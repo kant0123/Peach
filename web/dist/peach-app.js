@@ -2758,7 +2758,167 @@ var e = Object.create, n = Object.defineProperty, r = Object.getOwnPropertyDescr
 	"，{retry_in} 秒后重试": "、{retry_in} 秒後に再試行します",
 	"，{unreadable} 项未能读取": "、{unreadable} 件を読み取れませんでした",
 	"：已完成 {value}/{total}": "：{value}/{total} 件完了",
-	"已撤销别名 {gone}": "別名 {gone} を取り消しました"
+	"已撤销别名 {gone}": "別名 {gone} を取り消しました",
+	AI解码: "AI 復号",
+	"Peach 服务处理失败，请重试；持续失败时查看托盘日志。": "Peach サービスの処理に失敗しました。もう一度試してください。失敗が続く場合はトレイのログを確認してください。",
+	"Peach 服务暂时不可用，请稍后重试。": "Peach サービスは一時的に利用できません。しばらくしてからもう一度試してください。",
+	"Peach 服务没有取回结果，请稍后重试；持续失败时查看托盘日志。": "Peach サービスから結果を取得できませんでした。しばらくしてからもう一度試してください。失敗が続く場合はトレイのログを確認してください。",
+	"{d} 天": "{d} 日",
+	"{d} 天 {hours} 小时": "{d} 日 {hours} 時間",
+	丁香: "ライラック",
+	下载: "ダウンロード",
+	云灰: "クラウドグレー",
+	"代表作画面，非本人": "代表作の画面で、本人ではありません",
+	任务完成率: "タスク完了率",
+	光晕一: "グロー 1",
+	光晕三: "グロー 3",
+	光晕二: "グロー 2",
+	兰粉: "オーキッドピンク",
+	兰紫: "オーキッド",
+	冰青: "アイスシアン",
+	切换为大图: "大きい画像に切り替え",
+	切换为小图: "小さい画像に切り替え",
+	加载中: "読み込み中",
+	双洞齐下: "ダブル挿入",
+	口罩: "マスク",
+	古紫: "アンティークパープル",
+	可滚动内容: "スクロール可能なコンテンツ",
+	叶绿: "リーフグリーン",
+	墨灰: "チャコールグレー",
+	墨紫: "インクパープル",
+	墨绿: "ダークグリーン",
+	夕红: "夕焼け赤",
+	夜昙: "夜の月下美人",
+	夜樱: "夜桜",
+	夜紫: "夜の紫",
+	夜蓝: "夜の青",
+	大图: "大きい画像",
+	天蓝: "スカイブルー",
+	妄想族: "妄想族",
+	姜黄: "ターメリック",
+	媒体: "メディア",
+	嫩芽: "若芽",
+	孔雀: "ピーコック",
+	官方网站: "公式サイト",
+	宝蓝: "サファイアブルー",
+	密集: "密",
+	小图: "小さい画像",
+	强制: "強制",
+	"当前状态不允许此操作，请刷新后重试。": "現在の状態ではこの操作はできません。更新してからもう一度試してください。",
+	"当前设备没有执行此操作的权限，请在运行 Peach 的电脑上操作。": "このデバイスにはこの操作の権限がありません。Peach を実行しているパソコンで操作してください。",
+	性感内衣: "セクシーランジェリー",
+	所选记录: "選択した記録",
+	"提交内容有误，请检查输入后重试。": "送信内容に誤りがあります。入力を確認してからもう一度試してください。",
+	"提交内容过大，请减少数量后重试。": "送信内容が大きすぎます。件数を減らしてからもう一度試してください。",
+	"操作未完成，请重试；持续失败时查看托盘日志。": "操作が完了しませんでした。もう一度試してください。失敗が続く場合はトレイのログを確認してください。",
+	"无法连接到 Peach 服务，请确认网络连接和托盘服务已启动。": "Peach サービスに接続できません。ネットワーク接続とトレイサービスの起動を確認してください。",
+	暗红: "ダークレッド",
+	暮紫: "暮れの紫",
+	朱红: "朱色",
+	杏橙: "アプリコットオレンジ",
+	松绿: "松葉色",
+	柠绿: "ライム",
+	栗棕: "チェスナットブラウン",
+	栗黄: "チェスナットイエロー",
+	桃晕: "ピーチグロー",
+	桃红: "ピーチピンク",
+	梅紫: "梅紫",
+	棕: "茶",
+	森绿: "フォレストグリーン",
+	樱红: "チェリーレッド",
+	橘黄: "ミカンイエロー",
+	橙: "オレンジ",
+	正在读取内容: "コンテンツを読み込んでいます",
+	正在读取索引: "インデックスを読み込んでいます",
+	正在读取配置: "設定を読み込んでいます",
+	毒龙钻: "アナル舐め",
+	沙棕: "サンドブラウン",
+	"没有「{name}」这种界面音效": "「{name}」という UI サウンドはありません",
+	浅杏: "ライトアプリコット",
+	浅色: "ライト",
+	浅青: "ライトシアン",
+	淡紫: "ペールパープル",
+	深林: "深い森",
+	深灰: "ダークグレー",
+	深紫: "ディープパープル",
+	深翠: "ディープエメラルド",
+	深色: "ダーク",
+	深蓝: "ディープブルー",
+	深褐: "ダークブラウン",
+	湖蓝: "レイクブルー",
+	潟湖: "ラグーン",
+	火红: "ファイアレッド",
+	灰: "グレー",
+	灰雾: "グレーミスト",
+	玉绿: "ジェイドグリーン",
+	玫瑰金: "ローズゴールド",
+	玫粉: "ローズピンク",
+	玫紫: "ローズパープル",
+	玫红: "ローズレッド",
+	玻璃原色: "ガラスのオリジナル色",
+	珊瑚: "コーラル",
+	琉璃: "瑠璃",
+	琉璃霞: "瑠璃霞",
+	琥珀: "アンバー",
+	电蓝: "エレクトリックブルー",
+	"登录已失效，请刷新页面重新登录。": "ログインの有効期限が切れました。ページを更新して再度ログインしてください。",
+	眼镜娘: "メガネっ娘",
+	石灰: "ストーングレー",
+	砖红: "レンガ色",
+	碧波: "エメラルドウェーブ",
+	碧绿: "ジェイドブルーグリーン",
+	空间使用偏高: "空き容量が少なめです",
+	空间充足: "空き容量は十分です",
+	空间即将用满: "空き容量がもうすぐなくなります",
+	"等待服务响应超时，请检查连接后重试。": "サービスの応答待ちがタイムアウトしました。接続を確認してからもう一度試してください。",
+	"等待服务响应超时，请稍后重试。": "サービスの応答待ちがタイムアウトしました。しばらくしてからもう一度試してください。",
+	粉樱: "ピンク桜",
+	紫: "紫",
+	紫罗兰: "バイオレット",
+	紫藤: "藤色",
+	红: "赤",
+	维护: "メンテナンス",
+	绿: "緑",
+	翠绿: "エメラルドグリーン",
+	翡翠: "翡翠",
+	耀斑: "フレア",
+	背后位: "バック",
+	苔绿: "苔色",
+	茄紫: "ナスの紫",
+	草绿: "草色",
+	莓紫: "ベリーパープル",
+	落日: "夕日",
+	葡萄: "グレープ",
+	蓝: "青",
+	薄荷: "ミント",
+	薄荷冰: "ミントアイス",
+	薰衣草: "ラベンダー",
+	藏蓝: "ネイビー",
+	藕粉: "ロータスピンク",
+	蛋白石: "オパール",
+	褐棕: "ブラウン",
+	"请求的内容已不存在，请刷新列表。": "要求された内容は存在しません。一覧を更新してください。",
+	"请求超时，请稍后重试。": "リクエストがタイムアウトしました。しばらくしてからもう一度試してください。",
+	"请求过于频繁，请稍后重试。": "リクエストが多すぎます。しばらくしてからもう一度試してください。",
+	赭棕: "オーカーブラウン",
+	跟随系统: "システムに合わせる",
+	酒红: "ワインレッド",
+	金黄: "ゴールデンイエロー",
+	钨丝: "タングステン",
+	钨丝暖阁: "タングステンの暖かな部屋",
+	铁灰: "アイアングレー",
+	阳黄: "サニーイエロー",
+	陶棕: "テラコッタ",
+	雾灰: "ミストグレー",
+	霁蓝: "晴れ空の青",
+	霞红: "霞の赤",
+	青: "シアン",
+	青绿: "ティール",
+	靛紫: "インディゴパープル",
+	靛蓝: "インディゴ",
+	骑乘位: "騎乗位",
+	麦黄: "麦色",
+	黄: "黄"
 }, f = [{
 	value: "zh-CN",
 	label: "简体中文"
@@ -13884,20 +14044,20 @@ var zt = [
 //#region src/core/request-error.ts
 function Kt(e, n = 0) {
 	let r = String(e?.message ?? e ?? ""), i = Number(n || e?.status || r.match(/\b(400|401|403|404|408|409|413|429|500|502|503|504)\b/)?.[1]), a = {
-		400: "提交内容有误，请检查输入后重试。",
-		401: "登录已失效，请刷新页面重新登录。",
-		403: "当前设备没有执行此操作的权限，请在运行 Peach 的电脑上操作。",
-		404: "请求的内容已不存在，请刷新列表。",
-		408: "请求超时，请稍后重试。",
-		409: "当前状态不允许此操作，请刷新后重试。",
-		413: "提交内容过大，请减少数量后重试。",
-		429: "请求过于频繁，请稍后重试。",
-		500: "Peach 服务处理失败，请重试；持续失败时查看托盘日志。",
-		502: "Peach 服务没有取回结果，请稍后重试；持续失败时查看托盘日志。",
-		503: "Peach 服务暂时不可用，请稍后重试。",
-		504: "等待服务响应超时，请稍后重试。"
+		400: y("提交内容有误，请检查输入后重试。"),
+		401: y("登录已失效，请刷新页面重新登录。"),
+		403: y("当前设备没有执行此操作的权限，请在运行 Peach 的电脑上操作。"),
+		404: y("请求的内容已不存在，请刷新列表。"),
+		408: y("请求超时，请稍后重试。"),
+		409: y("当前状态不允许此操作，请刷新后重试。"),
+		413: y("提交内容过大，请减少数量后重试。"),
+		429: y("请求过于频繁，请稍后重试。"),
+		500: y("Peach 服务处理失败，请重试；持续失败时查看托盘日志。"),
+		502: y("Peach 服务没有取回结果，请稍后重试；持续失败时查看托盘日志。"),
+		503: y("Peach 服务暂时不可用，请稍后重试。"),
+		504: y("等待服务响应超时，请稍后重试。")
 	};
-	return /Failed to fetch|fetch failed|NetworkError|Load failed|network request failed|ERR_CONNECTION/i.test(r) ? "无法连接到 Peach 服务，请确认网络连接和托盘服务已启动。" : e?.name === "TimeoutError" || !i && /timed? ?out|timeout/i.test(r) ? "等待服务响应超时，请检查连接后重试。" : /[㐀-鿿]/.test(r) && !/^请求失败[（(]/.test(r) ? r : a[i] ? a[i] : "操作未完成，请重试；持续失败时查看托盘日志。";
+	return /Failed to fetch|fetch failed|NetworkError|Load failed|network request failed|ERR_CONNECTION/i.test(r) ? y("无法连接到 Peach 服务，请确认网络连接和托盘服务已启动。") : e?.name === "TimeoutError" || !i && /timed? ?out|timeout/i.test(r) ? y("等待服务响应超时，请检查连接后重试。") : /[㐀-鿿]/.test(r) && !/^请求失败[（(]/.test(r) ? r : a[i] ? a[i] : y("操作未完成，请重试；持续失败时查看托盘日志。");
 }
 //#endregion
 //#region src/core/icon-geometry.ts
@@ -13966,10 +14126,10 @@ var R = (e) => document.querySelector(e), z = (e, n = "") => {
 	flagged: "/flagged",
 	ads: "/junk-files"
 }, $t = Object.fromEntries(Object.entries(Qt).map(([e, n]) => [n, e])), en = {
-	fresh: "没看过",
-	later: "稍后看",
-	flagged: "已标记",
-	ads: "垃圾文件"
+	fresh: y("没看过"),
+	later: y("稍后看"),
+	flagged: y("已标记"),
+	ads: y("垃圾文件")
 }, tn = (e) => e === "/" || e === "/wall" || Object.prototype.hasOwnProperty.call($t, e), nn = {
 	performer: "performers",
 	studio: "studios",
@@ -14003,7 +14163,7 @@ var R = (e) => document.querySelector(e), z = (e, n = "") => {
 	["k-mib.com", "K-MIB"],
 	["minnano-av.com", "みんなのAV"],
 	["km-produce.com", "KMP"],
-	["mousouzoku-av.com", "妄想族"],
+	["mousouzoku-av.com", y("妄想族")],
 	["mines-pro.jp", "マインズ"],
 	["lightpro.jp", "LIGHT"],
 	["eltra.jp", "ELTRA"],
@@ -14059,7 +14219,7 @@ var R = (e) => document.querySelector(e), z = (e, n = "") => {
 	return !a.length || a.includes("官方网站") || a.some((n) => sn(n) === cn(e.url) || r.some((e) => {
 		let r = mn(e);
 		return !!r && (r.includes(n) || n.includes(r));
-	})) ? "官方网站" : i;
+	})) ? y("官方网站") : i;
 }, vn = (e) => {
 	let n = Number(e);
 	return Number.isFinite(n) && n > 0 ? n : 0;
@@ -14067,7 +14227,10 @@ var R = (e) => document.querySelector(e), z = (e, n = "") => {
 	if (e = vn(e), !e) return "—";
 	if (e = Math.round(e), e >= 172800) {
 		let n = Math.floor(e / 86400), r = Math.floor(e % 86400 / 3600);
-		return r ? `${n} 天 ${r} 小时` : `${n} 天`;
+		return r ? y("{d} 天 {hours} 小时", {
+			d: n,
+			hours: r
+		}) : y("{d} 天", { d: n });
 	}
 	let n = Math.floor(e / 3600), r = Math.floor(e % 3600 / 60), i = e % 60;
 	return n ? `${n}:${String(r).padStart(2, "0")}:${String(i).padStart(2, "0")}` : `${r}:${String(i).padStart(2, "0")}`;
@@ -14076,9 +14239,9 @@ var R = (e) => document.querySelector(e), z = (e, n = "") => {
 	let n = e / 3600 | 0, r = e % 3600 / 60 | 0, i = e % 60;
 	return n ? `${n}:${String(r).padStart(2, "0")}:${String(i).padStart(2, "0")}` : `${r}:${String(i).padStart(2, "0")}`;
 }, xn = (e) => {
-	if (e == null || e === "") return "大小未知";
+	if (e == null || e === "") return y("大小未知");
 	let n = Number(e);
-	return !Number.isFinite(n) || n < 0 ? "大小未知" : n === 0 ? "0 B" : n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : n >= 0x4000000000000 ? (n / 0x4000000000000).toFixed(2) + " PB" : n >= 1099511627776 ? (n / 1099511627776).toFixed(2) + " TB" : n >= 1073741824 ? (n / 1073741824).toFixed(1) + " GB" : Math.floor(n / 1048576) + " MB";
+	return !Number.isFinite(n) || n < 0 ? y("大小未知") : n === 0 ? "0 B" : n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : n >= 0x4000000000000 ? (n / 0x4000000000000).toFixed(2) + " PB" : n >= 1099511627776 ? (n / 1099511627776).toFixed(2) + " TB" : n >= 1073741824 ? (n / 1073741824).toFixed(1) + " GB" : Math.floor(n / 1048576) + " MB";
 }, Sn = typeof Intl < "u" && typeof Intl.Segmenter == "function" ? new Intl.Segmenter(void 0, { granularity: "grapheme" }) : null, Cn = (e) => Sn ? Array.from(Sn.segment(e), (e) => e.segment) : Array.from(e), wn = (e, n) => {
 	let r = String(e ?? "").trim(), i = [];
 	if (!r || n <= 0) return "";
@@ -14090,8 +14253,8 @@ var R = (e) => document.querySelector(e), z = (e, n = "") => {
 	return r.length > n ? `${r.slice(0, Math.max(0, n - 1)).join("")}…` : r.join("");
 }, Dn = {
 	...Wt,
-	local: "本地",
-	online: "在线"
+	local: y("本地"),
+	online: y("在线")
 }, On = (e, n) => {
 	let r = 2166136261;
 	for (let i of `${e}\u0000${n}`) r ^= i.codePointAt(0), r = Math.imul(r, 16777619) >>> 0;
@@ -15032,9 +15195,9 @@ function Ca(e, n) {
 }
 //#endregion
 //#region src/card-art/markup.ts
-var wa = "代表作画面，非本人", Ta = (e, n) => n ? `${e}&v=${encodeURIComponent(n)}` : e, Ea = (e, n = !1) => Ta(`/cover?code=${encodeURIComponent(e.cover_key || e.code || "")}${n ? "&thumb=1" : ""}`, e.cover_version), Da = (e, n, r) => Ta(`/logo?studio=${encodeURIComponent(e)}&variant=${n}`, r), Oa = (e) => e && typeof e == "object" ? e : null;
+var wa = y("代表作画面，非本人"), Ta = (e, n) => n ? `${e}&v=${encodeURIComponent(n)}` : e, Ea = (e, n = !1) => Ta(`/cover?code=${encodeURIComponent(e.cover_key || e.code || "")}${n ? "&thumb=1" : ""}`, e.cover_version), Da = (e, n, r) => Ta(`/logo?studio=${encodeURIComponent(e)}&variant=${n}`, r), Oa = (e) => e && typeof e == "object" ? e : null;
 function ka(e) {
-	return e && e.is_jav ? "女优" : "艺人";
+	return e && e.is_jav ? y("女优") : y("艺人");
 }
 function Aa({ kind: e = "performer", id: n = null, hasImage: r = !1, version: i = "", rep: a = null, mark: o = null, logo: s = "", logoVersion: c = "", logoVariant: l = "logo", alt: u = "", lazy: d = !0, style: f = "", dropStyle: p = !1, focus: m = null, thumb: h = !1, standIn: g = !1 } = {}) {
 	let _ = !!(n && r), v = _ ? Ta(`/entity-image?kind=${e}&id=${n}${h ? "&thumb=1" : ""}`, i) : "", y = a ? `/avatar?id=${a}` : "", b = !!s, x = b ? Da(s, l, c) : v || y || (o ? `/link-mark?id=${o}` : "");
@@ -15124,7 +15287,7 @@ function Ba(e, n, r, i) {
 	};
 }
 function Va(e, n) {
-	return Ba(e, "small", !1, n).html || "<span class=\"nopic\">无预览</span>";
+	return Ba(e, "small", !1, n).html || `<span class="nopic">${y("无预览")}</span>`;
 }
 function Ha(e, n) {
 	let r = e.has_thumb || e.has_local_poster ? `/poster?id=${e.id}&c=4` : "";
@@ -15134,7 +15297,7 @@ function Ua(e) {
 	let n = e.performers || [], r = e.performer_entities ?? e.entity_refs?.performer ?? [], i = n[0] || "", a = e.is_jav && i ? "" : e.creator || "";
 	return {
 		kind: a ? "creator" : i ? "performer" : "",
-		name: a || i || "未归属",
+		name: a || i || y("未归属"),
 		coStarred: n.length > 1 && !a,
 		performers: n,
 		refs: r,
@@ -15147,7 +15310,7 @@ function Wa(e) {
 }
 function Ga(e, n) {
 	let r = (e.performers || [])[0];
-	return (e.is_jav && r ? r : e.creator) || r || e.studio || e.code || n((e.tags || [])[0] || "") || "为你推荐";
+	return (e.is_jav && r ? r : e.creator) || r || e.studio || e.code || n((e.tags || [])[0] || "") || y("为你推荐");
 }
 //#endregion
 //#region src/ui-kit/overlay-scrollbar.ts
@@ -15385,7 +15548,7 @@ function ro(e) {
 }
 function io(e) {
 	let n = no[e];
-	if (!n) throw Error(`没有「${e}」这种界面音效`);
+	if (!n) throw Error(y("没有「{name}」这种界面音效", { name: e }));
 	if (!Qa) return !1;
 	let r = $a();
 	return r ? (n(r, r.currentTime), !0) : !1;
@@ -15597,16 +15760,16 @@ function Go(e, { variant: n = "secondary", label: r = "", className: i = "", siz
 	return `<div class="geist-note geist-note-${u}${i ? ` ${B(i)}` : ""}${a === "small" ? " geist-note-small" : ""}${o ? " geist-note-filled" : ""}"${f}>
     ${z(d)}<p>${r ? `<b>${B(r)}</b>` : ""}<span>${B(u === "error" ? Kt(e) : e)}</span></p>${p}${l ? Wo(l) : ""}</div>`;
 }
-function Ko(e = "加载中") {
+function Ko(e = y("加载中")) {
 	let n = Array.from({ length: 10 }, (e, n) => `<i aria-hidden="true" style="--spinner-angle:${n * 36}deg;--spinner-delay:${n * 100 - 900}ms"></i>`).join("");
 	return `<span class="ui-geist-spinner" role="status" aria-label="${B(e)}">${n}</span>`;
 }
-function qo(e = "正在处理", { className: n = "" } = {}) {
+function qo(e = y("正在处理"), { className: n = "" } = {}) {
 	return `<span class="ui-geist-loading${n ? ` ${B(n)}` : ""}" role="status">
     <span class="ui-geist-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
     <span>${B(e)}</span></span>`;
 }
-function Jo(e, { active: n = "", attr: r = "data-tab", label: i = "页面视图", className: a = "", panel: o = "" } = {}) {
+function Jo(e, { active: n = "", attr: r = "data-tab", label: i = y("页面视图"), className: a = "", panel: o = "" } = {}) {
 	let s = e.map(({ value: e, label: i, count: a, symbol: s }) => {
 		let c = String(e) === String(n), l = a == null ? "" : `<span class="ui-board-tab-count">${B(Number(a).toLocaleString())}</span>`;
 		return `<button type="button" role="tab" ${r}="${B(e)}" aria-selected="${c}"${o ? ` aria-controls="${B(o)}"` : ""}>${s ? z(s) : ""}${B(i)}${l}</button>`;
@@ -15733,15 +15896,16 @@ function as(e, n) {
 	}, 1e3);
 }
 function os() {
-	return `<div class="ui-configpage" data-skeleton="configuration" role="status" aria-label="正在读取配置">${[
-		["通用", 2],
-		["媒体", 2],
-		["下载", 2],
-		["网络与访问", 3],
-		["维护", 3]
-	].map(([e, n]) => `<h2 class="ui-configgroup" aria-hidden="true">${e}</h2>${Array.from({ length: n }, () => "<div class=\"configfieldset config-skeleton-card\" aria-hidden=\"true\"><div class=\"geist-fieldset-content\"><span class=\"skeleton\"></span><span class=\"skeleton\"></span><span class=\"skeleton\"></span></div><footer class=\"geist-fieldset-footer\"><span class=\"skeleton\"></span></footer></div>").join("")}`).join("")}</div>`;
+	let e = [
+		[y("通用"), 2],
+		[y("媒体"), 2],
+		[y("下载"), 2],
+		[y("网络与访问"), 3],
+		[y("维护"), 3]
+	];
+	return `<div class="ui-configpage" data-skeleton="configuration" role="status" aria-label="${y("正在读取配置")}">${e.map(([e, n]) => `<h2 class="ui-configgroup" aria-hidden="true">${e}</h2>${Array.from({ length: n }, () => "<div class=\"configfieldset config-skeleton-card\" aria-hidden=\"true\"><div class=\"geist-fieldset-content\"><span class=\"skeleton\"></span><span class=\"skeleton\"></span><span class=\"skeleton\"></span></div><footer class=\"geist-fieldset-footer\"><span class=\"skeleton\"></span></footer></div>").join("")}`).join("")}</div>`;
 }
-function ss(e = "正在读取内容", { className: n = "", variant: r = "panel", count: i = 6, fill: a = !0, gridClass: o = "", gridSize: s = "", cardRatio: c = 0 } = {}) {
+function ss(e = y("正在读取内容"), { className: n = "", variant: r = "panel", count: i = 6, fill: a = !0, gridClass: o = "", gridSize: s = "", cardRatio: c = 0 } = {}) {
 	let l = (/* @__PURE__ */ new Set([
 		"panel",
 		"cards",
@@ -15762,7 +15926,7 @@ function cs({ kind: e, layout: n = "big", mode: r = "alphabet" } = {}) {
 		76,
 		108,
 		144
-	][n % 5]}px">&nbsp;</span>`).join("")}</div>` : i ? `<div class="${s}">${o.repeat(12)}</div>` : `<section class="ui-alphagroup"><span class="indexletterskeleton skeleton"></span><div class="${s}">${o.repeat(10)}</div></section>`.repeat(3), l = "正在读取索引";
+	][n % 5]}px">&nbsp;</span>`).join("")}</div>` : i ? `<div class="${s}">${o.repeat(12)}</div>` : `<section class="ui-alphagroup"><span class="indexletterskeleton skeleton"></span><div class="${s}">${o.repeat(10)}</div></section>`.repeat(3), l = y("正在读取索引");
 	return `<div class="skeletonpanel index-skeleton" data-skeleton="index/${B(e)}/${B(n)}/${B(r)}"${i ? " data-fill=\"\"" : ""}
     role="status" aria-label="${l}"><span class="sr-only">${l}</span><section aria-hidden="true">${c}</section></div>`;
 }
@@ -16220,7 +16384,7 @@ function Ys(e, { selector: n, attribute: r, onMove: i } = {}) {
 //#endregion
 //#region src/ui-kit/modal.ts
 var Xs = 0;
-function Zs({ title: e, description: n = "", body: r = "", confirmLabel: i, cancelLabel: a = "取消", onConfirm: o = null, confirmDisabled: s = !1 } = {}) {
+function Zs({ title: e, description: n = "", body: r = "", confirmLabel: i, cancelLabel: a = y("取消"), onConfirm: o = null, confirmDisabled: s = !1 } = {}) {
 	let c = document.activeElement, l = document.createElement("dialog");
 	l.className = "ui-geist-modal";
 	let u = `geist-form-title-${++Xs}`;
@@ -16253,7 +16417,7 @@ function Zs({ title: e, description: n = "", body: r = "", confirmLabel: i, canc
 						result: await o()
 					}, l.close();
 				} catch (e) {
-					p.innerHTML = Go(e.message || "操作未完成", { variant: "error" }), Vs(f, !1);
+					p.innerHTML = Go(e.message || y("操作未完成"), { variant: "error" }), Vs(f, !1);
 				} finally {
 					h = !1;
 				}
@@ -16267,7 +16431,7 @@ function Zs({ title: e, description: n = "", body: r = "", confirmLabel: i, canc
 	};
 }
 var lee = 0;
-function Qs({ title: e, body: n, items: r = [], confirmLabel: i, cancelLabel: a = "取消", onConfirm: o = null, danger: s = !1 } = {}) {
+function Qs({ title: e, body: n, items: r = [], confirmLabel: i, cancelLabel: a = y("取消"), onConfirm: o = null, danger: s = !1 } = {}) {
 	let c = document.activeElement, l = document.createElement("dialog");
 	l.className = "ui-geist-modal";
 	let u = `geist-modal-title-${++lee}`;
@@ -16280,7 +16444,7 @@ function Qs({ title: e, body: n, items: r = [], confirmLabel: i, cancelLabel: a 
 	let d = null;
 	if (r.length) {
 		let e = document.createElement("div");
-		e.className = "ui-geist-modal-list", d = document.createElement("ul"), d.setAttribute("aria-label", "所选记录"), d.tabIndex = 0;
+		e.className = "ui-geist-modal-list", d = document.createElement("ul"), d.setAttribute("aria-label", y("所选记录")), d.tabIndex = 0;
 		for (let e of r) {
 			let n = document.createElement("li");
 			n.textContent = e, d.append(n);
@@ -16311,7 +16475,7 @@ function Qs({ title: e, body: n, items: r = [], confirmLabel: i, cancelLabel: a 
 							result: await o()
 						}, l.close();
 					} catch (e) {
-						m.innerHTML = Go(e.message || "操作未完成", { variant: "error" }), Vs(p, !1);
+						m.innerHTML = Go(e.message || y("操作未完成"), { variant: "error" }), Vs(p, !1);
 					} finally {
 						r = !1;
 					}
@@ -16606,16 +16770,16 @@ function Vc(e, n) {
 var Hc = {
 	"1080P": "1080p",
 	"60fps": "60FPS",
-	AI去码: "AI解码",
-	眼镜: "眼镜娘",
-	情趣内衣: "性感内衣",
-	口罩遮脸: "口罩",
-	强制剧情: "强制",
-	骑乘: "骑乘位",
-	后入: "背后位",
+	AI去码: y("AI解码"),
+	眼镜: y("眼镜娘"),
+	情趣内衣: y("性感内衣"),
+	口罩遮脸: y("口罩"),
+	强制剧情: y("强制"),
+	骑乘: y("骑乘位"),
+	后入: y("背后位"),
 	"3P多人": "3P",
-	双洞齐插: "双洞齐下",
-	毒龙: "毒龙钻"
+	双洞齐插: y("双洞齐下"),
+	毒龙: y("毒龙钻")
 }, Uc = (e) => Hc[e] || e;
 //#endregion
 //#region src/react/follow-feed/follow-helpers.ts
@@ -32206,13 +32370,13 @@ var rE = [
 	"spot2",
 	"spot3"
 ], Xle = [
-	"光晕一",
-	"光晕二",
-	"光晕三"
+	y("光晕一"),
+	y("光晕二"),
+	y("光晕三")
 ], iE = "native", aE = [
 	[
 		"ash",
-		"灰雾",
+		y("灰雾"),
 		{
 			spot1: {
 				color: "#8f98a4",
@@ -32231,7 +32395,7 @@ var rE = [
 	],
 	[
 		"amber",
-		"钨丝暖阁",
+		y("钨丝暖阁"),
 		{
 			spot1: {
 				color: "#e08a2f",
@@ -32250,7 +32414,7 @@ var rE = [
 	],
 	[
 		"plum",
-		"夜樱",
+		y("夜樱"),
 		{
 			spot1: {
 				color: "#b455a0",
@@ -32269,7 +32433,7 @@ var rE = [
 	],
 	[
 		"pine",
-		"深林",
+		y("深林"),
 		{
 			spot1: {
 				color: "#3f9e57",
@@ -32288,7 +32452,7 @@ var rE = [
 	],
 	[
 		"iris",
-		"琉璃霞",
+		y("琉璃霞"),
 		{
 			spot1: {
 				color: "#1e50a2",
@@ -32307,7 +32471,7 @@ var rE = [
 	],
 	[
 		"opal",
-		"蛋白石",
+		y("蛋白石"),
 		{
 			spot1: {
 				color: "#9be0e8",
@@ -32326,7 +32490,7 @@ var rE = [
 	],
 	[
 		"lagoon",
-		"潟湖",
+		y("潟湖"),
 		{
 			spot1: {
 				color: "#5ce3e6",
@@ -32345,7 +32509,7 @@ var rE = [
 	],
 	[
 		"jade",
-		"翡翠",
+		y("翡翠"),
 		{
 			spot1: {
 				color: "#8fe3b0",
@@ -32364,7 +32528,7 @@ var rE = [
 	],
 	[
 		"flare",
-		"耀斑",
+		y("耀斑"),
 		{
 			spot1: {
 				color: "#ffc24b",
@@ -32383,7 +32547,7 @@ var rE = [
 	],
 	[
 		"orchid",
-		"兰紫",
+		y("兰紫"),
 		{
 			spot1: {
 				color: "#e794c9",
@@ -32402,7 +32566,7 @@ var rE = [
 	],
 	[
 		"peach",
-		"桃晕",
+		y("桃晕"),
 		{
 			spot1: {
 				color: "#ffc9a3",
@@ -32421,7 +32585,7 @@ var rE = [
 	],
 	[
 		"tide",
-		"电蓝",
+		y("电蓝"),
 		{
 			spot1: {
 				color: "#6fd8f2",
@@ -32440,7 +32604,7 @@ var rE = [
 	],
 	[
 		"sunset",
-		"落日",
+		y("落日"),
 		{
 			spot1: {
 				color: "#ffae3f",
@@ -32459,7 +32623,7 @@ var rE = [
 	],
 	[
 		"mint",
-		"薄荷冰",
+		y("薄荷冰"),
 		{
 			spot1: {
 				color: "#a8f0dc",
@@ -32478,7 +32642,7 @@ var rE = [
 	],
 	[
 		"bloom",
-		"夜昙",
+		y("夜昙"),
 		{
 			spot1: {
 				color: "#4c3894",
@@ -32497,7 +32661,7 @@ var rE = [
 	],
 	[
 		"rosegold",
-		"玫瑰金",
+		y("玫瑰金"),
 		{
 			spot1: {
 				color: "#fbc9ac",
@@ -32516,7 +32680,7 @@ var rE = [
 	],
 	[
 		iE,
-		"玻璃原色",
+		y("玻璃原色"),
 		{
 			spot1: {
 				color: "#6686b8",
@@ -32533,423 +32697,423 @@ var rE = [
 		},
 		"blue"
 	]
-], oE = (e) => e === iE, sE = [...aE.map(([e, n]) => [e, n]), ["custom", "自定义"]], Zle = (e) => (sE.find(([n]) => n === e) || sE[0])[1], cE = (e) => structuredClone((aE.find(([n]) => n === e) || aE[0])[2]), lE = [
-	["red", "红"],
-	["orange", "橙"],
-	["amber", "琥珀"],
-	["lime", "柠绿"],
-	["emerald", "翠绿"],
-	["teal", "青绿"],
-	["sky", "天蓝"],
-	["blue", "蓝"],
-	["indigo", "靛蓝"],
-	["violet", "紫罗兰"],
-	["fuchsia", "品红"],
-	["rose", "玫红"]
+], oE = (e) => e === iE, sE = [...aE.map(([e, n]) => [e, n]), ["custom", y("自定义")]], Zle = (e) => (sE.find(([n]) => n === e) || sE[0])[1], cE = (e) => structuredClone((aE.find(([n]) => n === e) || aE[0])[2]), lE = [
+	["red", y("红")],
+	["orange", y("橙")],
+	["amber", y("琥珀")],
+	["lime", y("柠绿")],
+	["emerald", y("翠绿")],
+	["teal", y("青绿")],
+	["sky", y("天蓝")],
+	["blue", y("蓝")],
+	["indigo", y("靛蓝")],
+	["violet", y("紫罗兰")],
+	["fuchsia", y("品红")],
+	["rose", y("玫红")]
 ], uE = "blue", dE = (e) => lE.some(([n]) => n === e) ? e : uE, Qle = (e) => (aE.find(([n]) => n === e) || [])[3] || "blue", $le = [
-	["all", "全部"],
-	["gray", "灰"],
-	["red", "红"],
-	["yellow", "黄"],
-	["green", "绿"],
-	["cyan", "青"],
-	["blue", "蓝"],
-	["purple", "紫"],
-	["brown", "棕"]
+	["all", y("全部")],
+	["gray", y("灰")],
+	["red", y("红")],
+	["yellow", y("黄")],
+	["green", y("绿")],
+	["cyan", y("青")],
+	["blue", y("蓝")],
+	["purple", y("紫")],
+	["brown", y("棕")]
 ], eue = [
 	[
 		"gray",
-		"云灰",
+		y("云灰"),
 		"#d8dade"
 	],
 	[
 		"gray",
-		"雾灰",
+		y("雾灰"),
 		"#b6bcc4"
 	],
 	[
 		"gray",
-		"石灰",
+		y("石灰"),
 		"#8f98a4"
 	],
 	[
 		"gray",
-		"铁灰",
+		y("铁灰"),
 		"#6f7783"
 	],
 	[
 		"gray",
-		"墨灰",
+		y("墨灰"),
 		"#4a4e56"
 	],
 	[
 		"gray",
-		"深灰",
+		y("深灰"),
 		"#2e3138"
 	],
 	[
 		"red",
-		"樱红",
+		y("樱红"),
 		"#f08a8a"
 	],
 	[
 		"red",
-		"珊瑚",
+		y("珊瑚"),
 		"#e26a62"
 	],
 	[
 		"red",
-		"砖红",
+		y("砖红"),
 		"#c4544a"
 	],
 	[
 		"red",
-		"朱红",
+		y("朱红"),
 		"#b5322f"
 	],
 	[
 		"red",
-		"酒红",
+		y("酒红"),
 		"#8e2a2c"
 	],
 	[
 		"red",
-		"暗红",
+		y("暗红"),
 		"#6b2224"
 	],
 	[
 		"yellow",
-		"麦黄",
+		y("麦黄"),
 		"#f2d48a"
 	],
 	[
 		"yellow",
-		"琥珀",
+		y("琥珀"),
 		"#e8b451"
 	],
 	[
 		"yellow",
-		"钨丝",
+		y("钨丝"),
 		"#e08a2f"
 	],
 	[
 		"yellow",
-		"金黄",
+		y("金黄"),
 		"#cf8a20"
 	],
 	[
 		"yellow",
-		"姜黄",
+		y("姜黄"),
 		"#a9701c"
 	],
 	[
 		"yellow",
-		"栗黄",
+		y("栗黄"),
 		"#7d5216"
 	],
 	[
 		"green",
-		"嫩芽",
+		y("嫩芽"),
 		"#a9cf7e"
 	],
 	[
 		"green",
-		"叶绿",
+		y("叶绿"),
 		"#7fae4a"
 	],
 	[
 		"green",
-		"草绿",
+		y("草绿"),
 		"#5da34f"
 	],
 	[
 		"green",
-		"森绿",
+		y("森绿"),
 		"#3f9e57"
 	],
 	[
 		"green",
-		"苔绿",
+		y("苔绿"),
 		"#4f9463"
 	],
 	[
 		"green",
-		"墨绿",
+		y("墨绿"),
 		"#27563a"
 	],
 	[
 		"blue",
-		"天蓝",
+		y("天蓝"),
 		"#9fc2e8"
 	],
 	[
 		"blue",
-		"湖蓝",
+		y("湖蓝"),
 		"#6a9fd8"
 	],
 	[
 		"blue",
-		"靛蓝",
+		y("靛蓝"),
 		"#4478c0"
 	],
 	[
 		"blue",
-		"宝蓝",
+		y("宝蓝"),
 		"#2f5ba3"
 	],
 	[
 		"blue",
-		"深蓝",
+		y("深蓝"),
 		"#27467c"
 	],
 	[
 		"blue",
-		"夜蓝",
+		y("夜蓝"),
 		"#1c3358"
 	],
 	[
 		"purple",
-		"丁香",
+		y("丁香"),
 		"#c3a7e0"
 	],
 	[
 		"purple",
-		"品红",
+		y("品红"),
 		"#b455a0"
 	],
 	[
 		"purple",
-		"薰衣草",
+		y("薰衣草"),
 		"#a67fd2"
 	],
 	[
 		"purple",
-		"葡萄",
+		y("葡萄"),
 		"#6a4fd0"
 	],
 	[
 		"purple",
-		"茄紫",
+		y("茄紫"),
 		"#7a4f96"
 	],
 	[
 		"purple",
-		"深紫",
+		y("深紫"),
 		"#432c6d"
 	],
 	[
 		"brown",
-		"沙棕",
+		y("沙棕"),
 		"#d6b492"
 	],
 	[
 		"brown",
-		"陶棕",
+		y("陶棕"),
 		"#bd8f68"
 	],
 	[
 		"brown",
-		"赭棕",
+		y("赭棕"),
 		"#a86a52"
 	],
 	[
 		"brown",
-		"栗棕",
+		y("栗棕"),
 		"#8c5340"
 	],
 	[
 		"brown",
-		"褐棕",
+		y("褐棕"),
 		"#6d3f31"
 	],
 	[
 		"brown",
-		"深褐",
+		y("深褐"),
 		"#4e2d23"
 	],
 	[
 		"red",
-		"霞红",
+		y("霞红"),
 		"#f09199"
 	],
 	[
 		"red",
-		"藕粉",
+		y("藕粉"),
 		"#f8b8d9"
 	],
 	[
 		"red",
-		"火红",
+		y("火红"),
 		"#f4664d"
 	],
 	[
 		"red",
-		"桃红",
+		y("桃红"),
 		"#f08a8c"
 	],
 	[
 		"red",
-		"夕红",
+		y("夕红"),
 		"#f0574d"
 	],
 	[
 		"red",
-		"粉樱",
+		y("粉樱"),
 		"#f6c6e2"
 	],
 	[
 		"red",
-		"玫粉",
+		y("玫粉"),
 		"#e79ba7"
 	],
 	[
 		"yellow",
-		"阳黄",
+		y("阳黄"),
 		"#ffc24b"
 	],
 	[
 		"yellow",
-		"橘黄",
+		y("橘黄"),
 		"#ffae3f"
 	],
 	[
 		"green",
-		"玉绿",
+		y("玉绿"),
 		"#8fe3b0"
 	],
 	[
 		"green",
-		"翠绿",
+		y("翠绿"),
 		"#22c79a"
 	],
 	[
 		"green",
-		"深翠",
+		y("深翠"),
 		"#0b5f51"
 	],
 	[
 		"green",
-		"松绿",
+		y("松绿"),
 		"#147a5f"
 	],
 	[
 		"cyan",
-		"浅青",
+		y("浅青"),
 		"#9be0e8"
 	],
 	[
 		"cyan",
-		"碧波",
+		y("碧波"),
 		"#5ce3e6"
 	],
 	[
 		"cyan",
-		"孔雀",
+		y("孔雀"),
 		"#0f9cc2"
 	],
 	[
 		"cyan",
-		"冰青",
+		y("冰青"),
 		"#6fd8f2"
 	],
 	[
 		"cyan",
-		"薄荷",
+		y("薄荷"),
 		"#a8f0dc"
 	],
 	[
 		"cyan",
-		"碧绿",
+		y("碧绿"),
 		"#52cbb0"
 	],
 	[
 		"blue",
-		"琉璃",
+		y("琉璃"),
 		"#1e50a2"
 	],
 	[
 		"blue",
-		"藏蓝",
+		y("藏蓝"),
 		"#274a78"
 	],
 	[
 		"blue",
-		"电蓝",
+		y("电蓝"),
 		"#4c5be0"
 	],
 	[
 		"purple",
-		"古紫",
+		y("古紫"),
 		"#895b8a"
 	],
 	[
 		"purple",
-		"紫藤",
+		y("紫藤"),
 		"#c4b5f7"
 	],
 	[
 		"purple",
-		"梅紫",
+		y("梅紫"),
 		"#8a2e5e"
 	],
 	[
 		"purple",
-		"兰粉",
+		y("兰粉"),
 		"#e794c9"
 	],
 	[
 		"purple",
-		"兰紫",
+		y("兰紫"),
 		"#9678ce"
 	],
 	[
 		"purple",
-		"靛紫",
+		y("靛紫"),
 		"#4a3894"
 	],
 	[
 		"purple",
-		"莓紫",
+		y("莓紫"),
 		"#b65e8c"
 	],
 	[
 		"purple",
-		"墨紫",
+		y("墨紫"),
 		"#2a2450"
 	],
 	[
 		"purple",
-		"暮紫",
+		y("暮紫"),
 		"#5d2a66"
 	],
 	[
 		"purple",
-		"夜紫",
+		y("夜紫"),
 		"#4c3894"
 	],
 	[
 		"purple",
-		"淡紫",
+		y("淡紫"),
 		"#b387e8"
 	],
 	[
 		"purple",
-		"玫紫",
+		y("玫紫"),
 		"#8e5a74"
 	],
 	[
 		"brown",
-		"杏橙",
+		y("杏橙"),
 		"#ffc9a3"
 	],
 	[
 		"brown",
-		"浅杏",
+		y("浅杏"),
 		"#fbc9ac"
 	],
 	[
 		"blue",
-		"霁蓝",
+		y("霁蓝"),
 		"#6686b8"
 	]
 ], fE = (e, n, r, i) => Number.isInteger(e) && e >= n && e <= r ? e : i, pE = (e, n) => /^#[0-9a-f]{6}$/i.test(String(e)) ? String(e).toLowerCase() : n, tue = (e, n) => `rgba(${[
@@ -33110,17 +33274,17 @@ function due(e = xE()) {
 var fue = [
 	[
 		"system",
-		"跟随系统",
+		y("跟随系统"),
 		"monitor"
 	],
 	[
 		"light",
-		"浅色",
+		y("浅色"),
 		"sun"
 	],
 	[
 		"dark",
-		"深色",
+		y("深色"),
 		"moon"
 	]
 ], pue = null, CE = () => pue ??= matchMedia("(prefers-color-scheme: dark)"), wE = null;
@@ -33150,27 +33314,27 @@ function hue() {
 //#region src/appearance/layout.ts
 var DE = [[
 	"big",
-	"大图",
+	y("大图"),
 	"maximize"
 ], [
 	"small",
-	"小图",
+	y("小图"),
 	"layout-grid"
 ]], OE = [[
 	"big",
-	"大图",
+	y("大图"),
 	"maximize"
 ], [
 	"small",
-	"小图",
+	y("小图"),
 	"layout-grid"
 ]], gue = [[
 	"fixed",
-	"固定比例",
+	y("固定比例"),
 	"layout-grid"
 ], [
 	"masonry",
-	"瀑布流",
+	y("瀑布流"),
 	"columns-2"
 ]], kE = .75, AE = () => xE().value, jE = (e = AE()) => ha(e.javLayout), _ue = (e = AE()) => ha(e.homeLayout), vue = (e, n = AE()) => e ? _ue(n) : jE(n), yue = OE.map(([e]) => e), bue = gue.map(([e]) => e), ME = (e = AE()) => yE(e.photoSize, yue, "small"), NE = (e = AE()) => yE(e.photoLayout, bue, "masonry"), PE = null;
 function FE(e, n = AE()) {
@@ -33208,13 +33372,13 @@ var Eue = "density", Due = {
 }, Oue = () => localStorage.getItem(Eue) === "dense" ? "dense" : "big";
 function kue(e, n) {
 	let [r, i] = OE;
-	e.querySelector("[data-icon-swap]") ? Qo(e, n === i[0] ? "b" : "a") : e.innerHTML = Zo(r[2], i[2], n === i[0] ? "b" : "a"), e.setAttribute("aria-label", n === "big" ? "切换为小图" : "切换为大图");
+	e.querySelector("[data-icon-swap]") ? Qo(e, n === i[0] ? "b" : "a") : e.innerHTML = Zo(r[2], i[2], n === i[0] ? "b" : "a"), e.setAttribute("aria-label", y(n === "big" ? "切换为小图" : "切换为大图"));
 }
 var Aue = () => document.querySelector("#density");
 function LE(e = Oue()) {
 	document.documentElement.style.setProperty("--tile", Due[e]), document.body.dataset.density = e;
 	let n = Aue();
-	n && (n.setAttribute("aria-pressed", String(e === "dense")), n.title = "当前：" + (e === "big" ? "大图" : "密集"), kue(n, e === "big" ? "big" : "small"));
+	n && (n.setAttribute("aria-pressed", String(e === "dense")), n.title = y("当前：") + y(e === "big" ? "大图" : "密集"), kue(n, e === "big" ? "big" : "small"));
 }
 function jue() {
 	let e = Oue() === "big" ? "dense" : "big";
@@ -33222,7 +33386,7 @@ function jue() {
 }
 function Mue(e) {
 	let n = Aue();
-	n && (n.setAttribute("aria-pressed", String(e === "small")), n.title = "当前：" + (e === "big" ? "大图" : "小图"), kue(n, e));
+	n && (n.setAttribute("aria-pressed", String(e === "small")), n.title = y("当前：") + y(e === "big" ? "大图" : "小图"), kue(n, e));
 }
 //#endregion
 //#region src/appearance/glow.ts
@@ -33249,7 +33413,7 @@ var Fue = (e, n, r) => ({
 });
 function Iue(e) {
 	let n = aE.map(([e, n, r]) => Fue(e, n, rE.map((e) => r[e].color)));
-	return e.preset === "custom" && n.push(Fue("custom", "自定义", rE.map((n) => e[n].color))), n;
+	return e.preset === "custom" && n.push(Fue("custom", y("自定义"), rE.map((n) => e[n].color))), n;
 }
 var Lue = lE;
 function Rue(e, n = xE()) {
@@ -110757,7 +110921,7 @@ function zmt(e) {
 function Bmt(e) {
 	let n = e.performer_refs || [], r = [...new Set((e.performers || "").split(/[,，、;/]/).map((e) => e.trim()).filter(Boolean))], i = n.length ? n : r.map((e) => ({ name: e })), a = i.slice(0, 3).map((n) => {
 		let r = e.code && n.source_actor_id && n.source_avatar && !n.has_image && !n.has_avatar, i = r ? ` data-feed-source-avatar data-code="${B(e.code)}" data-actor="${B(n.source_actor_id)}" data-name="${B(n.name)}"` : "", a = r ? "" : ja(n.name, n, null);
-		return "id" in n && n.id ? `<a class="mav"${i} href="${B(an("performer", n.name, n.id))}" aria-label="打开女优页：${B(n.name)}">${a}</a>` : `<span class="mav"${i} title="${B(n.name)}">${a}</span>`;
+		return "id" in n && n.id ? `<a class="mav"${i} href="${B(an("performer", n.name, n.id))}" aria-label="${y("打开女优页：{name}", { name: B(n.name) })}">${a}</a>` : `<span class="mav"${i} title="${B(n.name)}">${a}</span>`;
 	}).join("");
 	return i.length > 1 ? `<div class="mavstack">${a}</div>` : a;
 }

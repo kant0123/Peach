@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 /* 外观配色的纯数据层：光晕参数、预设、命名色板、强调色清单与存量规范化。
  * 当前设置与目标元素由 glow.ts、settings.ts 递进来，paintHomeGlow 只写目标元素。
  * @peach/appearance 直接解析到共享源码，主界面只发布一份预设表和规范化实现。
@@ -25,7 +26,7 @@ type GlowField = 'strength' | 'noise' | 'speed' | 'soften' | 'size';
    每一档还带一枚搭配的强调色：换配色是换整套外观，按钮、焦点环和链接跟着走才是一副面。
    单点强调色可以把它覆盖掉，那一下只改强调色、不动光晕。 */
 const HOME_GLOW_SPOTS:readonly SpotKey[]=['spot1','spot2','spot3'];
-const GLOW_SPOT_LABELS:readonly string[]=['光晕一','光晕二','光晕三'];
+const GLOW_SPOT_LABELS:readonly string[]=[t('光晕一'),t('光晕二'),t('光晕三')];
 /* 「玻璃原色」是每块玻璃自带的那两团反光，颜色由明暗主题给：深色近白、浅色一蓝一灰。
    它不走光晕那一层——两团、各自的尺寸与轨迹全在 board.css 的 `--glass-drift-a/b` 里，
    照着三枚光晕重画一遍只会得到一份形状不同的仿制品。选中这一档时光晕整层的强度算成 0，
@@ -37,13 +38,13 @@ const GLASS_NATIVE_PRESET='native';
    两者一起就是这个壳没被改过时的样子；暖色那几档留给人自己挑。 */
 /** `[键, 名称, 三枚光晕, 搭配的强调色]`。 */
 const HOME_GLOW_PRESETS:readonly (readonly [key:string,label:string,palette:GlowPalette,accent:string])[]=[
-  ['ash','灰雾',{
+  ['ash',t('灰雾'),{
     spot1:{color:'#8f98a4',alpha:52},spot2:{color:'#b6bcc4',alpha:38},spot3:{color:'#6f7783',alpha:50}},'blue'],
-  ['amber','钨丝暖阁',{
+  ['amber',t('钨丝暖阁'),{
     spot1:{color:'#e08a2f',alpha:62},spot2:{color:'#c4544a',alpha:52},spot3:{color:'#a86a52',alpha:52}},'amber'],
-  ['plum','夜樱',{
+  ['plum',t('夜樱'),{
     spot1:{color:'#b455a0',alpha:64},spot2:{color:'#6a4fd0',alpha:54},spot3:{color:'#7a4f96',alpha:56}},'violet'],
-  ['pine','深林',{
+  ['pine',t('深林'),{
     spot1:{color:'#3f9e57',alpha:66},spot2:{color:'#7fae4a',alpha:48},spot3:{color:'#4f9463',alpha:56}},'emerald'],
   /* 下面十二档照 feralui.dev/gradients 预设区那十二枚 chip 取色，逐档记在
      docs/reference-snapshots/feralui-gradients-measured.md。它每档四枚色标，第一枚一律是
@@ -52,38 +53,38 @@ const HOME_GLOW_PRESETS:readonly (readonly [key:string,label:string,palette:Glow
      等于没有、在浅色侧栏上是一团脏。所以取的是第二、三、四枚，也就是它真正当光斑用的
      那三枚。不透明度不跟着走：那是这块玻璃自己的浓淡，统一用默认档那一组。
      档名中文自拟，按颜色取，不照抄英文名。 */
-  ['iris','琉璃霞',{
+  ['iris',t('琉璃霞'),{
     spot1:{color:'#1e50a2',alpha:62},spot2:{color:'#f09199',alpha:52},spot3:{color:'#895b8a',alpha:52}},'indigo'],
-  ['opal','蛋白石',{
+  ['opal',t('蛋白石'),{
     spot1:{color:'#9be0e8',alpha:62},spot2:{color:'#c4b5f7',alpha:52},spot3:{color:'#f8b8d9',alpha:52}},'sky'],
-  ['lagoon','潟湖',{
+  ['lagoon',t('潟湖'),{
     spot1:{color:'#5ce3e6',alpha:62},spot2:{color:'#0f9cc2',alpha:52},spot3:{color:'#274a78',alpha:52}},'teal'],
-  ['jade','翡翠',{
+  ['jade',t('翡翠'),{
     spot1:{color:'#8fe3b0',alpha:62},spot2:{color:'#22c79a',alpha:52},spot3:{color:'#0b5f51',alpha:52}},'emerald'],
-  ['flare','耀斑',{
+  ['flare',t('耀斑'),{
     spot1:{color:'#ffc24b',alpha:62},spot2:{color:'#f4664d',alpha:52},spot3:{color:'#8a2e5e',alpha:52}},'orange'],
-  ['orchid','兰紫',{
+  ['orchid',t('兰紫'),{
     spot1:{color:'#e794c9',alpha:62},spot2:{color:'#9678ce',alpha:52},spot3:{color:'#4a3894',alpha:52}},'violet'],
-  ['peach','桃晕',{
+  ['peach',t('桃晕'),{
     spot1:{color:'#ffc9a3',alpha:62},spot2:{color:'#f08a8c',alpha:52},spot3:{color:'#b65e8c',alpha:52}},'rose'],
-  ['tide','电蓝',{
+  ['tide',t('电蓝'),{
     spot1:{color:'#6fd8f2',alpha:62},spot2:{color:'#4c5be0',alpha:52},spot3:{color:'#2a2450',alpha:52}},'blue'],
-  ['sunset','落日',{
+  ['sunset',t('落日'),{
     spot1:{color:'#ffae3f',alpha:62},spot2:{color:'#f0574d',alpha:52},spot3:{color:'#5d2a66',alpha:52}},'amber'],
-  ['mint','薄荷冰',{
+  ['mint',t('薄荷冰'),{
     spot1:{color:'#a8f0dc',alpha:62},spot2:{color:'#52cbb0',alpha:52},spot3:{color:'#147a5f',alpha:52}},'emerald'],
-  ['bloom','夜昙',{
+  ['bloom',t('夜昙'),{
     spot1:{color:'#4c3894',alpha:62},spot2:{color:'#b387e8',alpha:52},spot3:{color:'#f6c6e2',alpha:52}},'fuchsia'],
-  ['rosegold','玫瑰金',{
+  ['rosegold',t('玫瑰金'),{
     spot1:{color:'#fbc9ac',alpha:62},spot2:{color:'#e79ba7',alpha:52},spot3:{color:'#8e5a74',alpha:52}},'rose'],
-  [GLASS_NATIVE_PRESET,'玻璃原色',{
+  [GLASS_NATIVE_PRESET,t('玻璃原色'),{
     spot1:{color:'#6686b8',alpha:52},spot2:{color:'#8f98a4',alpha:44},spot3:{color:'#6686b8',alpha:52}},'blue'],
 ];
 /** 「玻璃原色」那一档：没有三枚光晕，面上漂的是每块玻璃自带的两团反光。 */
 const isNativeGlass=(key:string):boolean=>key===GLASS_NATIVE_PRESET;
 /* 手调过颜色之后当前档就不再是任何一个预设，侧栏那一格和面板顶上的标识要如实说这件事，
    不能继续顶着上一档的名字。 */
-const HOME_GLOW_CHOICES:readonly (readonly [key:string,label:string])[]=[...HOME_GLOW_PRESETS.map(([key,label])=>[key,label] as const),['custom','自定义']];
+const HOME_GLOW_CHOICES:readonly (readonly [key:string,label:string])[]=[...HOME_GLOW_PRESETS.map(([key,label])=>[key,label] as const),['custom',t('自定义')]];
 const glowPresetName=(key:string):string=>(HOME_GLOW_CHOICES.find(([name])=>name===key)||HOME_GLOW_CHOICES[0]!)[1];
 /** 一档预设的三枚光晕（深拷贝）；认不出的键给默认那一档。 */
 const glowPalette=(key:string):GlowPalette=>structuredClone((HOME_GLOW_PRESETS.find(([name])=>name===key)||HOME_GLOW_PRESETS[0]!)[2]);
@@ -94,8 +95,8 @@ const glowPalette=(key:string):GlowPalette=>structuredClone((HOME_GLOW_PRESETS.f
    十二档是 Tailwind v4 色板里绕色轮一圈取的十二个色相，六列两行正好铺满；中性色不收，
    灰的链接和灰的焦点环在这套界面上读不出是「可点的东西」。 */
 /** `[键, 名称]`，十二档强调色。 */
-const ACCENTS:readonly (readonly [key:string,label:string])[]=[['red','红'],['orange','橙'],['amber','琥珀'],['lime','柠绿'],['emerald','翠绿'],['teal','青绿'],
-  ['sky','天蓝'],['blue','蓝'],['indigo','靛蓝'],['violet','紫罗兰'],['fuchsia','品红'],['rose','玫红']];
+const ACCENTS:readonly (readonly [key:string,label:string])[]=[['red',t('红')],['orange',t('橙')],['amber',t('琥珀')],['lime',t('柠绿')],['emerald',t('翠绿')],['teal',t('青绿')],
+  ['sky',t('天蓝')],['blue',t('蓝')],['indigo',t('靛蓝')],['violet',t('紫罗兰')],['fuchsia',t('品红')],['rose',t('玫红')]];
 const DEFAULT_ACCENT:string='blue';
 const normalizeAccent=(value:unknown):string=>ACCENTS.some(([key])=>key===value)?value as string:DEFAULT_ACCENT;
 /** 一档预设搭配的强调色。 */
@@ -107,42 +108,42 @@ const glowAccent=(key:string):string=>(HOME_GLOW_PRESETS.find(([name])=>name===k
    各系不再一样长。青绿自成一系：feralui 那几档水色预设的主色都落在这一段，它在深色玻璃
    上确实偏冷，但那是一种可以挑的冷，不是不能出现的颜色。 */
 /** `[色系, 名称]`，第一项是「全部」。 */
-const GLOW_SWATCH_FAMILIES:readonly (readonly [key:string,label:string])[]=[['all','全部'],['gray','灰'],['red','红'],['yellow','黄'],
-  ['green','绿'],['cyan','青'],['blue','蓝'],['purple','紫'],['brown','棕']];
+const GLOW_SWATCH_FAMILIES:readonly (readonly [key:string,label:string])[]=[['all',t('全部')],['gray',t('灰')],['red',t('红')],['yellow',t('黄')],
+  ['green',t('绿')],['cyan',t('青')],['blue',t('蓝')],['purple',t('紫')],['brown',t('棕')]];
 /** `[色系, 名称, #rrggbb]`。 */
 const GLOW_SWATCHES:readonly (readonly [family:string,name:string,hex:string])[]=[
-  ['gray','云灰','#d8dade'],['gray','雾灰','#b6bcc4'],['gray','石灰','#8f98a4'],
-  ['gray','铁灰','#6f7783'],['gray','墨灰','#4a4e56'],['gray','深灰','#2e3138'],
-  ['red','樱红','#f08a8a'],['red','珊瑚','#e26a62'],['red','砖红','#c4544a'],
-  ['red','朱红','#b5322f'],['red','酒红','#8e2a2c'],['red','暗红','#6b2224'],
-  ['yellow','麦黄','#f2d48a'],['yellow','琥珀','#e8b451'],['yellow','钨丝','#e08a2f'],
-  ['yellow','金黄','#cf8a20'],['yellow','姜黄','#a9701c'],['yellow','栗黄','#7d5216'],
-  ['green','嫩芽','#a9cf7e'],['green','叶绿','#7fae4a'],['green','草绿','#5da34f'],
-  ['green','森绿','#3f9e57'],['green','苔绿','#4f9463'],['green','墨绿','#27563a'],
-  ['blue','天蓝','#9fc2e8'],['blue','湖蓝','#6a9fd8'],['blue','靛蓝','#4478c0'],
-  ['blue','宝蓝','#2f5ba3'],['blue','深蓝','#27467c'],['blue','夜蓝','#1c3358'],
-  ['purple','丁香','#c3a7e0'],['purple','品红','#b455a0'],['purple','薰衣草','#a67fd2'],
-  ['purple','葡萄','#6a4fd0'],['purple','茄紫','#7a4f96'],['purple','深紫','#432c6d'],
-  ['brown','沙棕','#d6b492'],['brown','陶棕','#bd8f68'],['brown','赭棕','#a86a52'],
-  ['brown','栗棕','#8c5340'],['brown','褐棕','#6d3f31'],['brown','深褐','#4e2d23'],
-  ['red','霞红','#f09199'],['red','藕粉','#f8b8d9'],['red','火红','#f4664d'],
-  ['red','桃红','#f08a8c'],['red','夕红','#f0574d'],['red','粉樱','#f6c6e2'],
-  ['red','玫粉','#e79ba7'],
-  ['yellow','阳黄','#ffc24b'],['yellow','橘黄','#ffae3f'],
-  ['green','玉绿','#8fe3b0'],['green','翠绿','#22c79a'],['green','深翠','#0b5f51'],
-  ['green','松绿','#147a5f'],
-  ['cyan','浅青','#9be0e8'],['cyan','碧波','#5ce3e6'],['cyan','孔雀','#0f9cc2'],
-  ['cyan','冰青','#6fd8f2'],['cyan','薄荷','#a8f0dc'],['cyan','碧绿','#52cbb0'],
-  ['blue','琉璃','#1e50a2'],['blue','藏蓝','#274a78'],['blue','电蓝','#4c5be0'],
-  ['purple','古紫','#895b8a'],['purple','紫藤','#c4b5f7'],['purple','梅紫','#8a2e5e'],
-  ['purple','兰粉','#e794c9'],['purple','兰紫','#9678ce'],['purple','靛紫','#4a3894'],
-  ['purple','莓紫','#b65e8c'],['purple','墨紫','#2a2450'],['purple','暮紫','#5d2a66'],
-  ['purple','夜紫','#4c3894'],['purple','淡紫','#b387e8'],['purple','玫紫','#8e5a74'],
-  ['brown','杏橙','#ffc9a3'],['brown','浅杏','#fbc9ac'],
+  ['gray',t('云灰'),'#d8dade'],['gray',t('雾灰'),'#b6bcc4'],['gray',t('石灰'),'#8f98a4'],
+  ['gray',t('铁灰'),'#6f7783'],['gray',t('墨灰'),'#4a4e56'],['gray',t('深灰'),'#2e3138'],
+  ['red',t('樱红'),'#f08a8a'],['red',t('珊瑚'),'#e26a62'],['red',t('砖红'),'#c4544a'],
+  ['red',t('朱红'),'#b5322f'],['red',t('酒红'),'#8e2a2c'],['red',t('暗红'),'#6b2224'],
+  ['yellow',t('麦黄'),'#f2d48a'],['yellow',t('琥珀'),'#e8b451'],['yellow',t('钨丝'),'#e08a2f'],
+  ['yellow',t('金黄'),'#cf8a20'],['yellow',t('姜黄'),'#a9701c'],['yellow',t('栗黄'),'#7d5216'],
+  ['green',t('嫩芽'),'#a9cf7e'],['green',t('叶绿'),'#7fae4a'],['green',t('草绿'),'#5da34f'],
+  ['green',t('森绿'),'#3f9e57'],['green',t('苔绿'),'#4f9463'],['green',t('墨绿'),'#27563a'],
+  ['blue',t('天蓝'),'#9fc2e8'],['blue',t('湖蓝'),'#6a9fd8'],['blue',t('靛蓝'),'#4478c0'],
+  ['blue',t('宝蓝'),'#2f5ba3'],['blue',t('深蓝'),'#27467c'],['blue',t('夜蓝'),'#1c3358'],
+  ['purple',t('丁香'),'#c3a7e0'],['purple',t('品红'),'#b455a0'],['purple',t('薰衣草'),'#a67fd2'],
+  ['purple',t('葡萄'),'#6a4fd0'],['purple',t('茄紫'),'#7a4f96'],['purple',t('深紫'),'#432c6d'],
+  ['brown',t('沙棕'),'#d6b492'],['brown',t('陶棕'),'#bd8f68'],['brown',t('赭棕'),'#a86a52'],
+  ['brown',t('栗棕'),'#8c5340'],['brown',t('褐棕'),'#6d3f31'],['brown',t('深褐'),'#4e2d23'],
+  ['red',t('霞红'),'#f09199'],['red',t('藕粉'),'#f8b8d9'],['red',t('火红'),'#f4664d'],
+  ['red',t('桃红'),'#f08a8c'],['red',t('夕红'),'#f0574d'],['red',t('粉樱'),'#f6c6e2'],
+  ['red',t('玫粉'),'#e79ba7'],
+  ['yellow',t('阳黄'),'#ffc24b'],['yellow',t('橘黄'),'#ffae3f'],
+  ['green',t('玉绿'),'#8fe3b0'],['green',t('翠绿'),'#22c79a'],['green',t('深翠'),'#0b5f51'],
+  ['green',t('松绿'),'#147a5f'],
+  ['cyan',t('浅青'),'#9be0e8'],['cyan',t('碧波'),'#5ce3e6'],['cyan',t('孔雀'),'#0f9cc2'],
+  ['cyan',t('冰青'),'#6fd8f2'],['cyan',t('薄荷'),'#a8f0dc'],['cyan',t('碧绿'),'#52cbb0'],
+  ['blue',t('琉璃'),'#1e50a2'],['blue',t('藏蓝'),'#274a78'],['blue',t('电蓝'),'#4c5be0'],
+  ['purple',t('古紫'),'#895b8a'],['purple',t('紫藤'),'#c4b5f7'],['purple',t('梅紫'),'#8a2e5e'],
+  ['purple',t('兰粉'),'#e794c9'],['purple',t('兰紫'),'#9678ce'],['purple',t('靛紫'),'#4a3894'],
+  ['purple',t('莓紫'),'#b65e8c'],['purple',t('墨紫'),'#2a2450'],['purple',t('暮紫'),'#5d2a66'],
+  ['purple',t('夜紫'),'#4c3894'],['purple',t('淡紫'),'#b387e8'],['purple',t('玫紫'),'#8e5a74'],
+  ['brown',t('杏橙'),'#ffc9a3'],['brown',t('浅杏'),'#fbc9ac'],
   /* 这一枚是玻璃自带那团蓝色反光在浅色主题下的颜色，另一团是上面灰系的石灰。「玻璃原色」
      那一档的界面不显示颜色，但它在模型里仍有三枚合法色，同一条「预设用到的颜色都在表里」
      因此也要对它成立。 */
-  ['blue','霁蓝','#6686b8'],
+  ['blue',t('霁蓝'),'#6686b8'],
 ];
 const glowNumber=(value:number,min:number,max:number,fallback:number):number=>Number.isInteger(value)&&value>=min&&value<=max?value:fallback;
 /** 合法的 `#rrggbb` 转成小写原样返回，否则给 `fallback`。 */
