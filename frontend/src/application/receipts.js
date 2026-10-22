@@ -4,6 +4,7 @@ import { playUiSound } from '../ui-kit/sounds';
 import { mountToaster, showToast } from '../react/application-residents';
 import { setActionBusy } from '../ui-kit';
 import { applicationEffects } from './effects';
+import { t } from '../i18n';
 export const receiptsState = { toastBody: undefined, toastSeq: undefined, toast: undefined, liftToastsOverTutorial: undefined, actionReceipt: undefined, actionFailure: undefined, rollSeed: undefined, seededSample: undefined };
 
 
@@ -38,15 +39,15 @@ receiptsState.actionReceipt = (message,{undo=null,timeout=undo?8000:6000}={})=>{
   let item=null;
   item=receiptsState.toast({text:message},{
     timeout,
-    action:undo?{label:'撤销',run:async()=>{
-      try{await undo();item.replaceMessage({text:'已撤销'})}
-      catch(error){item.replaceMessage({text:`撤销失败：${error.message||'请重试'}`},{warn:true})}
+    action:undo?{label:t('撤销'),run:async()=>{
+      try{await undo();item.replaceMessage({text:t('已撤销')})}
+      catch(error){item.replaceMessage({text:t('撤销失败：{value}', { value: error.message||t('请重试') })},{warn:true})}
     }}:null,
   });
   return item;
 };
 receiptsState.actionFailure = (message,error)=>receiptsState.toast(
-  {text:`${message}失败：${error?.message||'请重试'}`},{warn:true});
+  {text:t('{message}失败：{value}', { message, value: error?.message||t('请重试') })},{warn:true});
 receiptsState.rollSeed = ()=>newSeed();
 receiptsState.seededSample = (rows,count,seed,key=row=>row.k)=>{
   if(rows.length<=count)return rows;
