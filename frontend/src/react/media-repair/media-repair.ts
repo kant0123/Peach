@@ -4,6 +4,7 @@
  * 首屏两份一起取，卡片挂上去直接读缓存。 */
 import { apiGet } from '../../api';
 import { queryClient } from '../query';
+import { t } from '../../i18n';
 
 export const MEDIA_REPAIR_URL = '/api/media-repair';
 export const MEDIA_REPAIR_KEY = ['media-repair'] as const;
@@ -55,18 +56,18 @@ const count = (value: number) => Number(value).toLocaleString();
 export function statusLine(state: MediaRepairState): string {
   if (state.status === 'running') {
     // 服务端偶尔报出超过总数的已查数，按总数封顶。
-    const where = state.total ? `${count(Math.min(state.checked || 0, state.total))} / ${count(state.total)}` : '准备中';
+    const where = state.total ? `${count(Math.min(state.checked || 0, state.total))} / ${count(state.total)}` : t('准备中');
     return state.stage === '修复' && state.message
-      ? `修复 ${where} · ${state.message}`
-      : `${state.stage || '扫描'} ${where}`;
+      ? t('修复 {where} · {message}', { where, message: state.message })
+      : `${state.stage || t('扫描')} ${where}`;
   }
   if (state.status === 'complete' && (state.repaired || state.failed)) {
     return state.failed
-      ? `修好 ${count(state.repaired)} 部，${count(state.failed)} 部修不了`
-      : `修好 ${count(state.repaired)} 部`;
+      ? t('修好 {value} 部，{value2} 部修不了', { value: count(state.repaired), value2: count(state.failed) })
+      : t('修好 {value} 部', { value: count(state.repaired) });
   }
   return '';
 }
 
 export const missingToolText = (state: MediaRepairState) =>
-  `${count(state.missing_tool)} 部缺索引的片子要装上 untrunc 才修得了，下载入口在配置页的「运行信息」里。`;
+  t('{value} 部缺索引的片子要装上 untrunc 才修得了，下载入口在配置页的「运行信息」里。', { value: count(state.missing_tool) });

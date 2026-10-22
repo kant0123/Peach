@@ -25,11 +25,12 @@ import {
   previewOrganize, rememberTemplates, startOrganize, withOrganizeJob,
   type OrganizeCommand, type OrganizeData, type OrganizeJob, type OrganizePlan,
 } from './organize';
+import { t } from '../../i18n';
 
-const APPLY_BODY = (name: string) => `将按这两份模板改动「${name}」上的文件名与目录，目标已存在的行会整行跳过。`
-  + '这一批可以从「回滚上一批」整批退回。';
-const ROLLBACK_BODY = '将把上一批整理动过的文件退回整理前的名字与位置，数据库路径跟着退回。'
-  + '退回后这一批不再出现在这里。';
+const APPLY_BODY = (name: string) => t('将按这两份模板改动「{name}」上的文件名与目录，目标已存在的行会整行跳过。', { name })
+  + t('这一批可以从「回滚上一批」整批退回。');
+const ROLLBACK_BODY = t('将把上一批整理动过的文件退回整理前的名字与位置，数据库路径跟着退回。')
+  + t('退回后这一批不再出现在这里。');
 /** 预览只列前 8 行：这里是给人扫一眼方向对不对，完整计划在 CSV 里。 */
 const PLAN_ROWS = 8;
 
@@ -47,7 +48,7 @@ function PlanRows({ plan }: { plan: OrganizePlan }) {
         ))}
       </ol>
       {plan.truncated
-        ? <p className="text-caption-1-regular text-text-secondary">只列出前 8 行，完整计划在计划 CSV 里。</p>
+        ? <p className="text-caption-1-regular text-text-secondary">{t('只列出前 8 行，完整计划在计划 CSV 里。')}</p>
         : null}
     </>
   );
@@ -92,7 +93,7 @@ export function OrganizeCard(
       void queryClient.invalidateQueries({ queryKey: ORGANIZE_KEY, exact: true });
       if (finished.status !== 'complete') return;
       const { text, failed } = organizeOutcome(finished);
-      if (failed) failure('按模板整理', new Error(`${failed} 行未能处理`));
+      if (failed) failure(t('按模板整理'), new Error(t('{failed} 行未能处理', { failed })));
       else toast(text.replace(/。$/, ''));
     },
   });
@@ -109,7 +110,7 @@ export function OrganizeCard(
     preview.mutate(request());
   };
   const runApply = () => void confirmModal({
-    title: '按模板整理文件', body: APPLY_BODY(name), confirmLabel: '整理文件',
+    title: t('按模板整理文件'), body: APPLY_BODY(name), confirmLabel: t('整理文件'),
     /* 预览只是试一试，不落盘；确认执行的那两行才记成这个来源的模板。 */
     onConfirm: async () => {
       const sent = request();
@@ -120,7 +121,7 @@ export function OrganizeCard(
     },
   });
   const runRollback = () => void confirmModal({
-    title: '回滚上一批整理', body: ROLLBACK_BODY, confirmLabel: '回滚整理',
+    title: t('回滚上一批整理'), body: ROLLBACK_BODY, confirmLabel: t('回滚整理'),
     onConfirm: () => job.start.mutateAsync({ kind: 'rollback' }),
   });
 
@@ -129,21 +130,21 @@ export function OrganizeCard(
   const current = job.job;
   const outcome = job.outcome;
   if (current?.status === 'running') {
-    const line = current.message || current.stage || '正在整理文件…';
+    const line = current.message || current.stage || t('正在整理文件…');
     state = <TaskProgress embedded label={line} value={Math.min(current.checked || 0, current.total || 0)} total={current.total} />;
   } else if (outcome?.status === 'failed') {
-    state = <Note tone="error" title="文件整理未完成">{outcome.error || '请查看任务记录，核对已处理的文件。'}</Note>;
+    state = <Note tone="error" title={t('文件整理未完成')}>{outcome.error || t('请查看任务记录，核对已处理的文件。')}</Note>;
   } else if (outcome) {
     const { text, failed } = organizeOutcome(outcome);
-    state = <Note tone={failed ? 'warning' : 'success'} title={failed ? '部分完成' : '整理结果'}>{text}</Note>;
+    state = <Note tone={failed ? 'warning' : 'success'} title={failed ? t('部分完成') : t('整理结果')}>{text}</Note>;
   } else if (job.start.isError) {
-    state = <Note tone="error" title="整理失败">{errorMessage(job.start.error)}</Note>;
+    state = <Note tone="error" title={t('整理失败')}>{errorMessage(job.start.error)}</Note>;
   } else if (preview.isPending) {
-    state = <TaskProgress embedded label="正在按模板算计划…" />;
+    state = <TaskProgress embedded label={t('正在按模板算计划…')} />;
   } else if (preview.isError) {
-    state = <Note tone="error" title="模板不可用">{errorMessage(preview.error)}</Note>;
+    state = <Note tone="error" title={t('模板不可用')}>{errorMessage(preview.error)}</Note>;
   } else if (plan) {
-    state = <><Note tone="neutral" title="预览结果">{planSummary(plan)}</Note>{changes ? <PlanRows plan={plan} /> : null}</>;
+    state = <><Note tone="neutral" title={t('预览结果')}>{planSummary(plan)}</Note>{changes ? <PlanRows plan={plan} /> : null}</>;
   }
 
   return (
@@ -151,25 +152,25 @@ export function OrganizeCard(
       attributes={{ 'data-cleanup-organize': '' }}
       footer={
         <>
-          <Button disabled={!locations.length} {...busyProps(preview.isPending)} onClick={runPreview}>预览</Button>
+          <Button disabled={!locations.length} {...busyProps(preview.isPending)} onClick={runPreview}>{t('预览')}</Button>
           {changes && !running && !job.outcome
-            ? <Button onClick={runApply}>执行整理</Button>
+            ? <Button onClick={runApply}>{t('执行整理')}</Button>
             : null}
           {data?.last_batch
-            ? <Button variant="secondary" {...busyProps(running)} onClick={runRollback}>回滚上一批</Button>
+            ? <Button variant="secondary" {...busyProps(running)} onClick={runRollback}>{t('回滚上一批')}</Button>
             : null}
         </>
       }>
-      <FieldsetTitle id="cleanup-organize-title" gap="medium">整理</FieldsetTitle>
+      <FieldsetTitle id="cleanup-organize-title" gap="medium">{t('整理')}</FieldsetTitle>
       <p className="text-body-regular text-text-secondary">
         按模板给文件改名并归入目录。先预览，确认后执行；执行过的一批可以整批退回。
       </p>
       {organize.isError
-        ? <div className="mt-3"><Note tone="error" title="整理配置读取失败">{errorMessage(organize.error)}</Note></div>
+        ? <div className="mt-3"><Note tone="error" title={t('整理配置读取失败')}>{errorMessage(organize.error)}</Note></div>
         : null}
       <div className="mt-3 flex flex-col gap-3">
         {locations.length
-          ? <Select aria-label="整理哪个来源" className="w-fit min-w-25" selectedKey={location || null}
+          ? <Select aria-label={t('整理哪个来源')} className="w-fit min-w-25" selectedKey={location || null}
               onSelectionChange={(key) => {
                 if (key === null) return;
                 setChosen(String(key)); setInvalid(null); preview.reset();
@@ -181,10 +182,10 @@ export function OrganizeCard(
               ))}
             </Select>
           : null}
-        <Input label="文件名模板" placeholder="{number}[ {title}]" value={fields.file} ref={fileInput}
+        <Input label={t('文件名模板')} placeholder="{number}[ {title}]" value={fields.file} ref={fileInput}
           spellCheck="false" isInvalid={invalid === 'file'}
           onChange={(value) => { edit({ file: value }); setInvalid(null) }} />
-        <Input label="目录模板" placeholder="留空表示原地改名" value={fields.dir} ref={dirInput}
+        <Input label={t('目录模板')} placeholder={t('留空表示原地改名')} value={fields.dir} ref={dirInput}
           spellCheck="false" isInvalid={invalid === 'dir'}
           onChange={(value) => { edit({ dir: value }); setInvalid(null) }} />
         {data?.presets?.length
@@ -199,7 +200,7 @@ export function OrganizeCard(
             </div>
           : null}
         <p className="text-caption-1-regular leading-4.5 text-text-secondary">
-          {`${hint ? `${hint}；` : ''}方括号里的内容在字段为空时整段省略。`}
+          {t('{value}方括号里的内容在字段为空时整段省略。', { value: hint ? `${hint}；` : '' })}
         </p>
       </div>
       <div aria-live="polite" className="mt-3 flex flex-col gap-2 empty:hidden">{state}</div>

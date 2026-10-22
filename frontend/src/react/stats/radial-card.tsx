@@ -17,6 +17,7 @@ import { CHART_CARD, ChartEmpty, sliceConfig, sliceKey } from '../charts/chart-c
 import { ChartTip } from '../charts/chart-tip';
 import { SourceMark } from '../settings/section';
 import { radialArc, radialBarSize, radialCeiling, radialSlices, type RadialSlice } from './stats';
+import { t } from '../../i18n';
 
 /** 六档图表色循环。类名写成整串，Tailwind 扫得到。 */
 const TILE_SWATCH = [
@@ -35,7 +36,7 @@ const TILE_PINNED = [
 ];
 
 export function RadialCard(
-  { title, rows, empty, unit = '个视频' }: { title: string; rows: RadialSlice[]; empty: string; unit?: string },
+  { title, rows, empty, unit = t('个视频') }: { title: string; rows: RadialSlice[]; empty: string; unit?: string },
 ) {
   /* 钉住的那一段和指针扫过的那一段分开记：扫过去要能回到钉住的那一段，合成一个状态的话
      鼠标一离开就把用户点下的选择也擦了。 */

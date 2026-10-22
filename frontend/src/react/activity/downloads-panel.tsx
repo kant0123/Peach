@@ -22,6 +22,7 @@ import { ErrorText } from '../settings/section';
 import { busyProps, useAction } from '../settings/use-action';
 import { momentText } from './tasks';
 import { SourceLabel } from '../components/source-label';
+import { t } from '../../i18n';
 
 export const DOWNLOADS_URL = '/api/downloads';
 export const DOWNLOADS_KEY = ['downloads'] as const;
@@ -36,7 +37,7 @@ const STATE_COLORS: Record<string, 'lime' | 'rose' | 'yellow'> = {
 };
 
 const taskName = (task: DownloadTask) =>
-  task.title || task.display_name || task.remote_name || task.code || `磁力 ${task.info_hash?.slice(0, 8) ?? task.id}`;
+  task.title || task.display_name || task.remote_name || task.code || t('磁力 {id}', { id: task.info_hash?.slice(0, 8) ?? task.id });
 
 export const failureText = (task: DownloadTask) =>
   task.failure_label ? [task.failure_label, task.failure_detail].filter(Boolean).join('：') : '';
@@ -52,7 +53,7 @@ export function DownloadsPanel() {
   if (!data?.tasks.length && !query.error) return null;
   return (
     <section aria-labelledby={id} className="flex min-w-0 flex-col gap-3">
-      <h3 id={id} className="text-title-2-semibold text-text-primary">云下载</h3>
+      <h3 id={id} className="text-title-2-semibold text-text-primary">{t('云下载')}</h3>
       {query.error ? <Note tone="error">{errorMessage(query.error)}</Note> : null}
       {data?.tasks.length
         ? <ul aria-live="polite" className="flex min-w-0 flex-col gap-3">
@@ -106,7 +107,7 @@ function TaskCard({ task, writable }: { task: DownloadTask; writable: boolean })
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-caption-1-regular text-text-secondary"><SourceLabel source={task.provider} label={task.provider_label} /><span className="break-words">{meta}</span></div>
         {task.state === 'remote_running' && task.progress != null
-          ? <Progress label="远端下载进度" value={Math.round(task.progress * 100)} max={100} />
+          ? <Progress label={t('远端下载进度')} value={Math.round(task.progress * 100)} max={100} />
           : null}
         {task.ledger_path
           ? <p className="min-w-0 break-all text-caption-1-regular text-text-secondary">{task.ledger_path}</p>
@@ -114,16 +115,16 @@ function TaskCard({ task, writable }: { task: DownloadTask; writable: boolean })
         {action.error ? <ErrorText>{action.error}</ErrorText> : null}
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {writable && task.cancellable
-            ? <Button variant="secondary" size="small" {...busyProps(action.busy === 'cancel')} onClick={cancel}>取消</Button>
+            ? <Button variant="secondary" size="small" {...busyProps(action.busy === 'cancel')} onClick={cancel}>{t('取消')}</Button>
             : null}
           {writable && task.resubmittable
-            ? <Button variant="secondary" size="small" {...busyProps(action.busy === 'resubmit')} onClick={resubmit}>重新提交</Button>
+            ? <Button variant="secondary" size="small" {...busyProps(action.busy === 'resubmit')} onClick={resubmit}>{t('重新提交')}</Button>
             : null}
           {writable && task.postprocess_retryable
             ? <Button variant="secondary" size="small" {...busyProps(action.busy === 'postprocess')}
-                onClick={retryPostprocess}>重试后处理</Button>
+                onClick={retryPostprocess}>{t('重试后处理')}</Button>
             : null}
-          <Button variant="ghost" size="small" onClick={copy}>{copied ? '已复制磁力' : '复制磁力'}</Button>
+          <Button variant="ghost" size="small" onClick={copy}>{copied ? t('已复制磁力') : t('复制磁力')}</Button>
         </div>
       </div>
       {reason || task.postprocess_detail

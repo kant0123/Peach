@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /* 批量条（常驻组件 `batch-dock`，`batch-dock-island.tsx`）对壳的契约，以及每种语境下列哪几颗键。
  *
  * 多选的状态归共享 shell store 与 application/selection.js：开关、选中集、Shift 连选与切页退出只有一份。壳每次重画
@@ -37,39 +38,39 @@ export interface BatchDockApi {
   render(props: BatchDockProps): void;
 }
 
-const CLEAR: BatchAction = { group: 'clear', operation: 'clear', label: '取消', glyph: 'x' };
+const CLEAR: BatchAction = { group: 'clear', operation: 'clear', label: t('取消'), glyph: 'x' };
 
 /** 这一语境下浮条上的键，按从左到右的顺序。「取消」总在最后。 */
 export function batchActions(context: BatchContext, junkDismissed = false): BatchAction[] {
   switch (context) {
     case 'trash':
       return [
-        { group: 'batch', operation: 'restore', label: '还原', glyph: 'rotate-ccw' },
-        { group: 'batch', operation: 'delete', label: '彻底删除', glyph: 'trash', danger: true },
+        { group: 'batch', operation: 'restore', label: t('还原'), glyph: 'rotate-ccw' },
+        { group: 'batch', operation: 'delete', label: t('彻底删除'), glyph: 'trash', danger: true },
         CLEAR,
       ];
     case 'junk':
       return [
         junkDismissed
-          ? { group: 'junk', operation: 'reconsider-junk', label: '重新判断', glyph: 'rotate-ccw' }
-          : { group: 'junk', operation: 'dismiss-junk', label: '不是垃圾', glyph: 'check' },
-        { group: 'junk', operation: 'dispose', label: '移入回收站', glyph: 'trash', danger: true },
+          ? { group: 'junk', operation: 'reconsider-junk', label: t('重新判断'), glyph: 'rotate-ccw' }
+          : { group: 'junk', operation: 'dismiss-junk', label: t('不是垃圾'), glyph: 'check' },
+        { group: 'junk', operation: 'dispose', label: t('移入回收站'), glyph: 'trash', danger: true },
         CLEAR,
       ];
     case 'follow':
       return [
-        { group: 'follow', operation: 'save', label: '保存到数据库', glyph: 'bookmark-plus' },
-        { group: 'follow', operation: 'seen', label: '标记已看', glyph: 'eye' },
-        { group: 'follow', operation: 'ignored', label: '忽略', glyph: 'eye-off' },
+        { group: 'follow', operation: 'save', label: t('保存到数据库'), glyph: 'bookmark-plus' },
+        { group: 'follow', operation: 'seen', label: t('标记已看'), glyph: 'eye' },
+        { group: 'follow', operation: 'ignored', label: t('忽略'), glyph: 'eye-off' },
         CLEAR,
       ];
     default:
       return [
-        { group: 'batch', operation: 'like', label: '喜欢', glyph: 'thumbs-up' },
-        { group: 'batch', operation: 'seen', label: '看过', glyph: 'eye' },
-        { group: 'batch', operation: 'later', label: '稍后看', glyph: 'bookmark-plus' },
-        { group: 'region', operation: 'region', label: '判定产地', glyph: 'globe' },
-        { group: 'batch', operation: 'dispose', label: '移入回收站', glyph: 'trash', danger: true },
+        { group: 'batch', operation: 'like', label: t('喜欢'), glyph: 'thumbs-up' },
+        { group: 'batch', operation: 'seen', label: t('看过'), glyph: 'eye' },
+        { group: 'batch', operation: 'later', label: t('稍后看'), glyph: 'bookmark-plus' },
+        { group: 'region', operation: 'region', label: t('判定产地'), glyph: 'globe' },
+        { group: 'batch', operation: 'dispose', label: t('移入回收站'), glyph: 'trash', danger: true },
         CLEAR,
       ];
   }
