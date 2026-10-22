@@ -19,6 +19,7 @@ import { currentBarsContext, entityState, openEntity, revealForIsland, syncForIs
 import { openAddToPlaylist, rereadPlaylists, saveMixAsPlaylist } from './playlists.js';
 import { releaseHoverPreviews } from './../card-art/hover';
 import { applicationEffects } from './effects';
+import { t } from '../i18n';
 export const mediaState = { total: undefined, facets: undefined, stageHost: undefined, stageOpen: undefined, itemDetailHelpers: undefined, itemDetailActions: undefined, immerseHost: undefined, immerseOpen: undefined, requestedImmerseId: undefined };
 
 export function urlResume(){
@@ -197,7 +198,7 @@ mediaState.itemDetailHelpers = {
   tagCandidates:()=>(mediaState.facets&&mediaState.facets.tags)||[],
   sourceOffline:key=>preferencesState.sourceOffline(key),
   offlineReason:key=>preferencesState.offlineReason(key),
-  relatedSkeletonHtml:()=>pageSkeletonHtml('正在读取推荐',{cards:true,className:'related-skeleton'}),
+  relatedSkeletonHtml:()=>pageSkeletonHtml(t('正在读取推荐'),{cards:true,className:'related-skeleton'}),
   mixRelated:seedId=>mixRelated(seedId),
   wireDrag:el=>wireDrag(el),
   wireDragReorder:(root,options)=>wireDragReorder(root,options),

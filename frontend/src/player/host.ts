@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 /* 播放器向外要的几样东西：设置、回执、来源状态与舞台元素。
  *
  * 播放器是命令式模块，不持有这些状态：设置归遗留壳的 `appSettings`（存在 localStorage 的
@@ -32,6 +33,6 @@ let current: PlayerHost | null = null;
 export function configurePlayer(host: PlayerHost): void { current = host }
 
 export function playerHost(): PlayerHost {
-  if (!current) throw new Error('播放器还没有接上宿主（configurePlayer）');
+  if (!current) throw new Error(t('播放器还没有接上宿主（configurePlayer）'));
   return current;
 }
