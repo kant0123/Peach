@@ -20,8 +20,10 @@ import { installSearch20, installSearch22 } from './search.js';
 import { installComposition24 } from './composition.js';
 import { installChrome25 } from './chrome.js';
 import { applicationEffects } from './effects';
+import { applyDocumentLanguage } from '../i18n';
 
 export function initializeApplication() {
+  applyDocumentLanguage();
   installLifecycle1();
   installNavigation2();
   installLoading3();

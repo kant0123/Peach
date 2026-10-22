@@ -3,9 +3,11 @@ import { useState, type FormEvent } from 'react';
 
 import { SettingsRow } from '@/components/application/settings/settings-rows';
 import { Button } from '@/components/base/buttons/button';
+import { Select, SelectItem } from '@/components/base/select/select';
 import { Switch } from '@/components/base/switch/switch';
 
 import { apiSend } from '../../api';
+import { LOCALES, locale, setLocale, t, type Locale } from '../../i18n';
 import type { ConfigurationGroupProps, StartupState } from '../bundle';
 import { groupRoot } from './configuration-panel';
 import { AutomaticUpdates } from './maintenance-settings';
@@ -18,12 +20,13 @@ import { busyProps, useAction } from './use-action';
 export function GeneralSettings({ data, receipt, panel }: ConfigurationGroupProps) {
   return (
     <div {...groupRoot(panel)}>
-      {data.remote_reporting || data.library_sharing ? <Section title="数据上传">
+      {data.remote_reporting || data.library_sharing ? <Section title={t('数据上传')}>
         {data.remote_reporting ? <RemoteReportingSettings initial={data.remote_reporting} receipt={receipt} /> : null}
         {data.library_sharing ? <div className="border-t border-separator-border">
           <LibrarySharingSettings initial={data.library_sharing} receipt={receipt} />
         </div> : null}
       </Section> : null}
+      <LanguageSettings />
       {data.startup ? <StartupSettings startup={data.startup} receipt={receipt} /> : null}
       {data.automatic_updates ? <AutomaticUpdates initial={data.automatic_updates} receipt={receipt} /> : null}
       {data.updates ? <ReleaseUpdates initial={data.updates} initialJob={data.update_job} /> : null}
@@ -44,20 +47,20 @@ export function StartupSettings({ startup, receipt }: { startup: StartupState; r
     event.preventDefault();
     if (!startup.available) return;
     void action.run('save', (signal) => apiSend('/api/configuration/startup', { enabled, silent, desktop }, 'POST', signal),
-      () => receipt('已保存配置'));
+      () => receipt(t('已保存配置')));
   };
 
   return (
-    <Section title="开机自启" onSubmit={submit}>
+    <Section title={t('开机自启')} onSubmit={submit}>
       <Rows>
-        <SettingsRow label="开机后启动 Peach">
-          <Switch aria-label="开机后启动 Peach" isSelected={enabled} isDisabled={!startup.available} onChange={setEnabled} />
+        <SettingsRow label={t('开机后启动 Peach')}>
+          <Switch aria-label={t('开机后启动 Peach')} isSelected={enabled} isDisabled={!startup.available} onChange={setEnabled} />
         </SettingsRow>
-        <SettingsRow label="只启动托盘，不打开网页">
-          <Switch aria-label="只启动托盘，不打开网页" isSelected={silent} isDisabled={!startup.available || !enabled} onChange={setSilent} />
+        <SettingsRow label={t('只启动托盘，不打开网页')}>
+          <Switch aria-label={t('只启动托盘，不打开网页')} isSelected={silent} isDisabled={!startup.available || !enabled} onChange={setSilent} />
         </SettingsRow>
-        <SettingsRow label="在桌面创建快捷方式" description={startup.desktop_message || undefined}>
-          <Switch aria-label="在桌面创建快捷方式" isSelected={desktop} isDisabled={!desktopReady} onChange={setDesktop} />
+        <SettingsRow label={t('在桌面创建快捷方式')} description={startup.desktop_message || undefined}>
+          <Switch aria-label={t('在桌面创建快捷方式')} isSelected={desktop} isDisabled={!desktopReady} onChange={setDesktop} />
         </SettingsRow>
       </Rows>
       {startup.message || action.error ? (
@@ -67,8 +70,22 @@ export function StartupSettings({ startup, receipt }: { startup: StartupState; r
         </Stack>
       ) : null}
       <Footer>
-        <Button type="submit" disabled={!startup.available} {...busyProps(action.busy === 'save')}>保存配置</Button>
+        <Button type="submit" disabled={!startup.available} {...busyProps(action.busy === 'save')}>{t('保存配置')}</Button>
       </Footer>
+    </Section>
+  );
+}
+
+function LanguageSettings() {
+  return (
+    <Section title={t('界面语言')}>
+      <Rows>
+        <SettingsRow label={t('显示语言')} description={t('切换后页面会重新载入')}>
+          <Select aria-label={t('显示语言')} selectedKey={locale()} onSelectionChange={(key) => setLocale(String(key) as Locale)}>
+            {LOCALES.map((option) => <SelectItem key={option.value} id={option.value}>{option.label}</SelectItem>)}
+          </Select>
+        </SettingsRow>
+      </Rows>
     </Section>
   );
 }
