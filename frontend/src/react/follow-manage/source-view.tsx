@@ -13,6 +13,7 @@ import {
   authorAvatar, authorInitial, errorHeadline, isBroken, sourceIconUrl, statusText,
   type FollowSource,
 } from './follow-manage';
+import { t } from '../../i18n';
 
 /** 站点圆标。
  *
@@ -42,7 +43,7 @@ export function AuthorAvatar({ group, name }: { group: FollowSource[]; name: str
   const current = chain[at];
   if (!current) {
     return (
-      <span title="没有可用头像"
+      <span title={t('没有可用头像')}
         className="inline-grid size-8 shrink-0 place-items-center rounded-full bg-background-tertiary-default text-caption-1-semibold text-text-secondary">
         {authorInitial(name)}
       </span>
@@ -66,7 +67,7 @@ export function StatusBadge({ source }: { source: FollowSource }) {
 /** 来源名连到站上的原页面。新标签页不继承这一页的会话，来源地址也不带走 Peach 自己的地址。 */
 export function SourceLink({ source }: { source: FollowSource }) {
   return (
-    <a href={source.url} target="_blank" rel="noreferrer noopener" title="打开原来源"
+    <a href={source.url} target="_blank" rel="noreferrer noopener" title={t('打开原来源')}
       className="min-w-0 text-body-medium wrap-anywhere text-text-primary underline-offset-2 hover:underline">
       {source.label}
     </a>
@@ -99,7 +100,7 @@ export function ErrorLine({ text, prefix = '', tone = 'error' }: { text: string;
       {more ? (
         <Button variant="ghost" size="xs" data-error-line-toggle="" aria-expanded={open} className="-ml-2"
           onClick={() => setOpen(!open)}>
-          {open ? '收起详情' : '查看详情'}
+          {open ? t('收起详情') : t('查看详情')}
         </Button>
       ) : null}
     </span>

@@ -35,9 +35,10 @@ import {
   SORT_DEFAULT_DIR, type CredentialData, type FollowData, type Layout, type SortDir, type SortKey,
 } from './follow-manage';
 import { SourceList } from './source-list';
+import { t } from '../../i18n';
 
 const TABS = [
-  ['list', '关注列表'], ['add', '添加关注'], ['feeds', 'JAV 订阅源'],
+  ['list', t('关注列表')], ['add', t('添加关注')], ['feeds', t('JAV 订阅源')],
 ] as const;
 type TabKey = (typeof TABS)[number][0];
 
@@ -116,7 +117,7 @@ export function FollowManagePage(props: FollowManageProps) {
   return (
     <Page>
       {readOnly ? (
-        <Note tone="warning" title="本机只能浏览"
+        <Note tone="warning" title={t('本机只能浏览')}
           extra={writerUrl
             ? <p className="text-body-2-regular">
                 <a href={writerUrl} className="text-text-primary underline underline-offset-2">
@@ -129,13 +130,13 @@ export function FollowManagePage(props: FollowManageProps) {
       ) : null}
 
       {/* 前四张是关注，后两张是 JAV 订阅源：订了几位、拉回来的新作还有几条没看。 */}
-      <div className={STAT_STRIP_SIX} aria-label="关注概览">
-        <Reading term="关注创作者" figure={groups.length} unit="位" />
-        <Reading term="启用来源" figure={enabled} unit={`/ ${sources.length}`} />
-        <Reading term="检查失败" figure={broken} unit="个来源" />
-        <Reading term="未看更新" figure={data.counts?.new || 0} unit="条" />
-        <Reading term="JAV 订阅" figure={subscribed} unit="位" />
-        <Reading term="未看新作" figure={feeds.data?.unread || 0} unit="条" />
+      <div className={STAT_STRIP_SIX} aria-label={t('关注概览')}>
+        <Reading term={t('关注创作者')} figure={groups.length} unit={t('位')} />
+        <Reading term={t('启用来源')} figure={enabled} unit={`/ ${sources.length}`} />
+        <Reading term={t('检查失败')} figure={broken} unit={t('个来源')} />
+        <Reading term={t('未看更新')} figure={data.counts?.new || 0} unit={t('条')} />
+        <Reading term={t('JAV 订阅')} figure={subscribed} unit={t('位')} />
+        <Reading term={t('未看新作')} figure={feeds.data?.unread || 0} unit={t('条')} />
       </div>
 
       <Tabs selectedKey={tab} onSelectionChange={(key) => {
@@ -144,7 +145,7 @@ export function FollowManagePage(props: FollowManageProps) {
         setTab(next);
         go({ tab: next });
       }} className="flex flex-col gap-6">
-        <TabList ref={sectionScroll} aria-label="关注管理区域" data-section-nav data-section-items
+        <TabList ref={sectionScroll} aria-label={t('关注管理区域')} data-section-nav data-section-items
           className="flex max-w-full flex-nowrap overflow-x-auto">
           {TABS.map(([key, name]) => (
             <Tab key={key} id={key} className="cursor-pointer whitespace-nowrap">{name}</Tab>
@@ -189,7 +190,7 @@ export function FollowManagePage(props: FollowManageProps) {
         </TabPanel>
 
       </Tabs>
-      <div><Button variant="secondary" onClick={openServiceConfiguration}>来源与订阅设置{pending ? `（${pending}）` : ''}</Button></div>
+      <div><Button variant="secondary" onClick={openServiceConfiguration}>{t('来源与订阅设置')}{pending ? `（${pending}）` : ''}</Button></div>
     </Page>
   );
 }

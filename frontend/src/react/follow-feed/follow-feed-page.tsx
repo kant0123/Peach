@@ -40,6 +40,7 @@ import {
   type FollowCondition, type FollowContext, type FollowDrawer, type FollowFeedProps, type FollowGroup, type FollowPage, type FollowSource,
   type FollowJobState, type FollowView, type FollowWorkRow,
 } from './follow-feed';
+import { t } from '../../i18n';
 
 const Sep = () => <span data-entity-sep="" aria-hidden="true" />;
 const SETTINGS = spriteGlyph('settings');
@@ -48,7 +49,7 @@ const HISTORY = spriteGlyph('history');
 
 /** 照片墙那一排的图片布局两档，同壳里 `PHOTO_LAYOUTS`。 */
 export const FOLLOW_PHOTO_LAYOUTS: readonly SegmentOption[] = [
-  ['fixed', '固定比例', 'layout-grid'], ['masonry', '瀑布流', 'columns-2'],
+  ['fixed', t('固定比例'), 'layout-grid'], ['masonry', t('瀑布流'), 'columns-2'],
 ];
 
 /** 这一页从数据里推出来的那几样：两排的取样、筛选条的选项、可见的组。只随数据、视图与种子变。 */
@@ -160,16 +161,16 @@ export function FollowFeedPage(props: FollowFeedProps) {
     <>
       {/* 进度那一格归 `followJobProgress`：它自己往里插面板、自己开合，React 只给一个空节点。 */}
       <div key={job.generation} ref={job.host} data-follow-progress="" />
-      {!job.busy && job.report ? <Note tone="neutral" title="检查结果">{job.report}</Note> : null}
+      {!job.busy && job.report ? <Note tone="neutral" title={t('检查结果')}>{job.report}</Note> : null}
       <div data-follow-feed="" data-select-mode={props.selectMode ? '' : undefined}>
         <Head onManage={actions.openManage}>
           {facets.sources.length ? (
-            <Button variant="primary" data-follow-recheck="" aria-label="检查每个来源的更新"
+            <Button variant="primary" data-follow-recheck="" aria-label={t('检查每个来源的更新')}
               aria-busy={job.busy || undefined}
               onClick={() => void job.start(false)}>
               {job.starting === 'check'
-                ? <span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml('检查中') }} />
-                : '检查更新'}
+                ? <span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml(t('检查中')) }} />
+                : t('检查更新')}
             </Button>
           ) : null}
         </Head>
@@ -190,7 +191,7 @@ export function FollowFeedPage(props: FollowFeedProps) {
                 {data.groups.length < FOLLOW_AUTO_LOAD_LIMIT ? (
                   <LoadMore key={result.data?.pages.length} entity enabled={() => !job.busyRef.current}
                     load={async () => { await result.fetchNextPage({ throwOnError: true }) }}>
-                    <CHEVRON_DOWN className="size-3.5" />加载更多
+                    <CHEVRON_DOWN className="size-3.5" />{t('加载更多')}
                   </LoadMore>
                 ) : (
                   <ManualMore busy={result.isFetchingNextPage}
@@ -205,8 +206,8 @@ export function FollowFeedPage(props: FollowFeedProps) {
                   aria-busy={job.busy || undefined}
                   onClick={() => void job.start(true)}>
                   {job.olderBusy
-                    ? <><span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml('抓取中') }} /><span>抓取中…</span></>
-                    : '抓更早的一页'}
+                    ? <><span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml(t('抓取中')) }} /><span>{t('抓取中…')}</span></>
+                    : t('抓更早的一页')}
                 </Button>
                 <span data-follow-backfill="">{backfillState(facets.sources)}</span>
               </span>
@@ -222,7 +223,7 @@ export function FollowFeedPage(props: FollowFeedProps) {
 function Head({ onManage, children }: { onManage(): void; children?: ReactNode }) {
   return (
     <div data-follow-head="">
-      <h2 data-follow-title="">关注</h2>
+      <h2 data-follow-title="">{t('关注')}</h2>
       <span data-follow-head-actions="">
         <Button variant="secondary" leadingIcon={SETTINGS} data-follow-manage="" onClick={onManage}>
           管理关注
@@ -239,7 +240,7 @@ function ManualMore({ busy, error, load }: { busy: boolean; error: string; load(
   return (
     <>
       <button type="button" data-entity-more="" aria-busy={busy || undefined} aria-disabled={busy || undefined} onClick={load}>
-        <CHEVRON_DOWN className="size-3.5" />加载更多
+        <CHEVRON_DOWN className="size-3.5" />{t('加载更多')}
       </button>
       {error ? <RetryNote message={error} onRetry={load} /> : null}
     </>
@@ -332,7 +333,7 @@ function Authors({ facets, pressed, context, props, onPick }: {
   if (!facets.authorOrder.length) return null;
   return (
     <div data-follow-authors-bar="">
-      <div ref={row} data-follow-authors="" aria-label="创作者">
+      <div ref={row} data-follow-authors="" aria-label={t('创作者')}>
         {facets.authorOrder.map((key) => {
           const list = facets.authorSources.get(key) || [];
           const entity = followAuthorEntity(list);
@@ -342,7 +343,7 @@ function Authors({ facets, pressed, context, props, onPick }: {
           </>;
           return entity ? (
             <FollowAuthorLink key={key} name={entity} actions={props.actions} data-follow-author={key}
-              aria-label={`查看 ${nameOf(key)} 的作者页`}>{content}</FollowAuthorLink>
+              aria-label={t('查看 {value} 的作者页', { value: nameOf(key) })}>{content}</FollowAuthorLink>
           ) : (
             <button key={key} type="button" data-follow-author={key} aria-pressed={pressed === key} onClick={() => onPick(key)}>
               {content}
@@ -363,7 +364,7 @@ function Works({ rows, pressed, props, onPick }: {
   useEffect(() => { props.helpers.wireDrag(row.current) }, [props.helpers]);
   if (!rows.length) return null;
   return (
-    <div ref={row} data-follow-works="" aria-label="按题材筛选">
+    <div ref={row} data-follow-works="" aria-label={t('按题材筛选')}>
       {rows.map((work) => (
         <button key={work[0]} type="button" data-follow-work={work[0]} aria-pressed={pressed === work[0]}
           onClick={() => onPick(work[0])}>
@@ -404,7 +405,7 @@ function Glass({ facets, view, total, busy, props, route }: {
   const extras = providers.length + facets.tagRows.length > 0;
   const images = view.media === 'images';
   return (
-    <FilterGlassRows label="筛选与排序" topLabel={showMedia ? '媒体与关注筛选' : '关注筛选'}
+    <FilterGlassRows label={t('筛选与排序')} topLabel={showMedia ? t('媒体与关注筛选') : t('关注筛选')}
       attrs={{ 'data-filter-frame': '', 'data-follow-filter-glass': '' }}
       topClassName="gap-1.5 overflow-visible" busy={busy}
       panes={<>
@@ -414,9 +415,9 @@ function Glass({ facets, view, total, busy, props, route }: {
       top={<>
         {showMedia ? (
           <>
-            <div ref={mediaRow} role="group" aria-label="媒体类型" data-entity-media="" onPointerLeave={mediaGlide.leave}>
-              {([['videos', '视频', facets.mediaCounts.videos, 'play', 'video'],
-                ['images', '图片', facets.mediaCounts.images, 'pics', 'image']] as const).map(([value, text, count, symbol, kind]) => {
+            <div ref={mediaRow} role="group" aria-label={t('媒体类型')} data-entity-media="" onPointerLeave={mediaGlide.leave}>
+              {([['videos', t('视频'), facets.mediaCounts.videos, 'play', 'video'],
+                ['images', t('图片'), facets.mediaCounts.images, 'pics', 'image']] as const).map(([value, text, count, symbol, kind]) => {
                 const title = `${text} ${Math.max(0, count || 0).toLocaleString()}`;
                 return (
                   <button key={value} type="button" data-media-view={value} data-media-icon={kind}
@@ -430,7 +431,7 @@ function Glass({ facets, view, total, busy, props, route }: {
           </>
         ) : null}
         <div ref={scroll} data-entity-scroll="">
-          <div ref={stateRow} role="group" aria-label="状态" data-entity-states="" onPointerLeave={stateGlide.leave}>
+          <div ref={stateRow} role="group" aria-label={t('状态')} data-entity-states="" onPointerLeave={stateGlide.leave}>
             {FOLLOW_FILTERS.map(([key, label]) => (
               <button key={key} type="button" data-entity-state={key} data-follow-filter={key} data-entity-press=""
                 aria-pressed={view.status === key} onPointerEnter={stateGlide.hover}
@@ -443,7 +444,7 @@ function Glass({ facets, view, total, busy, props, route }: {
           <div ref={tagRow} data-entity-tags="">
             {providers.map(([key, label]) => (
               <button key={key} type="button" data-follow-provider={key} data-entity-press=""
-                aria-pressed={facets.provider === key} title={label} aria-label={`来源：${label}`}
+                aria-pressed={facets.provider === key} title={label} aria-label={t('来源：{label}', { label })}
                 onClick={() => route({ provider: facets.provider === key ? '' : key })}
                 dangerouslySetInnerHTML={{ __html: sourceMark(key, label) }} />
             ))}
@@ -461,17 +462,17 @@ function Glass({ facets, view, total, busy, props, route }: {
       </>}
       bottom={<>
         <h3 data-entity-readout="" data-follow-readout="">
-          {`${total.toLocaleString()} 项更新 · 显示 ${facets.visible.length.toLocaleString()}`}
+          {t('{value} 项更新 · 显示 {value2}', { value: total.toLocaleString(), value2: facets.visible.length.toLocaleString() })}
         </h3>
         <LibraryShortcuts currentHref={() => location.pathname + location.search} kind="creator" />
         <span data-entity-sorts="">
           <Shuffle onPress={actions.shuffle} />
           {images ? (
             <>
-              <Segments label="图片布局" value={props.photoLayout} options={FOLLOW_PHOTO_LAYOUTS}
+              <Segments label={t('图片布局')} value={props.photoLayout} options={FOLLOW_PHOTO_LAYOUTS}
                 onChange={(value) => actions.setPhotoLayout(value === 'fixed' ? 'fixed' : 'masonry')} />
-              <button type="button" data-follow-images-only="" aria-pressed={props.imagesOnly} title="仅显示图片"
-                aria-label="仅显示图片" onClick={() => actions.setImagesOnly(!props.imagesOnly)}>
+              <button type="button" data-follow-images-only="" aria-pressed={props.imagesOnly} title={t('仅显示图片')}
+                aria-label={t('仅显示图片')} onClick={() => actions.setImagesOnly(!props.imagesOnly)}>
                 {props.imagesOnly ? <span data-view-glide="" aria-hidden="true" /> : null}
                 <span className="contents" dangerouslySetInnerHTML={{ __html: icon('captions-off') }} />
               </button>
@@ -508,16 +509,16 @@ function Combo({ conditions, onDrop, onClear }: {
       {conditions.length ? (
         <>
           {conditions.map((row) => {
-            const text = `${row.kind === '标签' ? '' : `${row.kind} `}${row.label}`;
+            const text = `${row.kind === '标签' ? '' : `${kindLabel(row.kind)} `}${row.label}`;
             return (
               <span key={`${row.kind}:${row.key}`} data-combo-chip="">
                 {text}
-                <button type="button" aria-label={`撤掉 ${text}`} data-follow-drop={row.key} data-follow-drop-kind={row.kind}
+                <button type="button" aria-label={t('撤掉 {text}', { text })} data-follow-drop={row.key} data-follow-drop-kind={row.kind}
                   onClick={() => onDrop(row)}>✕</button>
               </span>
             );
           })}
-          <button type="button" data-combo-clear="" onClick={onClear}>全部清除</button>
+          <button type="button" data-combo-clear="" onClick={onClear}>{t('全部清除')}</button>
         </>
       ) : null}
     </div>
@@ -530,7 +531,7 @@ function BrokenNote({ count, onManage }: { count: number; onManage(): void }) {
     <div data-follow-broken="" onClick={(event) => {
       if ((event.target as HTMLElement).closest('[data-follow-manage]')) onManage();
     }} dangerouslySetInnerHTML={{
-      __html: `<div class="geist-note geist-note-error fwarn" role="alert">${icon('alert')}<span>${count} 个来源上次检查失败，去<button type="button" class="flink" data-follow-manage>管理关注</button>看原因。</span></div>`,
+      __html: `<div class="geist-note geist-note-error fwarn" role="alert">${icon('alert')}<span>${t('{count} 个来源上次检查失败，去', { count })}<button type="button" class="flink" data-follow-manage>${t('管理关注')}</button>${t('看原因。')}</span></div>`,
     }} />
   );
 }
@@ -595,13 +596,13 @@ function cardId(group: FollowGroup, view: FollowView): number {
  *  一个来源都没有。没设筛选时不叫人去改筛选。 */
 function Empty({ data, filtered }: { data: FollowPage; filtered: boolean }) {
   const html = (data.groups || []).length
-    ? emptyStateHtml('search-x', '当前筛选下没有更新', '切换媒体类型、创作者、来源、时长或标签后再试。')
+    ? emptyStateHtml('search-x', t('当前筛选下没有更新'), t('切换媒体类型、创作者、来源、时长或标签后再试。'))
     : (data.sources || []).length
       ? filtered
-        ? emptyStateHtml('rss', '没有符合条件的更新', '切换状态或来源筛选后再试。')
-        : emptyStateHtml('rss', '还没有更新', '点「检查更新」去各个来源取一遍；来源有新内容时会集中显示在这里。')
-      : emptyStateHtml('rss', '还没有关注任何来源', '添加创作者或订阅来源后，更新会集中显示在这里。',
-        { actions: '<a class="geist-button primary" href="/subscriptions?tab=add">添加关注</a>' });
+        ? emptyStateHtml('rss', t('没有符合条件的更新'), t('切换状态或来源筛选后再试。'))
+        : emptyStateHtml('rss', t('还没有更新'), t('点「检查更新」去各个来源取一遍；来源有新内容时会集中显示在这里。'))
+      : emptyStateHtml('rss', t('还没有关注任何来源'), t('添加创作者或订阅来源后，更新会集中显示在这里。'),
+        { actions: `<a class="geist-button primary" href="/subscriptions?tab=add">${t('添加关注')}</a>` });
   return <div data-follow-empty="" className="contents" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
@@ -610,7 +611,8 @@ function Empty({ data, filtered }: { data: FollowPage; filtered: boolean }) {
  * 而新状态不在这一档时整组移出；再在后台重读一遍，拿服务端的口径校正。回执带一颗撤销键，保存
  * 进数据库的不给撤销——那是另一件事。只读端写入必然 409，那是正常状态，照实写在卡上。资料页的在线
  * 视图用的是同一个钩子，`view` 是它那一份只按创作者筛的视图。 */
-const STATUS_RECEIPTS: Record<string, string> = { new: '已恢复未看', seen: '已标记已看', ignored: '已忽略' };
+const kindLabel = (kind: string): string => ({ 创作者: t('创作者'), 来源: t('来源'), 题材: t('题材'), 标签: t('标签') })[kind] ?? kind;
+const STATUS_RECEIPTS: Record<string, string> = { new: t('已恢复未看'), seen: t('已标记已看'), ignored: t('已忽略') };
 
 export function useFollowWrite(props: Pick<FollowFeedProps, 'view' | 'revision' | 'actions'>) {
   const { view, revision, actions } = props;
@@ -640,7 +642,7 @@ export function useFollowWrite(props: Pick<FollowFeedProps, 'view' | 'revision' 
     onSuccess: (_result, { id, to, was }) => {
       apply(id, to);
       refresh();
-      actions.toast(STATUS_RECEIPTS[to] || '已更新关注状态', {
+      actions.toast(STATUS_RECEIPTS[to] || t('已更新关注状态'), {
         undo: was !== 'saved' ? async () => {
           await apiSend(FOLLOW_STATUS_URL, { item: id, to: was });
           apply(id, was);
@@ -650,7 +652,7 @@ export function useFollowWrite(props: Pick<FollowFeedProps, 'view' | 'revision' 
     },
     onError: (error, { id }) => {
       mark(id, requestErrorMessage(error), setFailures);
-      actions.failure('更新关注状态', error);
+      actions.failure(t('更新关注状态'), error);
     },
     onSettled: (_result, _error, { id }) => mark(id, '', setBusy),
   });
@@ -659,11 +661,11 @@ export function useFollowWrite(props: Pick<FollowFeedProps, 'view' | 'revision' 
     onSuccess: (_result, id) => {
       apply(id, 'saved');
       refresh();
-      actions.toast('已保存到数据库');
+      actions.toast(t('已保存到数据库'));
     },
     onError: (error, id) => {
       mark(id, requestErrorMessage(error), setFailures);
-      actions.failure('保存到数据库', error);
+      actions.failure(t('保存到数据库'), error);
     },
     onSettled: (_result, _error, id) => mark(id, '', setBusy),
   });

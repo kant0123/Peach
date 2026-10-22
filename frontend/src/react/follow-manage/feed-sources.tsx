@@ -48,6 +48,7 @@ import {
   checkFeeds, errorHeadline, FEEDS_KEY, feedIntervalText, fetchFeeds, removeFeed, setFeedEnabled,
   pageWindow, type FeedSource,
 } from './follow-manage';
+import { t } from '../../i18n';
 
 const feedTableFeatures = tableFeatures({
   rowPaginationFeature,
@@ -58,15 +59,15 @@ const feedTableFeatures = tableFeatures({
 });
 
 const COLUMN_LABELS: Record<string, string> = {
-  select: '选择',
-  name: '名称',
-  kind: '类型',
-  origin: '来源',
-  status: '状态',
-  interval: '频率',
-  fetched: '上次拉取',
-  fresh: '上次新增',
-  actions: '操作',
+  select: t('选择'),
+  name: t('名称'),
+  kind: t('类型'),
+  origin: t('来源'),
+  status: t('状态'),
+  interval: t('频率'),
+  fetched: t('上次拉取'),
+  fresh: t('上次新增'),
+  actions: t('操作'),
 };
 
 /** 表头里不占字的列：勾选那一格自己会说「选择 谁」，行尾三个控件也各带自己的名字。 */
@@ -88,9 +89,9 @@ function originHost(url: string): string {
 
 /** 一条源此刻的状态：拉不动最要紧，其次才是开着还是停着。 */
 function StatusChip({ source }: { source: FeedSource }) {
-  if (source.last_error) return <Chip variant="caption" color="rose">拉取失败</Chip>;
-  if (!source.enabled) return <Chip variant="caption" color="neutral">已暂停</Chip>;
-  return <Chip variant="caption" color="lime">正常</Chip>;
+  if (source.last_error) return <Chip variant="caption" color="rose">{t('拉取失败')}</Chip>;
+  if (!source.enabled) return <Chip variant="caption" color="neutral">{t('已暂停')}</Chip>;
+  return <Chip variant="caption" color="lime">{t('正常')}</Chip>;
 }
 
 /** 名字前的圆框：和关注列表的创作者圆标同一个尺寸与底色。里面那段由 `card-art` 的 `avatarInner` 拼：
@@ -143,11 +144,11 @@ interface RowHandlers {
 function confirmRemove(sources: FeedSource[], write: () => Promise<unknown>) {
   const one = sources.length === 1 ? sources[0] : null;
   return confirmModal({
-    title: one ? '移除订阅源' : `移除 ${sources.length} 条订阅源`,
+    title: one ? t('移除订阅源') : t('移除 {count} 条订阅源', { count: sources.length }),
     body: one
-      ? `将移除订阅源「${feedName(one)}」，之后不再拉取它的新作；已经拉到的新作保留。`
-      : '将移除所选订阅源，之后不再拉取它们的新作；已经拉到的新作保留。',
-    confirmLabel: one ? '移除订阅源' : '移除所选订阅源', danger: true,
+      ? t('将移除订阅源「{value}」，之后不再拉取它的新作；已经拉到的新作保留。', { value: feedName(one) })
+      : t('将移除所选订阅源，之后不再拉取它们的新作；已经拉到的新作保留。'),
+    confirmLabel: one ? t('移除订阅源') : t('移除所选订阅源'), danger: true,
     onConfirm: write,
   });
 }
@@ -188,10 +189,10 @@ export function FeedSources({ readOnly, toast }: {
       const done = result.ids.length - failed.length;
       setSelected(new Set());
       void reload();
-      if (result.action === 'remove' && done) toast(`已移除 ${done} 条订阅源`);
+      if (result.action === 'remove' && done) toast(t('已移除 {done} 条订阅源', { done }));
       if (failed.length) {
         const first = failed[0]!;
-        action.setError(`${failed.length} 条没有写入：${first.ok ? '' : errorMessage(first.error)}`);
+        action.setError(t('{count} 条没有写入：{value}', { count: failed.length, value: first.ok ? '' : errorMessage(first.error) }));
       }
     },
     onError: (cause) => action.setError(errorMessage(cause)),
@@ -213,7 +214,7 @@ export function FeedSources({ readOnly, toast }: {
       (signal) => checkFeeds(signal, [source.id]), () => void reload()),
     remove: (source) => void confirmRemove([source], async () => {
       await removeFeed(source.id);
-      toast(`已移除订阅源「${feedName(source)}」`);
+      toast(t('已移除订阅源「{value}」', { value: feedName(source) }));
       void reload();
     }),
   };
@@ -230,7 +231,7 @@ export function FeedSources({ readOnly, toast }: {
         cell: (context) => (
           <Checkbox slot={null} isSelected={context.row.getIsSelected()}
             onChange={(on) => context.row.toggleSelected(on)}
-            aria-label={`选择 ${feedName(context.row.original)}`} />
+            aria-label={t('选择 {value}', { value: feedName(context.row.original) })} />
         ),
       }),
       column.accessor(feedName, {
@@ -245,7 +246,7 @@ export function FeedSources({ readOnly, toast }: {
               <FeedAvatar source={context.row.original} />
               {context.getValue()}
               {alias ? (
-                <span className="text-body-2-regular text-text-secondary" title={`站上这一页挂在「${alias}」名下`}>
+                <span className="text-body-2-regular text-text-secondary" title={t('站上这一页挂在「{alias}」名下', { alias })}>
                   {alias}
                 </span>
               ) : null}
@@ -262,13 +263,13 @@ export function FeedSources({ readOnly, toast }: {
         id: 'origin',
         header: label('origin'),
         cell: (context) => (
-          <a href={context.getValue()} target="_blank" rel="noreferrer noopener" title="打开来源页面"
+          <a href={context.getValue()} target="_blank" rel="noreferrer noopener" title={t('打开来源页面')}
             className="text-text-primary underline-offset-2 hover:underline">
             {originHost(context.getValue())}
           </a>
         ),
       }),
-      column.accessor((source) => source.last_error ? '拉取失败' : source.enabled ? '已启用' : '已暂停', {
+      column.accessor((source) => source.last_error ? t('拉取失败') : source.enabled ? t('已启用') : t('已暂停'), {
         id: 'status',
         header: label('status'),
         cell: (context) => <StatusChip source={context.row.original} />,
@@ -281,12 +282,12 @@ export function FeedSources({ readOnly, toast }: {
       column.accessor((row) => row.last_fetched_at ? Date.parse(row.last_fetched_at) || 0 : 0, {
         id: 'fetched',
         header: label('fetched'),
-        cell: (context) => <span className="whitespace-nowrap tabular-nums">{context.row.original.last_fetched_at ? localTime(context.row.original.last_fetched_at) : '还没拉过'}</span>,
+        cell: (context) => <span className="whitespace-nowrap tabular-nums">{context.row.original.last_fetched_at ? localTime(context.row.original.last_fetched_at) : t('还没拉过')}</span>,
       }),
       column.accessor((row) => row.last_new_count, {
         id: 'fresh',
         header: label('fresh'),
-        cell: (context) => <span className="whitespace-nowrap tabular-nums">{`${context.getValue()} 条`}</span>,
+        cell: (context) => <span className="whitespace-nowrap tabular-nums">{t('{getValue} 条', { getValue: context.getValue() })}</span>,
       }),
       column.display({
         id: 'actions',
@@ -295,16 +296,16 @@ export function FeedSources({ readOnly, toast }: {
            刷新与垃圾桶字形，xs 那一档和开关一样高。 */
         cell: (context) => (
           <span className="flex items-center gap-1">
-            <Switch aria-label={`启用 ${feedName(context.row.original)}`}
+            <Switch aria-label={t('启用 {value}', { value: feedName(context.row.original) })}
               isSelected={context.row.original.enabled} isDisabled={handlers.current.readOnly}
               onChange={(enabled) => handlers.current.toggle(context.row.original, enabled)} />
             <Button variant="secondary" size="xs" iconOnly leadingIcon={RiRefreshLine}
-              aria-label={`拉取 ${feedName(context.row.original)}`}
+              aria-label={t('拉取 {value}', { value: feedName(context.row.original) })}
               disabled={handlers.current.readOnly}
               {...busyProps(handlers.current.busy === `check-${context.row.original.id}`)}
               onClick={() => handlers.current.fetch(context.row.original)} />
             <Button variant="secondary" size="xs" iconOnly leadingIcon={RiDeleteBinLine}
-              aria-label={`移除 ${feedName(context.row.original)}`}
+              aria-label={t('移除 {value}', { value: feedName(context.row.original) })}
               disabled={handlers.current.readOnly}
               onClick={() => handlers.current.remove(context.row.original)} />
           </span>
@@ -331,8 +332,8 @@ export function FeedSources({ readOnly, toast }: {
 
   if (!data) {
     return feeds.error
-      ? <Note tone="error" title="打不开订阅源">{errorMessage(feeds.error)}</Note>
-      : <Help>正在读订阅源。</Help>;
+      ? <Note tone="error" title={t('打不开订阅源')}>{errorMessage(feeds.error)}</Note>
+      : <Help>{t('正在读订阅源。')}</Help>;
   }
 
   const check = () => void action.run('check', (signal) => checkFeeds(signal), () => void reload());
@@ -347,13 +348,13 @@ export function FeedSources({ readOnly, toast }: {
   return (
     <div className="flex flex-col gap-3">
       <AddFeed readOnly={readOnly} toast={toast} onAdded={() => void reload()} />
-      <section aria-label="JAV 订阅列表"
+      <section aria-label={t('JAV 订阅列表')}
         className={cardClass({ padding: 'none', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })}>
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="mr-auto text-title-2-medium text-text-primary">JAV 订阅源</h3>
-        <span className="text-body-2-regular text-text-secondary">{`${sources.length.toLocaleString()} 个订阅源 · ${(Number(data.unread) || 0).toLocaleString()} 条未看`}</span>
-        <Button onClick={check} disabled={readOnly} {...busyProps(action.busy === 'check')}>立即拉取</Button>
-        <DataTableSort label="JAV 订阅源" sorting={sorting} onChange={(next) => { setSorting(next); setPage(1); }}
+        <h3 className="mr-auto text-title-2-medium text-text-primary">{t('JAV 订阅源')}</h3>
+        <span className="text-body-2-regular text-text-secondary">{t('{value} 个订阅源 · {value2} 条未看', { value: sources.length.toLocaleString(), value2: (Number(data.unread) || 0).toLocaleString() })}</span>
+        <Button onClick={check} disabled={readOnly} {...busyProps(action.busy === 'check')}>{t('立即拉取')}</Button>
+        <DataTableSort label={t('JAV 订阅源')} sorting={sorting} onChange={(next) => { setSorting(next); setPage(1); }}
           options={['name', 'kind', 'origin', 'status', 'interval', 'fetched', 'fresh'].map((id) => ({ id, label: COLUMN_LABELS[id]! }))} />
       </div>
 
@@ -362,11 +363,11 @@ export function FeedSources({ readOnly, toast }: {
           {/* 拉不动的源并成一条：每条源一行「源名：报错首行」，几条源同时坏也不把表格推出首屏；
               表格里那一行的状态徽章同时标着「拉取失败」。 */}
           {failing.length ? (
-            <Note tone="error" title={`${failing.length.toLocaleString()} 条订阅源拉取失败`}
+            <Note tone="error" title={t('{value} 条订阅源拉取失败', { value: failing.length.toLocaleString() })}
               extra={<ul className="flex flex-col gap-0.5 text-body-2-regular">
                 {failing.map((source) => (
                   <li key={source.id} className="min-w-0 truncate" title={source.last_error || ''}>
-                    {`${feedName(source)}：${errorHeadline(source.last_error || '') || '未说明原因'}`}
+                    {t('{name}：{reason}', { name: feedName(source), reason: errorHeadline(source.last_error || '') || t('未说明原因') })}
                   </li>
                 ))}
               </ul>}>
@@ -377,20 +378,20 @@ export function FeedSources({ readOnly, toast }: {
         </div>
       ) : null}
 
-        <SelectionDock visible={chosen.length > 0} label="订阅源批量操作" count={`已选 ${chosen.length} 条订阅源`}>
+        <SelectionDock visible={chosen.length > 0} label={t('订阅源批量操作')} count={t('已选 {count} 条订阅源', { count: chosen.length })}>
           <Button variant="secondary" size="small" disabled={readOnly} {...busyProps(bulk.isPending)}
-            onClick={() => bulk.mutate({ ids: chosen.map((row) => row.id), action: 'enabled' })}>启用</Button>
+            onClick={() => bulk.mutate({ ids: chosen.map((row) => row.id), action: 'enabled' })}>{t('启用')}</Button>
           <Button variant="secondary" size="small" disabled={readOnly} {...busyProps(bulk.isPending)}
-            onClick={() => bulk.mutate({ ids: chosen.map((row) => row.id), action: 'paused' })}>暂停</Button>
+            onClick={() => bulk.mutate({ ids: chosen.map((row) => row.id), action: 'paused' })}>{t('暂停')}</Button>
           <Button variant="danger" size="small" disabled={readOnly} {...busyProps(bulk.isPending)}
             onClick={() => void confirmRemove(chosen,
-              () => bulk.mutateAsync({ ids: chosen.map((row) => row.id), action: 'remove' }))}>移除</Button>
-          <Button variant="ghost" size="small" onClick={() => setSelected(new Set())}>取消选择</Button>
+              () => bulk.mutateAsync({ ids: chosen.map((row) => row.id), action: 'remove' }))}>{t('移除')}</Button>
+          <Button variant="ghost" size="small" onClick={() => setSelected(new Set())}>{t('取消选择')}</Button>
         </SelectionDock>
 
       {sources.length ? (
         <DataTableFrame follow onRowClick={(key) => toggleRow(Number(key))}>
-          <Table aria-label="JAV 订阅源" size="sm"
+          <Table aria-label={t('JAV 订阅源')} size="sm"
             sortDescriptor={sorting[0] ? { column: sorting[0].id, direction: sorting[0].desc ? 'descending' : 'ascending' } : undefined}
             onSortChange={(sort) => table.getColumn(String(sort.column))?.toggleSorting(sort.direction === 'descending')}>
             <TableHeader>
@@ -420,18 +421,18 @@ export function FeedSources({ readOnly, toast }: {
           </Table>
         </DataTableFrame>
       ) : (
-        <EmptyState icon={RiRssLine} title="还没有订阅源" shell="plain">
+        <EmptyState icon={RiRssLine} title={t('还没有订阅源')} shell="plain">
           在上面按女优名添加，或在人物页点「订阅新作」。
         </EmptyState>
       )}
       {sources.length ? (
-        <DataTableFooter label="JAV 订阅" total={win.total} unit="个订阅源"
+        <DataTableFooter label={t('JAV 订阅')} total={win.total} unit={t('个订阅源')}
           pagination={{ pageIndex: win.page - 1, pageSize }}
           onChange={(next) => { setPageSize(next.pageSize); setPage(next.pageIndex + 1); }} />
       ) : null}
       <footer className="-mx-6 -mb-5 flex flex-wrap items-center gap-2 border-t border-separator-border rounded-b-2xl bg-card-footer px-6 py-4 max-sm:-mx-4 max-sm:px-4">
         <span role="status" className="mr-auto text-body-2-regular text-text-secondary">
-          {`未看 ${(Number(data.unread) || 0).toLocaleString()} · 已启用 ${sources.filter((source) => source.enabled).length.toLocaleString()} / ${sources.length.toLocaleString()}`}
+          {t('未看 {value} · 已启用 {value2} / {value3}', { value: (Number(data.unread) || 0).toLocaleString(), value2: sources.filter((source) => source.enabled).length.toLocaleString(), value3: sources.length.toLocaleString() })}
         </span>
       </footer>
       </section>
