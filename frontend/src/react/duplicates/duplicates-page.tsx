@@ -150,10 +150,10 @@ export function DuplicatesPage({ openItem, toast, failure }: DuplicatesProps) {
       {groups.length
         ? <FilterGlass title={t('批量保留')}>
             <GlassPill busy={pending === 'all:largest'} onPress={() => run({ groups, keep: 'largest', key: 'all:largest' })}>
-              全部保留最大
+              {t('全部保留最大')}
             </GlassPill>
             <GlassPill busy={pending === 'all:longest'} onPress={() => run({ groups, keep: 'longest', key: 'all:longest' })}>
-              全部保留最长
+              {t('全部保留最长')}
             </GlassPill>
             {bulkCloudPreferences(groups, configured).map((location) => (
               <GlassPill key={location} busy={pending === `all:${location}`}
@@ -202,7 +202,7 @@ export function DuplicatesPage({ openItem, toast, failure }: DuplicatesProps) {
             );
           })
         : <EmptyState icon={STACK} title={t('没有找到重复文件')}>
-            所有来源之间没有检测到内容相同的文件。扫描新来源后，这里会自动更新。
+            {t('所有来源之间没有检测到内容相同的文件。扫描新来源后，这里会自动更新。')}
           </EmptyState>}
       {groups.length > 0 && data.total > groups.length
         ? <p className="text-center text-caption-1-regular text-text-secondary">

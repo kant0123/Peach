@@ -175,14 +175,14 @@ function SourceCard({ source, toast }: { source: Source } & ScrapingProps) {
         {network === 'peach'
           ? <span className="self-start">
               <LinkButton href="/settings/library#peachProxy" size="small" trailingIcon={RiArrowRightLine}>
-                配置 Peach 代理
+                {t('配置 Peach 代理')}
               </LinkButton>
             </span>
           : null}
         {/* 由本机浏览器过验证的来源不收 Cookie：浏览器自己带着会话。留着「撤销 Cookie」让人清掉旧的。 */}
         {source.browser
           ? <p className="text-body-2-regular text-text-secondary">
-              人机验证由本机浏览器自动完成；需要点击时窗口会弹出。这台机器上不需要 Cookie。
+              {t('人机验证由本机浏览器自动完成；需要点击时窗口会弹出。这台机器上不需要 Cookie。')}
             </p>
           : null}
         {source.accepts_cookie && !source.browser ? <>
@@ -266,7 +266,7 @@ function CoverCard({ toast }: ScrapingProps) {
               placeholder={t('输入馆藏番号，如 ABW-232')} />
           </div>
           <Button type="submit" disabled={!code.trim()} {...busyProps(running || start.isPending)}>
-            抓取封面
+            {t('抓取封面')}
           </Button>
         </div>
         {/* 这一趟要挨个问几家站点、还可能走代理，没有可数的总量，也不能编一个百分比出来。
@@ -334,7 +334,7 @@ function AmaneBridgeCard({ toast }: ScrapingProps) {
       </Stack>
       <Footer>
         <Button variant="secondary" onClick={() => { if (!busy) check.mutate() }} {...busyProps(check.isPending)}>
-          检查上游版本
+          {t('检查上游版本')}
         </Button>
         <Button onClick={() => { if (!busy) rebuild.mutate() }} {...busyProps(running || rebuild.isPending)}>
           {data.installed ? t('重新安装') : t('安装')}

@@ -18,7 +18,7 @@ export function CloudDriveGuide() {
     <div className="@container flex flex-col gap-3">
       <Disclosure summary={t('CloudDrive 设置帮助')}>
         <Help>
-          先将 CloudDrive2 或 OpenList 中的网盘挂载为本机文件夹，再在这里选择。
+          {t('先将 CloudDrive2 或 OpenList 中的网盘挂载为本机文件夹，再在这里选择。')}
           <ExternalLink href="https://www.clouddrive2.com/help.html">{t('挂载帮助')}</ExternalLink>
         </Help>
         <Help>{t('缓存按所在硬盘和可用内存选起步值，再根据播放表现调整。')}</Help>

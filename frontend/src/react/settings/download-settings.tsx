@@ -368,12 +368,12 @@ function PikPakAccount({ state, settle, receipt, username, setUsername }: CardPr
       <Input label={t('密码')} type="password" autoComplete="current-password" maxLength={200}
         value={password} isDisabled={!state.available} onChange={setPassword} />
       <Checkbox isSelected={remember} isDisabled={!state.available} onChange={setRemember}>
-        保存密码，登录过期时自动重新登录
+        {t('保存密码，登录过期时自动重新登录')}
       </Checkbox>
       {captcha ? (
         <Note tone="warning" title={t('需要人机验证')}
           extra={<div className="pt-2"><ExternalLink href={captcha}>{t('打开 PikPak 验证页')}</ExternalLink></div>}>
-          在浏览器里完成验证后，回到这里再点一次「登录」。
+          {t('在浏览器里完成验证后，回到这里再点一次「登录」。')}
         </Note>
       ) : null}
     </>

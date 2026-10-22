@@ -166,7 +166,7 @@ export function ResourceSyncCard(
                 {cleaning ? t('正在复核并清理…') : APPLY_LABEL}
               </Button>
             : <p className="mr-auto text-body-regular text-notification-success-foreground">
-                已检查可访问的来源，没有待清理的记录、空文件夹或缓存。
+                {t('已检查可访问的来源，没有待清理的记录、空文件夹或缓存。')}
               </p>}
         </div>
       </>
@@ -184,7 +184,7 @@ export function ResourceSyncCard(
       }>
         <FieldsetTitle id="resource-sync-title" gap="small">{t('资源同步')}</FieldsetTitle>
         <p className="max-w-190 text-body-2-regular leading-5 text-text-secondary">
-          按馆藏记录逐条查找本地磁盘与网盘上的文件，列出文件已不存在的记录、空文件夹，以及不再被引用的缓存。
+          {t('按馆藏记录逐条查找本地磁盘与网盘上的文件，列出文件已不存在的记录、空文件夹，以及不再被引用的缓存。')}
         </p>
         <div aria-live="polite" className="mt-4 empty:hidden">{progress}</div>
       </Fieldset>

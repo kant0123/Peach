@@ -368,10 +368,10 @@ function Side({ item, data, context, media, write, issue, helpers, actions }: {
         {/* 上游没给出媒体时，代理只会回一个不含缘由的失败。有缩略图就换上缩略图并说明这是缩略图；
             连缩略图也取不到，才说「这次没取到、多半是限流」——别让人对着一块空画布猜。 */}
         <p data-follow-media-issue="" data-media-load-issue="" hidden={issue !== 'failed'}>
-          媒体未取回：上游这一次没有返回内容，多半是站点限流，过一阵再打开。
+          {t('媒体未取回：上游这一次没有返回内容，多半是站点限流，过一阵再打开。')}
         </p>
         <p data-follow-media-issue="" data-media-thumb-fallback="" hidden={issue !== 'thumb'}>
-          原图未取回，先显示缩略图：上游拦下了这一次请求。
+          {t('原图未取回，先显示缩略图：上游拦下了这一次请求。')}
         </p>
         {item.resource_urls?.length ? (
           <div data-follow-resources="">

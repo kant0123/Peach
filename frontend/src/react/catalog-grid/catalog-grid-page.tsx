@@ -288,7 +288,7 @@ function ShortsStrip({ cut, props, onOpen }: {
   return (
     <section data-shorts-strip="">
       <h2>
-        竖屏 <span data-shorts-count="">{t('{count} 个', { count: cut.total.toLocaleString() })}</span>
+        {t('竖屏')} <span data-shorts-count="">{t('{count} 个', { count: cut.total.toLocaleString() })}</span>
         <button type="button" data-shorts-enter="" onClick={() => props.actions.openShorts()}>
           <Icon name="gallery-vertical-end" /><span>{t('进入沉浸模式')}</span>
         </button>

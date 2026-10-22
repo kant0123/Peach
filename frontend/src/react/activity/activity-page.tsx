@@ -228,7 +228,7 @@ export function ActivityPage() {
         : null}
       {quiet
         ? <EmptyState shell="plain" icon={RiHistoryLine} title={t('还没有任务记录')}>
-            扫描、追更检查、批量操作和命令行批处理跑起来之后，这里会显示它们的进度与结果。
+            {t('扫描、追更检查、批量操作和命令行批处理跑起来之后，这里会显示它们的进度与结果。')}
           </EmptyState>
         : <>
             <Section title={t('正在进行')}>
@@ -260,7 +260,7 @@ export function ActivityPage() {
                   {hasEarlier
                     ? <Button variant="secondary" size="small" leadingIcon={RiArrowDownSLine}
                         className="self-start" {...busyProps(more.isPending)} onClick={loadEarlier}>
-                        加载更早
+                        {t('加载更早')}
                       </Button>
                     : null}
                 </Section>

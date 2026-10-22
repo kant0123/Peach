@@ -163,7 +163,7 @@ export function OrganizeCard(
       }>
       <FieldsetTitle id="cleanup-organize-title" gap="medium">{t('整理')}</FieldsetTitle>
       <p className="text-body-regular text-text-secondary">
-        按模板给文件改名并归入目录。先预览，确认后执行；执行过的一批可以整批退回。
+        {t('按模板给文件改名并归入目录。先预览，确认后执行；执行过的一批可以整批退回。')}
       </p>
       {organize.isError
         ? <div className="mt-3"><Note tone="error" title={t('整理配置读取失败')}>{errorMessage(organize.error)}</Note></div>

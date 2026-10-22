@@ -57,7 +57,7 @@ function IndexerForm({ initial, receipt }: { initial: State; receipt(message: st
               onChange={(enabled) => update(row.key, { enabled })}>{t('启用')}</Checkbox>
             {row.api_key_set ? <Checkbox isSelected={Boolean(row.clear_api_key)}
               isDisabled={Boolean(action.busy)} onChange={(clear_api_key) => update(row.key, { clear_api_key })}>
-              清除已保存的 API key
+              {t('清除已保存的 API key')}
             </Checkbox> : null}
             <div><Button variant="danger" type="button" disabled={Boolean(action.busy)}
               onClick={() => setRows(rows.filter((item) => item.key !== row.key))}>{t('移除索引器 {n}', { n: index + 1 })}</Button></div>
@@ -68,7 +68,7 @@ function IndexerForm({ initial, receipt }: { initial: State; receipt(message: st
       <Footer>
         <Button variant="secondary" type="button" disabled={Boolean(action.busy) || rows.length >= initial.max_indexers}
           onClick={() => setRows([...rows, { key: crypto.randomUUID(), name: '', url: '', enabled: true, api_key_set: false }])}>
-          添加索引器
+          {t('添加索引器')}
         </Button>
         <Button type="submit" {...busyProps(action.busy === 'save')}>{t('保存配置')}</Button>
       </Footer>

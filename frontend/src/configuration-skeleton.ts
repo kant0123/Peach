@@ -4,7 +4,7 @@ import { diagnosticsSkeleton } from './diagnostics-skeleton';
 import { t } from './i18n';
 
 // 首屏在 React 包到达前绘制，几何与 settings/section.tsx、BoardUI SettingsRow 共用类名。
-const section = (title: string, content: string) => `<section aria-label="${title}" class="flex w-full flex-col gap-2"><p class="w-full px-3 text-body-2-medium text-text-secondary">${title}</p><div class="flex w-full flex-col rounded-2xl bg-background-secondary-default pl-3">${content}<div class="-ml-3 flex flex-wrap items-center justify-end gap-3 rounded-b-2xl border-t border-separator-border bg-card-footer px-3 py-3">${islandButton({ label: '保存配置', attrs: 'disabled data-skeleton-action' })}</div></div></section>`;
+const section = (title: string, content: string) => `<section aria-label="${title}" class="flex w-full flex-col gap-2"><p class="w-full px-3 text-body-2-medium text-text-secondary">${title}</p><div class="flex w-full flex-col rounded-2xl bg-background-secondary-default pl-3">${content}<div class="-ml-3 flex flex-wrap items-center justify-end gap-3 rounded-b-2xl border-t border-separator-border bg-card-footer px-3 py-3">${islandButton({ label: t('保存配置'), attrs: 'disabled data-skeleton-action' })}</div></div></section>`;
 const row = (label: string, description = '', control = 'ui-configuration-skeleton-toggle') => `<div class="flex min-h-[52px] w-full items-center justify-between gap-4 py-2.5 pr-2.5 border-b border-separator-border last:border-b-0"><div class="flex min-w-0 flex-col"><p class="text-body-regular text-text-primary">${label}</p>${description ? `<p class="text-body-2-regular text-text-secondary">${description}</p>` : ''}</div><span class="skeleton ${control}"></span></div>`;
 
 export function configurationSkeleton(chosen = t('媒体库与入库')): string {

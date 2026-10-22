@@ -233,7 +233,7 @@ export function ReviewPage(props: ReviewProps) {
           extra={writerUrl
             ? <p className="text-body-2-regular">
                 <a href={writerUrl} className="text-text-primary underline underline-offset-2">
-                  前往写入端复核
+                  {t('前往写入端复核')}
                 </a>
               </p>
             : undefined}>
@@ -335,7 +335,7 @@ export function ReviewPage(props: ReviewProps) {
             </Note>
           ) : (
             <EmptyState icon={RiCheckboxCircleLine} title={t('此分类没有待复核项目')}>
-              可切换分类查看其他待确认资料。
+              {t('可切换分类查看其他待确认资料。')}
             </EmptyState>
           )}
 

@@ -226,7 +226,7 @@ function Head({ onManage, children }: { onManage(): void; children?: ReactNode }
       <h2 data-follow-title="">{t('关注')}</h2>
       <span data-follow-head-actions="">
         <Button variant="secondary" leadingIcon={SETTINGS} data-follow-manage="" onClick={onManage}>
-          管理关注
+          {t('管理关注')}
         </Button>
         {children}
       </span>

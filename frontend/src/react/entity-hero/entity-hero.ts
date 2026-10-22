@@ -208,7 +208,7 @@ export function heroLinks(entity: EntityHeroData, kind: string): LinkView[] {
       return { type: 'gone', title: `${performerLinkName(x, agency)} · ${why}` };
     }
     const url = x.url || '';
-    if (!(x.clickable && /^https?:\/\//i.test(url))) return { type: 'private', label: x.label || x.hostname || '已记录' };
+    if (!(x.clickable && /^https?:\/\//i.test(url))) return { type: 'private', label: x.label || x.hostname || t('已记录') };
     if (isPeople(kind) && x.link_kind !== 'social') {
       return { type: 'icon', url, title: performerLinkName(x, agency), mark: siteMark(x) };
     }

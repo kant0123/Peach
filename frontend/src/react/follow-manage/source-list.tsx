@@ -574,7 +574,7 @@ export function SourceList(props: SourceListProps) {
                 </li>
               ))}
             </ul>}>
-            这些来源这一轮没有取到更新。
+            {t('这些来源这一轮没有取到更新。')}
           </Note>
         ) : null}
         {evidence ? <Note tone="warning">{t('条目已保存，但这次未保存来源的原始响应：{evidence}', { evidence })}</Note> : null}

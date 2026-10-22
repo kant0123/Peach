@@ -423,11 +423,11 @@ function WorksEmpty({ filtered, onShowAll }: { filtered: boolean; onShowAll(): v
   return filtered ? (
     <EmptyState icon={spriteGlyph('search')} title={t('没有符合条件的视频')}
       actions={<Button variant="secondary" onClick={onShowAll}>{t('查看全部视频')}</Button>}>
-      清除筛选后查看名下全部视频。
+      {t('清除筛选后查看名下全部视频。')}
     </EmptyState>
   ) : (
     <EmptyState icon={spriteGlyph('film')} title={t('还没有视频')}>
-      署上这个名字的视频入库后会显示在这里。
+      {t('署上这个名字的视频入库后会显示在这里。')}
     </EmptyState>
   );
 }

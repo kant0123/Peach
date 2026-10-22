@@ -228,7 +228,7 @@ export function PlaylistsPage({ openPlaylist, openEntity, canFlip, toast, revisi
         )
         : (
           <EmptyState icon={PLAYLIST} title={t('还没有播放列表')}>
-            保存 Mix 或新建列表后，会在这里按自己的顺序继续播放。
+            {t('保存 Mix 或新建列表后，会在这里按自己的顺序继续播放。')}
           </EmptyState>
         )}
       </div>

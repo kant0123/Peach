@@ -371,7 +371,7 @@ export function FeedSources({ readOnly, toast }: {
                   </li>
                 ))}
               </ul>}>
-              这些订阅源这一轮没有取到新条目。
+              {t('这些订阅源这一轮没有取到新条目。')}
             </Note>
           ) : null}
           {action.error ? <ErrorText>{action.error}</ErrorText> : null}
@@ -422,7 +422,7 @@ export function FeedSources({ readOnly, toast }: {
         </DataTableFrame>
       ) : (
         <EmptyState icon={RiRssLine} title={t('还没有订阅源')} shell="plain">
-          在上面按女优名添加，或在人物页点「订阅新作」。
+          {t('在上面按女优名添加，或在人物页点「订阅新作」。')}
         </EmptyState>
       )}
       {sources.length ? (

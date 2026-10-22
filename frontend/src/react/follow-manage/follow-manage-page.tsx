@@ -121,7 +121,7 @@ export function FollowManagePage(props: FollowManageProps) {
           extra={writerUrl
             ? <p className="text-body-2-regular">
                 <a href={writerUrl} className="text-text-primary underline underline-offset-2">
-                  前往写入端管理关注
+                  {t('前往写入端管理关注')}
                 </a>
               </p>
             : undefined}>

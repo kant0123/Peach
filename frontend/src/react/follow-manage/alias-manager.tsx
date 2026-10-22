@@ -270,7 +270,7 @@ export function AliasManager({ groups, suggestions, sources = [], readOnly, toas
           <Button variant="primary" disabled={readOnly || !canonical.trim() || !alias.trim()}
             {...busyProps(save.isPending)}
             onClick={() => save.mutate({ canonical: canonical.trim(), alias: alias.trim() })}>
-            保存别名
+            {t('保存别名')}
           </Button>
         </div>
       </div>
@@ -373,7 +373,7 @@ export function AliasManager({ groups, suggestions, sources = [], readOnly, toas
           </>
         ) : (
           <EmptyState shell="plain" icon={RiUserLine} title={t('还没有保存创作者别名')}>
-            填写规范创作者名和平台别名以添加。
+            {t('填写规范创作者名和平台别名以添加。')}
           </EmptyState>
         )}
       </div>

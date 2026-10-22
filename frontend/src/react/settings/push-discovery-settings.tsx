@@ -136,7 +136,7 @@ export function PushDiscoveryForm({ initial, receipt }: {
             <div>
               <Button variant="secondary" size="small"
                 onClick={() => setRows((list) => [...list, { prefix: '', root: roots[0] ?? '' }])}>
-                添加前缀
+                {t('添加前缀')}
               </Button>
             </div>
           </div>
@@ -152,7 +152,7 @@ export function PushDiscoveryForm({ initial, receipt }: {
             {...busyProps(action.busy === 'secret')}>{t('更换密钥')}</Button>
         ) : null}
         <Button type="submit" disabled={!state.available} {...busyProps(action.busy === 'save')}>
-          保存配置
+          {t('保存配置')}
         </Button>
       </Footer>
     </Section>

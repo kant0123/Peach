@@ -16,7 +16,7 @@ export function RelatedSection({ children, wireDrag, busy, empty, error, onRetry
     <h3 className="font-semibold">{t('接着看')}</h3>
     {error ? <div data-related-state=""><RetryNote message={error} onRetry={onRetry || (() => {})} /></div>
       : empty && !busy ? <div data-related-state=""><EmptyState shell="plain" icon={RiVideoLine} title={t('暂无接着看的内容')}>
-        可以回到列表挑选其他作品。
+        {t('可以回到列表挑选其他作品。')}
       </EmptyState></div>
       : <div ref={row} id="nrow" data-related-row="">{children}</div>}
   </div>;

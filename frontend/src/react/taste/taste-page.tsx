@@ -324,7 +324,7 @@ function HistoryActions(
     <>
       <span data-button-group data-split-button data-variant="primary">
         <Button leadingIcon={RiCompassLine} title={REFRESH_TITLE} onClick={onRefresh} {...busyProps(busy)}>
-          读取浏览器记录
+          {t('读取浏览器记录')}
         </Button>
         <Button ref={trigger} iconOnly leadingIcon={RiArrowDownSLine}
           aria-label={t('更多取得浏览记录的方式')} aria-haspopup="dialog" aria-expanded={open}
