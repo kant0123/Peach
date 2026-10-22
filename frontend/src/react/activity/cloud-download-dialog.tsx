@@ -19,6 +19,7 @@ import { DOWNLOADS_KEY, DOWNLOADS_URL, downloadPollInterval, failureText } from 
 import { ResourceSearch } from './resource-search';
 import { sameWorkCode } from './work-code';
 import { SourceLabel } from '../components/source-label';
+import { t } from '../../i18n';
 
 /** 入口带进来的上下文。`origin` 记在任务上，如 `asset:12`、`wishlist:5`。 */
 export interface DownloadPrefill { code?: string; title?: string; origin?: string; searchReason?: string;
@@ -145,7 +146,7 @@ function SubmitForm({ header, snapshot, prefill, close, receipt, provider: prefe
           {provider === '115' ? <Help>每提交一次扣一条离线配额，重新提交也算。</Help> : null}
         </div>
         {!snapshot.available ? <Note tone="neutral">云下载只在允许修改数据库的设备上可用。</Note> : null}
-        {!configured.length ? <Note tone="neutral">尚未配置下载渠道。<a href={'/settings/library?section=' + encodeURIComponent('下载渠道')}>下载渠道设置</a></Note> : null}
+        {!configured.length ? <Note tone="neutral">尚未配置下载渠道。<a href={'/settings/library?section=' + encodeURIComponent(t('下载渠道'))}>下载渠道设置</a></Note> : null}
         <Input label="目标目录" placeholder="/云下载" autoComplete="off" maxLength={300}
           value={target} onChange={setTarget} />
         {/* 带着番号进来时它和搜索框是同一个值，选中候选也会跟着换，不再单列一格。 */}

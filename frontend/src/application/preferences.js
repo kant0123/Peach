@@ -24,6 +24,7 @@ import { rereadPlaylists } from './playlists.js';
 import { receiptsState } from './receipts.js';
 import { dropBars } from './../catalog-bars';
 import { applicationEffects } from './effects';
+import { t } from '../i18n';
 export const preferencesState = { sourceOnline: undefined, sourceProblems: undefined, sourceOffline: undefined, OFFLINE_HINT: undefined, OFFLINE_REASON: undefined, offlineReason: undefined, settingsStore: undefined, appSettings: undefined, saveSettings: undefined, catalogLoadWaiters: undefined, nextCatalogLoad: undefined, handOff: undefined, settingsEffects: undefined, syncGlassOptics: undefined, placeSidebarHead: undefined, SRCICON: undefined, srcBadge: undefined, emptyState: undefined, CENSOR_KEY: undefined };
 
 export async function loadSourceStatus(){
@@ -135,11 +136,11 @@ export function installPreferences5() {
 preferencesState.sourceOnline = {};
 preferencesState.sourceProblems = {};
 preferencesState.sourceOffline = key=>preferencesState.sourceOnline[key]===false;
-preferencesState.OFFLINE_HINT = '媒体目录无法访问，请检查目录、读取权限和网盘挂载状态';
-preferencesState.OFFLINE_REASON = {local:'无法读取媒体目录，请检查目录是否存在及读取权限。',
-  '115':'无法读取 115 媒体目录，请检查目录权限及网盘挂载工具是否正常运行。',
-  pikpak:'无法读取 PikPak 媒体目录，请检查目录权限及网盘挂载工具是否正常运行。'};
-preferencesState.offlineReason = key=>preferencesState.sourceProblems[key]||preferencesState.OFFLINE_REASON[key]||'无法读取这个来源的媒体目录，请检查目录权限及挂载状态。';
+preferencesState.OFFLINE_HINT = t('媒体目录无法访问，请检查目录、读取权限和网盘挂载状态');
+preferencesState.OFFLINE_REASON = {local:t('无法读取媒体目录，请检查目录是否存在及读取权限。'),
+  '115':t('无法读取 115 媒体目录，请检查目录权限及网盘挂载工具是否正常运行。'),
+  pikpak:t('无法读取 PikPak 媒体目录，请检查目录权限及网盘挂载工具是否正常运行。')};
+preferencesState.offlineReason = key=>preferencesState.sourceProblems[key]||preferencesState.OFFLINE_REASON[key]||t('无法读取这个来源的媒体目录，请检查目录权限及挂载状态。');
 preferencesState.settingsStore = appSettingsStore();
 preferencesState.appSettings = preferencesState.settingsStore.value;
 preferencesState.saveSettings = ()=>preferencesState.settingsStore.save();
@@ -199,7 +200,7 @@ preferencesState.SRCICON = {
     [location,mark.startsWith('data:')?`<img class="source-icon" src="${mark}" alt="">`:icon(mark)])),
   online:icon('rss'),
 };
-preferencesState.srcBadge = (loc,cost,cls)=>{const label=`${LOC[loc]||loc}${cost==='metered'?' · 计费':''}`;
+preferencesState.srcBadge = (loc,cost,cls)=>{const label=`${LOC[loc]||loc}${cost==='metered'?` · ${t('计费')}`:''}`;
   return `<span class="${cls||'src'} ${cost==='metered'?'metered':'free'}" title="${esc(label)}" aria-label="${esc(label)}">`
     +(preferencesState.SRCICON[loc]||'')+'</span>'};
 preferencesState.emptyState = emptyStateHtml;

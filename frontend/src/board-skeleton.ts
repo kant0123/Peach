@@ -3,6 +3,7 @@ import { islandButton, islandSelect } from './island-skeleton';
 import { configurationSkeleton } from './configuration-skeleton';
 import { javPageSkeleton } from './jav-skeleton';
 import { duplicatesSkeleton, qualityGoalsSkeleton, statsSkeleton, tasteSkeleton } from './management-skeletons';
+import { t } from './i18n';
 
 /** 等待态复用页面容器，只有异步内容使用占位。 */
 const line = (width = '60%') => `<span class="skeleton" style="width:${width}"></span>`;
@@ -99,7 +100,7 @@ export function boardPageSkeleton(
   } else if (path === '/subscriptions') {
     body = followList(options);
   } else if (path === '/settings/library' || path === '/settings/diagnostics') {
-    body = configurationSkeleton(path === '/settings/diagnostics' ? '系统诊断' : '媒体库与入库');
+    body = configurationSkeleton(path === '/settings/diagnostics' ? t('系统诊断') : t('媒体库与入库'));
   } else if (path === '/tasks') {
     body = `<div class="ui-activitypage">${['正在进行', '被挡下的', '最近完成'].map(title => `<section class="activitysection"><h3 class="geist-fieldset-title">${title}</h3><div class="ui-activity-runs"><article class="cleanupfieldset activity-run"><div class="geist-fieldset-content ui-skeleton-lines">${line('35%')}${lines()}</div></article></div></section>`).join('')}</div>`;
   } else if (path === '/duplicates') {

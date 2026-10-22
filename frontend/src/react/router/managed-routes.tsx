@@ -76,6 +76,7 @@ import type {
   IndexOpenPropsTable, IndexRoutePath, ManagedOpenProps, ManagedPath, ResidentName, ResidentOpenProps, ShellActions,
   SurfaceName, SurfaceOpenProps,
 } from './shell-actions';
+import { t } from '../../i18n';
 
 interface ManagedRoute<P> {
   prefetch(open: P, signal: AbortSignal): Promise<void>;
@@ -111,7 +112,7 @@ const configurationRoute = (path: ConfigurationPath): ManagedRoute<ManagedOpenPr
     await Promise.all([prefetchConfiguration(signal), ...(path === '/settings/diagnostics' ? [prefetchDiagnostics(signal)] : [])]);
   },
   page: (open, actions, go) => <ConfigurationPage receipt={message => actions.receipt(message)}
-    reopenTutorial={actions.reopenTutorial} section={path === '/settings/diagnostics' ? '系统诊断' : open.section ?? ''}
+    reopenTutorial={actions.reopenTutorial} section={path === '/settings/diagnostics' ? t('系统诊断') : open.section ?? ''}
     diagnostics={<DiagnosticsPage navigate={go} openItem={actions.openItem} receipt={message => actions.receipt(message)}
       configure={section => { actions.requestConfigurationSection(section); go(settingsPath(section)) }} />} />,
 });
@@ -128,7 +129,7 @@ export const MANAGED_ROUTES: ManagedRouteTable = {
     /* 点一个内容标签是「回目录并按它筛选」，整页换成目录仍归壳。 */
     page: (open, actions, go) => (
       <StatsPage tagLabel={tagLabel} onTag={actions.openTag} configurable={open.configurable}
-        openMediaSettings={() => { actions.requestConfigurationSection('媒体库与入库'); go('/settings/library') }} />
+        openMediaSettings={() => { actions.requestConfigurationSection(t('媒体库与入库')); go('/settings/library') }} />
     ),
   },
   '/taste': {

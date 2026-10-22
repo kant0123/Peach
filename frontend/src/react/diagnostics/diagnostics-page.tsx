@@ -13,6 +13,7 @@ import { Disclosure, Fact, FactList, Section, Stack } from '../settings/section'
 import { busyProps, useAction } from '../settings/use-action';
 import { DIAGNOSTICS_KEY, fetchDiagnostics, type DiagnosticCheck } from './diagnostics';
 import { HealthList } from './health-list';
+import { t } from '../../i18n';
 
 const STATUS: Record<string, string> = { ok: '正常', warning: '需检查', failed: '需处理', unknown: '未取得', disabled: '未配置',
   stale: '待复查', unchecked: '尚无记录' };
@@ -63,7 +64,7 @@ function DownloadReport() {
 function Check({ name, check, navigate, configure, compact = false }: Pick<DiagnosticsProps, 'navigate' | 'configure'> & {
   name: string; check: DiagnosticCheck; compact?: boolean;
 }) {
-  const section = name === 'security' || name === 'port' ? '网络与访问' : '媒体库与入库';
+  const section = name === 'security' || name === 'port' ? t('网络与访问') : t('媒体库与入库');
   const Heading = compact ? 'h4' : 'h3';
   return <div data-diagnostic-check={name} className={cx('flex flex-col gap-4 border-b border-separator-border pr-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between', compact ? 'py-3' : 'py-5')}>
     <div className={cx('flex min-w-0 flex-1 flex-col', compact ? 'gap-1' : 'gap-2')}>
