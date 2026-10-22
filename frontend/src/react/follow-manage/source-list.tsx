@@ -559,7 +559,7 @@ export function SourceList(props: SourceListProps) {
       {/* 这一趟在后台跑，关掉页面还在继续，所以状态留在页面上而不是只让按钮转一下。 */}
       <div aria-live="polite" className="flex flex-col gap-3 empty:hidden">
         {running ? <TaskProgress embedded label={job?.message || (job?.total
-          ? t('{value}：已完成 {value2}/{total} 个来源', { value: job.older ? '抓取历史' : '检查更新', value2: job.checked || 0, total: job.total })
+          ? t('{value}：已完成 {value2}/{total} 个来源', { value: job.older ? t('抓取历史') : t('检查更新'), value2: job.checked || 0, total: job.total })
           : t('正在准备检查任务'))} value={job?.checked} total={job?.total} /> : null}
         {problem ? <Note tone="error" title={t('操作未完成')}>{problem}</Note> : null}
         {!running && outcome?.results?.length ? (

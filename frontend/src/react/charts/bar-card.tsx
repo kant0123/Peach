@@ -7,6 +7,7 @@ import { EvilBarChart } from '@/registry/charts/recharts-bar-chart';
 
 import { CategoryTick, categoryAxisWidth, CHART_CARD, ChartEmpty, ChartHead, tone } from './chart-card';
 import { ChartTip } from './chart-tip';
+import { t } from '../../i18n';
 
 /** 一根柱子：显示的名字和它的数。写成类型别名，EvilCharts 的 `data` 要能当 `Record` 收。 */
 export type BarRow = { name: string; value: number };
@@ -24,8 +25,8 @@ export function shortCount(value: number): string {
     const figure = value / unit;
     return `${figure.toLocaleString(undefined, { maximumFractionDigits: Math.abs(figure) < 100 ? 1 : 0 })}${name}`;
   };
-  if (abs >= 1e8) return scaled(1e8, '亿');
-  if (abs >= 1e5) return scaled(1e4, '万');
+  if (abs >= 1e8) return scaled(1e8, t('亿'));
+  if (abs >= 1e5) return scaled(1e4, t('万'));
   return value.toLocaleString();
 }
 

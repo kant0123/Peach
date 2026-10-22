@@ -46,8 +46,8 @@ export function applyDocumentLanguage(): void {
   document.documentElement.lang = current;
 }
 
-export function t(source: string, params?: Record<string, string | number>): string {
+export function t(source: string, params?: Record<string, string | number | undefined | null>): string {
   const text = current === 'ja' ? (jaCatalog[source] ?? source) : source;
   if (!params) return text;
-  return text.replace(/\{(\w+)\}/g, (whole, name: string) => (name in params ? String(params[name]) : whole));
+  return text.replace(/\{(\w+)\}/g, (whole, name: string) => (name in params ? String(params[name] ?? '') : whole));
 }

@@ -10,6 +10,7 @@ import { Toaster, toast } from 'sonner';
 
 import type * as Bundle from './bundle';
 import { Providers } from './providers';
+import { t } from '../i18n';
 
 /* 成功那一枚勾自己画出来（`src/ui-kit/motion.css` 的 `[data-toast-glyph=draw]`），失败那一枚
    不画：错误要的是立刻看清。字形由遗留层的 `icon()` 给，和全站其余图标同一套描边件。 */
@@ -40,13 +41,13 @@ export const mountToaster: typeof Bundle.mountToaster = (host, icons) => {
       style={{ ...FRAME, '--width': 'min(560px, calc(100vw - 48px))' } as CSSProperties}
       offset={{ right: 24, bottom: 'calc(var(--toast-bottom, 24px) + var(--processing-toast-space, 0px))' }}
       mobileOffset={{ right: 16, left: 16, bottom: 'calc(var(--toast-bottom, 16px) + var(--processing-toast-space, 0px))' }}
-      toastOptions={{ closeButtonAriaLabel: '关闭提示' }} containerAriaLabel="通知"
+      toastOptions={{ closeButtonAriaLabel: t('关闭提示') }} containerAriaLabel={t('通知')}
       icons={{ success: glyph(icons.success, true), error: glyph(icons.error, false) }} />
       <Toaster id="processing" position="bottom-right" gap={8} expand
         style={{ ...FRAME, '--width': 'min(400px, calc(100vw - 32px))' } as CSSProperties}
         offset={{ right: 24, bottom: 'var(--toast-bottom, 24px)' }}
         mobileOffset={{ right: 16, left: 16, bottom: 'var(--toast-bottom, 16px)' }}
-        toastOptions={{ closeButtonAriaLabel: '关闭任务提示' }} containerAriaLabel="后台任务" />
+        toastOptions={{ closeButtonAriaLabel: t('关闭任务提示') }} containerAriaLabel={t('后台任务')} />
     </Providers>,
   );
 };

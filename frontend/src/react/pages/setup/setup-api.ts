@@ -4,6 +4,7 @@
  * 「首次设置的内部流程」：错误正文是 `{error, errors?}`，`errors` 按题目 key 给，媒体目录那一项是
  * 与行对应的列表，整表不成立时是只有一句话的列表。 */
 import { PICK_FOLDER_URL } from '../../../configuration-endpoints';
+import { t } from '../../../i18n';
 
 export const SETUP_QUESTIONS_URL = '/api/setup/questions';
 export const SETUP_URL = '/api/setup';
@@ -81,7 +82,7 @@ async function request<T>(url: string, init: RequestInit, fallback: string): Pro
     });
   } catch (cause) {
     if (init.signal?.aborted) throw cause;
-    throw new SetupRequestError(0, '连接不到 Peach，请确认它仍在运行后重试');
+    throw new SetupRequestError(0, t('连接不到 Peach，请确认它仍在运行后重试'));
   }
   const body = await response.json().catch(() => null) as { error?: string; errors?: SetupErrors } | null;
   if (!response.ok) throw new SetupRequestError(response.status, body?.error || fallback, body?.errors);
@@ -89,16 +90,16 @@ async function request<T>(url: string, init: RequestInit, fallback: string): Pro
 }
 
 export const fetchQuestions = (signal?: AbortSignal) =>
-  request<SetupQuestions>(SETUP_QUESTIONS_URL, { signal }, '没能读取设置题目');
+  request<SetupQuestions>(SETUP_QUESTIONS_URL, { signal }, t('没能读取设置题目'));
 
 export const submitSetup = (submission: SetupSubmission) =>
-  request<SetupDone>(SETUP_URL, { method: 'POST', body: JSON.stringify(submission) }, '没能完成设置');
+  request<SetupDone>(SETUP_URL, { method: 'POST', body: JSON.stringify(submission) }, t('没能完成设置'));
 
 export const restoreSetup = (dataRoot: string) =>
-  request<SetupDone>(`${SETUP_URL}/restore`, { method: 'POST', body: JSON.stringify({ data_root: dataRoot }) }, '没能使用此数据目录');
+  request<SetupDone>(`${SETUP_URL}/restore`, { method: 'POST', body: JSON.stringify({ data_root: dataRoot }) }, t('没能使用此数据目录'));
 
 export const pickFolder = async (initial: string) =>
   (await request<{ path: string | null }>(PICK_FOLDER_URL,
-    { method: 'POST', body: JSON.stringify({ initial }) }, '没能打开文件夹对话框')).path;
+    { method: 'POST', body: JSON.stringify({ initial }) }, t('没能打开文件夹对话框'))).path;
 
-export const describeFailure = (cause: unknown) => (cause instanceof Error && cause.message) || '请求失败，请重试';
+export const describeFailure = (cause: unknown) => (cause instanceof Error && cause.message) || t('请求失败，请重试');
