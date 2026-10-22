@@ -65,7 +65,7 @@ const followTable = (rows: number, { sort, dir }: { sort: SortKey; dir: SortDir 
   return `<div data-board-data-table data-follow-table class="follow-skeleton-table"><div class="w-full overflow-x-auto"><table class="bui-table bui-table-sm"><thead><tr>${head}</tr></thead><tbody>${repeat(row, rows)}</tbody></table></div></div>`;
 };
 /** 分页行：条数与页码要等数据，每页几条是这台浏览器的偏好，照最终的字样写出来。 */
-const followPager = (table: boolean, size: number) => `<div class="flex flex-wrap items-center justify-between gap-3"><span class="text-body-2-regular text-text-secondary">${text('111px')}</span>${islandSelect(t('每页 {size} {value}', { size, value: table ? '条' : '位' }), { size: 'sm' })}${block(204, 32)}</div>`;
+const followPager = (table: boolean, size: number) => `<div class="flex flex-wrap items-center justify-between gap-3"><span class="text-body-2-regular text-text-secondary">${text('111px')}</span>${islandSelect(t('每页 {size} {value}', { size, value: table ? t('条') : t('位') }), { size: 'sm' })}${block(204, 32)}</div>`;
 /** 关注列表以外的页签：内容各不相同、要等数据才知道长什么样，只画那张填充卡和几行占位。 */
 const followPanel = () => `<div class="min-w-0 bg-background-secondary-default rounded-2xl shadow-card flex flex-col gap-4 px-6 py-5 max-sm:px-4 ui-follow-skeleton-surface"><h3 class="text-title-2-medium text-text-primary">${text('120px')}</h3>${['72%', '56%', '64%', '40%'].map((width) => `<span class="text-body-medium">${text(width)}</span>`).join('')}</div>`;
 type FollowSkeletonOptions = { followLayout?: string; followPageSize?: number; followSort?: string; followDir?: string; followTab?: string };

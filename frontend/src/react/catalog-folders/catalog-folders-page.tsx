@@ -85,7 +85,7 @@ export function CatalogFolders() {
           onClick={() => setEditing(true)} /> : null}
       </div>
       {query.error ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void query.refetch() }}>{t('重试')}</Button>}>{errorMessage(query.error)}</Note> : null}
-      {data?.conflicts?.length ? <Note tone="warning" action={<Button variant="secondary" size="small" onClick={() => setEditing(true)}>{t('查看归属冲突')}</Button>}>{data.conflicts.length} 项保留现有归属</Note> : null}
+      {data?.conflicts?.length ? <Note tone="warning" action={<Button variant="secondary" size="small" onClick={() => setEditing(true)}>{t('查看归属冲突')}</Button>}>{t('{count} 项保留现有归属', { count: data.conflicts.length })}</Note> : null}
       {data?.selected ? <div className="folder-scope-row">
         <Checkbox size="sm" isSelected={params.get('folder_recursive') !== '0'}
           onChange={on => actions.navigate(folderHref(address, { folder_recursive: on ? null : '0' }))}>{t('包含子文件夹')}</Checkbox>

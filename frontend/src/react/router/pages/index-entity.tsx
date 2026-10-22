@@ -23,6 +23,7 @@ import { appSettingsStore } from '@peach/appearance';
 import { isOverlayPath, managedEntry, openManagedRoute, peachHistory, shellNavigate, updateManagedRoute } from '@peach/history';
 import { ROUTE_ENTITIES, entityPath } from '@peach/legacy/core';
 import { apiGet } from '../../../api';
+import { t } from '../../../i18n';
 import { queryClient } from '../../query';
 import type { EntityPageData } from '../../entity-page/entity-page';
 import { pageOpens, selectMode, subscribeShell, writeShell } from '@peach/shell';
@@ -186,7 +187,7 @@ async function openEntity(
   const frame = document.createElement('template');
   frame.innerHTML = `<div data-entity-hero><div class="peach-react"></div></div>
     <div data-entity-filter><div class="peach-react"></div></div>
-    <section class="feednew" data-feed-new aria-label={t('未入库的新作')} hidden></section>
+    <section class="feednew" data-feed-new aria-label="${t('未入库的新作')}" hidden></section>
     <div data-entity-body><div class="peach-react"></div></div>`;
   const parts = [...frame.content.childNodes];
   const hero = frame.content.querySelector('[data-entity-hero]')!;
