@@ -61,6 +61,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
     "media": ("test_external_playback.py", "test_runtime_consistency.py", "test_endcard.py", "test_fastapi_api.py", "test_jobs.py",
               "test_task_runs.py", "test_followups.py", "test_task_center_integration.py",
               "test_frame_capture.py", "test_timeline_sheets.py", "test_processing_control.py",
+              "test_high_speed_previews.py",
               "test_web_timeline_thumbnails.py",
               "test_interaction.py", "test_media.py", "test_mp4repair.py",
               "test_mp4recover.py", "test_web_media_repair.py",
@@ -207,6 +208,7 @@ AUTO_SCOPE_FILES: dict[str, tuple[str, ...]] = {
     "src/peach/library_processing.py": ("metadata", "web"),
     "src/peach/local_poster.py": ("metadata", "web"),
     "src/peach/processing_control.py": ("media", "metadata", "web"),
+    "src/peach/storage_profile.py": ("media", "metadata"),
     # 刮削后继：主体测试 `test_followups.py` 与 `test_studio_followup.py`，按名字推不出来。
     "src/peach/avatar_followup.py": ("catalog", "media", "tooling"),
     "src/peach/avatar_offsite_cover_face.py": ("catalog", "media", "tooling"),

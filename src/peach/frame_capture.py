@@ -103,8 +103,46 @@ def capture_with_retry(ffmpeg: str, path: str, timestamp: float, destination: Pa
     return ok
 
 
+def capture_frames(ffmpeg: str, path: str, timestamps: list[float], destinations: list[Path], *,
+                   width: int = 480, timeout: float = 120, threads: int = 1,
+                   diagnostics: dict | None = None) -> bool:
+    """一个 FFmpeg 进程按多个时间点各抽一帧，每个时间点写自己的文件。
+
+    与逐帧调用 `capture_frame` 产出同样的帧文件：每个输入各自 `-ss` 在 `-i` 之前定位，
+    缩放和编码参数相同，只省掉其余进程的启动、探测和线程池开销。
+    不做色彩元数据重试；失败时由调用方回到逐帧路径，那条路径保留逐帧诊断。
+    """
+    for destination in destinations:
+        destination.unlink(missing_ok=True)
+    command = [ffmpeg, "-y", "-v", "error", "-rw_timeout", "8000000", "-threads", str(threads)]
+    for timestamp in timestamps:
+        command += ["-ss", f"{timestamp:.2f}", "-i", path]
+    for index, destination in enumerate(destinations):
+        command += ["-map", f"{index}:v:0", "-frames:v", "1", "-vf", f"scale={int(width)}:-1",
+                    "-q:v", "4", "-threads", str(threads), str(destination)]
+    try:
+        completed = subprocess.run(command, capture_output=True, timeout=timeout,
+                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    except subprocess.TimeoutExpired as error:
+        if diagnostics is not None:
+            diagnostics.update(reason='timeout', returncode=None,
+                               stderr=(error.stderr or b'').decode('utf-8', 'replace'))
+        for destination in destinations:
+            destination.unlink(missing_ok=True)
+        return False
+    ok = completed.returncode == 0 and all(_readable_image(destination) for destination in destinations)
+    if diagnostics is not None:
+        diagnostics.update(reason='success' if ok else 'ffmpeg_error' if completed.returncode else 'no_frame',
+                           returncode=completed.returncode,
+                           stderr=(completed.stderr or b'').decode('utf-8', 'replace'))
+    if not ok:
+        for destination in destinations:
+            destination.unlink(missing_ok=True)
+    return ok
+
+
 def tile_frames(ffmpeg: str, pattern: str, columns: int, rows: int, destination: Path,
-                *, timeout: float = 60) -> bool:
+                *, timeout: float = 60, threads: int | None = None) -> bool:
     """把 `pattern`（形如 `dir/s%02d.jpg`）指的那串帧拼成 columns×rows 一张。
 
     帧要先按连续序号改好名再进来：`image2` 读的是序号序列，中间缺一个号它就在那里停下，
@@ -112,14 +150,15 @@ def tile_frames(ffmpeg: str, pattern: str, columns: int, rows: int, destination:
     """
     destination.parent.mkdir(parents=True, exist_ok=True)
     checkpoint('frame')
-    options = ffmpeg_options(filter_option='-filter_complex_threads')
+    options = (ffmpeg_options(filter_option='-filter_complex_threads') if threads is None else
+               ['-threads', str(threads), '-filter_complex_threads', str(threads)])
     destination.unlink(missing_ok=True)
     from .error_reporting import subprocess_failure
     try:
         completed = subprocess.run(
             [ffmpeg, "-y", "-v", "error", *options, "-i", pattern,
              "-filter_complex", f"tile={int(columns)}x{int(rows)}", "-q:v", "4",
-             *ffmpeg_options(), str(destination)],
+             *(ffmpeg_options() if threads is None else ['-threads', str(threads)]), str(destination)],
             capture_output=True, timeout=timeout,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
