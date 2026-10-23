@@ -704,10 +704,9 @@ def misses_path(config):
 
 
 def _save(path, payload):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
-    temporary.replace(path)
+    # 状态文件每次轮询都有人读：Windows 上目标被打开的一瞬间 os.replace 会抛 PermissionError，
+    # 所以走共用的原子落盘，它带独立临时名并等读者放手。
+    atomic_write_text(path, json.dumps(payload, ensure_ascii=False))
 
 
 def decorate(state, *, now=None):
