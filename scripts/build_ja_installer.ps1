@@ -23,7 +23,8 @@ if (-not $OutputDirectory) { $OutputDirectory = Join-Path $ProjectRoot 'dist\ja\
 function Invoke-Git { & git -C $ProjectRoot @args; if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed." } }
 function Invoke-Npm {
     Push-Location $Frontend
-    try { & npm @args; if ($LASTEXITCODE -ne 0) { throw "npm $($args -join ' ') failed." } } finally { Pop-Location }
+    # npm.ps1 垫片会重新解析调用语句，拿不到 @args 展开的参数，所以直接调 npm.cmd。
+    try { & npm.cmd @args; if ($LASTEXITCODE -ne 0) { throw "npm $($args -join ' ') failed." } } finally { Pop-Location }
 }
 
 if ((& git -C $ProjectRoot status --porcelain)) { throw '工作区不干净。先提交或暂存改动再构建。' }
