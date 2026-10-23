@@ -6,7 +6,7 @@
 import { apiGet } from '../../api';
 import { elapsedText, progressText } from '../activity/tasks';
 import { queryClient } from '../query';
-import { t } from '../../i18n';
+import { localizeServer, t } from '../../i18n';
 
 export const LIBRARY_PROCESSING_URL = '/api/library-processing';
 
@@ -162,7 +162,7 @@ export function notesLine(notes: Record<string, number>): string {
 export function currentLine(state: LibraryProcessingData): string {
   if (state.status === 'paused') return t('已暂停');
   if (state.status === 'pausing') return t('正在暂停');
-  const action = ACTION_LABELS[state.current_action || ''] || state.stage || t('正在处理');
+  const action = ACTION_LABELS[state.current_action || ''] || localizeServer(state.stage) || t('正在处理');
   const waited = state.waited_seconds ? t(' · 已等待 {value}', { value: elapsedText(state.waited_seconds) }) : '';
   return state.current_asset_name
     ? t('当前：{current_asset_name} · {action}{waited}', { current_asset_name: state.current_asset_name, action, waited })

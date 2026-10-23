@@ -4,7 +4,7 @@
  * 首屏两份一起取，卡片挂上去直接读缓存。 */
 import { apiGet } from '../../api';
 import { queryClient } from '../query';
-import { t } from '../../i18n';
+import { localizeServer, t } from '../../i18n';
 
 export const MEDIA_REPAIR_URL = '/api/media-repair';
 export const MEDIA_REPAIR_KEY = ['media-repair'] as const;
@@ -59,7 +59,7 @@ export function statusLine(state: MediaRepairState): string {
     const where = state.total ? `${count(Math.min(state.checked || 0, state.total))} / ${count(state.total)}` : t('准备中');
     return state.stage === '修复' && state.message
       ? t('修复 {where} · {message}', { where, message: state.message })
-      : `${state.stage || t('扫描')} ${where}`;
+      : `${localizeServer(state.stage) || t('扫描')} ${where}`;
   }
   if (state.status === 'complete' && (state.repaired || state.failed)) {
     return state.failed

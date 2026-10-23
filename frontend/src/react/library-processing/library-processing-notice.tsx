@@ -11,7 +11,7 @@ import { DISCONNECTED_TEXT, processingActive, remainingTime, type LibraryProcess
 import { ProcessingControls } from './processing-controls';
 import { useLibraryProcessingJob } from './use-library-processing';
 import { ProcessingLine } from './processing-line';
-import { t } from '../../i18n';
+import { localizeServer, t } from '../../i18n';
 
 const COLLAPSE_KEY = 'peach.library-processing.collapsed';
 function expandedFor(jobId?: string): boolean {
@@ -87,11 +87,11 @@ export function ProcessingNoticePanel({ state, problem = '', measure = false }: 
           {step.status === 'complete' ? <RiCheckLine aria-hidden className="size-4 shrink-0" />
             : <RiCheckboxBlankCircleLine aria-hidden className={cx('size-4 shrink-0', step.status === 'current' && 'text-border-focus-ring')} />}
           <VisuallyHidden>{step.status === 'complete' ? t('已完成：') : step.status === 'current' ? t('当前：') : t('待处理：')}</VisuallyHidden>
-          {step.status === 'complete' ? <s className="wrap-anywhere">{step.label}</s> : <span className="wrap-anywhere">{step.label}</span>}
+          {step.status === 'complete' ? <s className="wrap-anywhere">{localizeServer(step.label)}</s> : <span className="wrap-anywhere">{localizeServer(step.label)}</span>}
         </li>)}
       </ol> : null}
       <p className="text-body-2-regular wrap-anywhere">{problem || (failed ? state?.error || t('请查看并处理未完成项') : <ProcessingLine state={state!} />)}</p>
-      {active && state?.stage && !state.steps?.length ? <p className="text-caption-1-regular text-text-tertiary">{t('当前阶段 · {stage}', { stage: state.stage })}</p> : null}
+      {active && state?.stage && !state.steps?.length ? <p className="text-caption-1-regular text-text-tertiary">{t('当前阶段 · {stage}', { stage: localizeServer(state.stage) })}</p> : null}
       {state?.stalled && !problem ? <p className="text-caption-1-regular">{t('当前步骤耗时较长，正在等待进展')}</p> : null}
     </div> : null}
     <div className="flex flex-wrap items-center justify-between gap-2">
