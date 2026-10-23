@@ -11,7 +11,7 @@ import { describeFailure, fetchQuestions, SetupRequestError, type SetupDone, typ
 import { SetupDoneView } from './setup-done';
 import { SetupForm } from './setup-form';
 import { SetupRestore } from './setup-restore';
-import { t } from '../../../i18n';
+import { applyDocumentLanguage, t } from '../../../i18n';
 
 type View =
   | { kind: 'loading' }
@@ -24,6 +24,11 @@ export function SetupPage() {
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [restoring, setRestoring] = useState(false);
+
+  useEffect(() => {
+    applyDocumentLanguage();
+    document.title = t('Peach · 首次运行');
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();

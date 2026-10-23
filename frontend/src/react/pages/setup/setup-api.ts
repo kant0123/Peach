@@ -4,7 +4,7 @@
  * 「首次设置的内部流程」：错误正文是 `{error, errors?}`，`errors` 按题目 key 给，媒体目录那一项是
  * 与行对应的列表，整表不成立时是只有一句话的列表。 */
 import { PICK_FOLDER_URL } from '../../../configuration-endpoints';
-import { t } from '../../../i18n';
+import { localizeServer, t } from '../../../i18n';
 
 export const SETUP_QUESTIONS_URL = '/api/setup/questions';
 export const SETUP_URL = '/api/setup';
@@ -85,8 +85,10 @@ async function request<T>(url: string, init: RequestInit, fallback: string): Pro
     throw new SetupRequestError(0, t('连接不到 Peach，请确认它仍在运行后重试'));
   }
   const body = await response.json().catch(() => null) as { error?: string; errors?: SetupErrors } | null;
-  if (!response.ok) throw new SetupRequestError(response.status, body?.error || fallback, body?.errors);
-  return body as T;
+  if (!response.ok) {
+    throw new SetupRequestError(response.status, localizeServer(body?.error) || fallback, localizeServer(body?.errors));
+  }
+  return localizeServer(body) as T;
 }
 
 export const fetchQuestions = (signal?: AbortSignal) =>

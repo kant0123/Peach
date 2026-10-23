@@ -4,6 +4,7 @@
  * 不会出现空白或键名。语言存在 `peach.locale`，启动时同步读取；切换后整页重载，让所有已渲染的文案
  * 一次换完，不维护逐组件的订阅。插值用 `{名}`：`t('共 {count} 项', { count })`。 */
 import { jaCatalog } from './ja';
+import { jaServerCatalog } from './ja-server';
 
 export type Locale = 'zh-CN' | 'ja';
 
@@ -47,6 +48,38 @@ export function setLocale(next: Locale): void {
 
 export function applyDocumentLanguage(): void {
   document.documentElement.lang = current;
+}
+
+const serverTemplates = Object.entries(jaServerCatalog).filter(([key]) => /\{\w+\}/.test(key)).map(([key, text]) => {
+  const names: string[] = [];
+  const pattern = key.split(/(\{\w+\})/).map((part) => {
+    const name = /^\{(\w+)\}$/.exec(part)?.[1];
+    if (!name) return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    names.push(name);
+    return '([\\s\\S]+?)';
+  }).join('');
+  return { pattern: new RegExp(`^${pattern}$`), names, text };
+});
+
+function localizeServerText(source: string): string {
+  const exact = jaServerCatalog[source];
+  if (exact !== undefined) return exact;
+  for (const { pattern, names, text } of serverTemplates) {
+    const match = pattern.exec(source);
+    if (match) return text.replace(/\{(\w+)\}/g, (whole, name: string) => match[names.indexOf(name) + 1] ?? whole);
+  }
+  return source;
+}
+
+/** 把接口返回里服务端生成的中文换成日语：整句命中 `jaServerCatalog` 才换，路径、网址等数据原样保留。 */
+export function localizeServer<T>(value: T): T {
+  if (current !== 'ja') return value;
+  if (typeof value === 'string') return localizeServerText(value) as T;
+  if (Array.isArray(value)) return value.map((item) => localizeServer(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, localizeServer(item)])) as T;
+  }
+  return value;
 }
 
 export function t(source: string, params?: Record<string, string | number | undefined | null>): string {
