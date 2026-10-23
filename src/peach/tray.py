@@ -39,6 +39,7 @@ from .mount import mount_share as mount_smb_share
 from .process_job import assign_to_job, create_kill_on_close_job
 from .tray_diagnostics import show_report as show_diagnostic_report
 from .tray_lifecycle import Lifecycle
+from .tray_text import tr
 from .tray_detached import handoff_tray
 from .sync import COPY_ACTIONS, SyncPlan, device_id, resolve
 from .versioning import VersionManager, VersionSnapshot
@@ -79,8 +80,8 @@ def ledger_menu_items(make_item, sync_ledger, take_ownership) -> list:
     if not REPLICATION_ENABLED or standalone():
         return []
     return [
-        make_item("同步数据库", sync_ledger),
-        make_item("由本机接管数据库写入", take_ownership),
+        make_item(tr("同步数据库"), sync_ledger),
+        make_item(tr("由本机接管数据库写入"), take_ownership),
     ]
 
 #: 改到这些路径就得重启托盘进程本身。托盘启动那一刻就把它们装进了内存，重启子服务
@@ -328,7 +329,7 @@ class ServiceManager:
             parts = []
             for spec in self.specs:
                 ok, detail = self._last_health[spec.name]
-                state = (f"正常（{detail}）" if detail else "正常") if ok else f"异常（{detail}）" if detail else "异常"
+                state = tr((f"正常（{detail}）" if detail else "正常") if ok else f"异常（{detail}）" if detail else "异常")
                 parts.append(f"{spec.name.upper()} {state}")
         return " · ".join(parts)
 
@@ -338,8 +339,8 @@ class ServiceManager:
             healthy = sum(self._last_health[spec.name][0] for spec in self.specs)
             warnings = set(value for spec in self.specs
                            for value in self._mount_warnings.get(spec.name, ()))
-            state = ("运行中" if healthy == len(self.specs) else "部分服务异常") if healthy else "服务未运行"
-        return f"{state} · {len(warnings)} 项提醒" if warnings else state
+            state = tr(("运行中" if healthy == len(self.specs) else "部分服务异常") if healthy else "服务未运行")
+        return f"{state} · {tr(f'{len(warnings)} 项提醒')}" if warnings else state
 
     def status_details(self) -> tuple[str, ...]:
         """服务与挂载分行呈现，避免一行堆入所有来源。"""
@@ -347,7 +348,7 @@ class ServiceManager:
             services = []
             for spec in self.specs:
                 ok, detail = self._last_health[spec.name]
-                state = "正常" if ok else f"异常（{detail}）" if detail else "异常"
+                state = tr("正常" if ok else f"异常（{detail}）" if detail else "异常")
                 services.append(menu_text(f"{spec.name.upper()} {state}"))
             warnings = dict.fromkeys(value for spec in self.specs
                                      for value in self._mount_warnings.get(spec.name, ()))
@@ -922,14 +923,14 @@ class SetupGate:
         return self._waiting
 
     def open_label(self) -> str:
-        return "重新打开设置页" if self._waiting else "打开 Peach"
+        return tr("重新打开设置页" if self._waiting else "打开 Peach")
 
     def open_url(self) -> str:
         return setup_url(self.config) if self._waiting else normal_url(self.config)
 
     def status_line(self) -> str:
         if self._waiting:
-            return "等待完成首次设置"
+            return tr("等待完成首次设置")
         return self.manager.status_summary()
 
     def open(self) -> None:
@@ -1077,9 +1078,9 @@ class PeachTray:
         version_menu = pystray.Menu(
             pystray.MenuItem(lambda _item: f"Peach {self.version.package_version}", None, enabled=False),
             pystray.MenuItem(lambda _item: self.version.build_label, None, enabled=False),
-            pystray.MenuItem(lambda _item: self.version.channel_label, None, enabled=False),
+            pystray.MenuItem(lambda _item: tr(self.version.channel_label), None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("检查更新", self.check_updates),
+            pystray.MenuItem(tr("检查更新"), self.check_updates),
         )
         self.icon = pystray.Icon(
             "Peach",
@@ -1088,26 +1089,26 @@ class PeachTray:
             "Peach · 蜜桃",
             pystray.Menu(
                 pystray.MenuItem(lambda _item: self.gate.open_label(), self.open, default=True),
-                pystray.MenuItem("配置 Peach", lambda *_: webbrowser.open(self.gate.open_url() + "configuration")),
-                pystray.MenuItem(lambda _item: f"状态：{self.gate.status_line()}", pystray.Menu(
+                pystray.MenuItem(tr("配置 Peach"), lambda *_: webbrowser.open(self.gate.open_url() + "configuration")),
+                pystray.MenuItem(lambda _item: tr(f"状态：{self.gate.status_line()}"), pystray.Menu(
                     lambda: (
                         *(pystray.MenuItem(line, None, enabled=False)
                           for line in self.manager.status_details()),
-                        pystray.MenuItem(menu_text(f"地址：{self.gate.open_url()}"), self.open),
-                        pystray.MenuItem("查看完整配置", lambda *_: webbrowser.open(
+                        pystray.MenuItem(menu_text(tr(f"地址：{self.gate.open_url()}")), self.open),
+                        pystray.MenuItem(tr("查看完整配置"), lambda *_: webbrowser.open(
                             self.gate.open_url() + "configuration")),
                     ))),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("同步开发进度", self.sync_source,
+                pystray.MenuItem(tr("同步开发进度"), self.sync_source,
                                  visible=lambda _: not standalone()),
                 *ledger_menu_items(
                     pystray.MenuItem, self.sync_ledger, self.take_ownership),
-                pystray.MenuItem("重启服务", self.restart),
-                pystray.MenuItem("查看日志", self.open_logs),
-                pystray.MenuItem("导出诊断报告", self.export_diagnostics),
-                pystray.MenuItem("版本与更新", version_menu),
+                pystray.MenuItem(tr("重启服务"), self.restart),
+                pystray.MenuItem(tr("查看日志"), self.open_logs),
+                pystray.MenuItem(tr("导出诊断报告"), self.export_diagnostics),
+                pystray.MenuItem(tr("版本与更新"), version_menu),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("退出 Peach", self.exit),
+                pystray.MenuItem(tr("退出 Peach"), self.exit),
             ),
         )
 
