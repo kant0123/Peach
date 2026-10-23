@@ -194,7 +194,7 @@
 }
 .peach-react [data-follow-filter-glass] [data-follow-tag] [data-count-badge] {
   color: color-mix(in srgb, var(--glass-text) 55%, transparent);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: 11px;
 }
 /* 「仅显示图片」：一枚 30px 的方键，按下时垫一块滑动玻璃那种料。 */
@@ -226,7 +226,7 @@
 
 /* 读数是等宽字，同遗留层 `.followcount .mono`。 */
 .peach-react [data-follow-readout] {
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
 }
 
 /* ── 提示与页脚 ── */
@@ -502,7 +502,7 @@ body[data-density="dense"]:not([data-surface="/trash"]) .peach-react [data-follo
 }
 .peach-react [data-follow-byline] > time {
   flex: none;
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

@@ -13,7 +13,7 @@
 .ib[aria-pressed="true"]{background:var(--hover);color:var(--ink)}
 .brand{display:flex;align-items:center;gap:9px;flex:none;text-decoration:none;color:inherit;height:32px}
 .mark{width:28px;height:28px;flex:none;display:block;object-fit:contain}
-.brand h1{font-family:Bahnschrift,"Segoe UI Variable Display","Microsoft YaHei UI","PingFang SC",sans-serif;font-weight:600;margin:0;font-size:var(--fs-xl);line-height:1;letter-spacing:.08em}
+.brand h1{font-family:Bahnschrift,"Segoe UI Variable Display",var(--cjk-ui),sans-serif;font-weight:600;margin:0;font-size:var(--fs-xl);line-height:1;letter-spacing:.08em}
 .brand .sub{font-size:var(--fs-xs);line-height:1;letter-spacing:.14em;color:var(--muted);padding-top:2px}
 .search{flex:1;max-width:620px;margin:0 auto;display:flex;align-items:center;gap:8px;
   background:var(--surface);border:1px solid var(--line);border-radius:var(--pill-radius);padding:8px 16px;position:relative;
@@ -52,7 +52,7 @@
 .av[aria-pressed="true"] .ring{box-shadow:0 0 0 2px var(--ink)}
 .av .ring img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .av .ring .ini{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-size:var(--fs-xl);color:var(--muted);font-family:Bahnschrift,"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif}
+  font-size:var(--fs-xl);color:var(--muted);font-family:Bahnschrift,var(--cjk-ui),sans-serif}
 .av .nm{display:block;font-size:var(--fs-xs);color:var(--ink-2);overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;max-width:76px}
 .av[aria-pressed="true"] .nm{color:var(--ink)}
@@ -66,7 +66,7 @@
 .brandpill[aria-pressed="true"]{border-color:var(--field-ring);background:var(--picked);color:var(--ink)}
 .brandpill .mk{width:32px;height:32px;border-radius:50%;background:#CFCFCF;flex:none;
   display:flex;align-items:center;justify-content:center;font-size:var(--fs-xs);
-  font-family:Bahnschrift,"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif;color:var(--ground);overflow:hidden;position:relative}
+  font-family:Bahnschrift,var(--cjk-ui),sans-serif;color:var(--ground);overflow:hidden;position:relative}
 /* 厂牌标识文件本身就是不透明方图（`peach.images.bake_square`），边距烤在图里，
    所以这里铺满圆片：留 inset 会在图自带的底之外再围出一圈灰。`#CFCFCF` 只是无图
    时垫在首字母后面的底色。
