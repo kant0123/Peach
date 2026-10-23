@@ -57,7 +57,7 @@ export function statusLine(state: MediaRepairState): string {
   if (state.status === 'running') {
     // 服务端偶尔报出超过总数的已查数，按总数封顶。
     const where = state.total ? `${count(Math.min(state.checked || 0, state.total))} / ${count(state.total)}` : t('准备中');
-    return state.stage === '修复' && state.message
+    return (state.stage === '修复' || state.stage === localizeServer('修复')) && state.message
       ? t('修复 {where} · {message}', { where, message: state.message })
       : `${localizeServer(state.stage) || t('扫描')} ${where}`;
   }

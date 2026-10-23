@@ -23,6 +23,14 @@ describe('localizeServer', () => {
       .toBe('フォルダーが存在しないか、ディレクトリではありません: D:\\media。先に作成してから入力してください。');
   });
 
+  it('模板里取到的可变部分本身有译文时一并换掉，顿号串起来的名称列表逐项换', async () => {
+    const { localizeServer } = await load('ja');
+    expect(localizeServer('当前值：尚无；1 个匹配资产；2 个资料来源'))
+      .toBe('現在の値: なし／一致する資産 1 件／情報源 2 件');
+    expect(localizeServer('FC2Club、片商官网、Prestige')).toBe('FC2Club、メーカー公式サイト、Prestige');
+    expect(localizeServer('Prestige、FALENO')).toBe('Prestige、FALENO');
+  });
+
   it('没有译文的句子原样返回', async () => {
     const { localizeServer } = await load('ja');
     expect(localizeServer('没有收录的句子')).toBe('没有收录的句子');

@@ -172,7 +172,7 @@ export function currentLine(state: LibraryProcessingData): string {
 /** 已知总量显示实际完成数；扫描目录期间显示持续发现的文件数。 */
 export function processingLine(state: LibraryProcessingData): string {
   const count = state.total ? t('{value} 项', { value: progressText(state.checked, state.total) })
-    : state.current_action === 'scanning_files' || state.stage === '扫描文件'
+    : state.current_action === 'scanning_files' || (state.stage === '扫描文件' || state.stage === localizeServer('扫描文件'))
       ? t('已发现 {value} 个文件', { value: (state.scanned || 0).toLocaleString() }) : '';
   return currentLine(state) + (count ? ` · ${count}` : '');
 }

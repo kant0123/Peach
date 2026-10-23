@@ -6,7 +6,7 @@ import { entityLinkId, registerEntityLink, registerResponseEntities } from './en
 import { SOURCE_LABELS } from './media-sources';
 import { requestErrorMessage } from './request-error';
 import { iconGeometry } from './icon-geometry';
-import { t } from '../i18n';
+import { localizeServer, t } from '../i18n';
 export { registerEntityLink, registerResponseEntities } from './entity-links';
 export { requestErrorMessage } from './request-error';
 const $=(s:string)=>document.querySelector(s);
@@ -36,7 +36,7 @@ const api=async(p:string,o?:RequestInit):Promise<unknown>=>{
     throw new Error(requestErrorMessage(detail,response.status));
   }
   registerResponseEntities(p,payload);
-  return payload;
+  return localizeServer(payload);
 };
 /* 取消不是失败。abort 只可能来自表面切换，调用点本来就有一条「已过期」分支要走，
    不该顺手弹一个「请求失败」的错误提示。 */

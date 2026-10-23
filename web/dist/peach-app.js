@@ -1473,7 +1473,7 @@ var e = Object.create, n = Object.defineProperty, r = Object.getOwnPropertyDescr
 	"入库于 {value}": "{value} に取り込み",
 	全选当前分类: "現在の分類をすべて選択",
 	全选本组: "このグループをすべて選択",
-	全速: "全速",
+	全速: "最速",
 	"全部优先 {location}": "すべて {location} を優先",
 	全部分类: "すべての分類",
 	全部待复核: "すべて確認待ち",
@@ -3037,6 +3037,55 @@ var e = Object.create, n = Object.defineProperty, r = Object.getOwnPropertyDescr
 	切换卡片密度: "カードの密度を切り替え",
 	打开设置: "設定を開く",
 	"Peach 安装教程": "Peach セットアップガイド",
+	片商官网: "メーカー公式サイト",
+	演员: "出演者",
+	原标题: "原題",
+	内容标签: "コンテンツタグ",
+	发行日期: "発売日",
+	尚无: "なし",
+	"当前值：{a}；{b} 个匹配资产；{c} 个资料来源": "現在の値: {a}／一致する資産 {b} 件／情報源 {c} 件",
+	"{n} 分钟": "{n} 分",
+	系统盘: "システムドライブ",
+	资源盘: "リソースドライブ",
+	低画质: "低画質",
+	去馆藏评价作品: "ライブラリで作品を評価",
+	"当前喜欢 {a} · 不合口味 {b}": "現在の好き {a} · 好みに合わない {b}",
+	仍在学习: "学習中",
+	"证据还不足以形成稳定口味结论。": "好みを安定して判断するには、まだ証拠が足りません。",
+	数据库: "データベース",
+	后台任务: "バックグラウンドタスク",
+	数据库可读取: "データベースを読み取れます",
+	数据库迁移: "データベース移行",
+	迁移校验通过: "移行の検証に成功",
+	配置可读取: "設定を読み取れます",
+	"媒体工具可执行，AV1 软件解码器可用": "メディアツールを実行でき、AV1 ソフトウェアデコーダーも使えます",
+	媒体挂载: "メディアのマウント",
+	服务端口: "サービスのポート",
+	没有已记录的任务失败: "記録されたタスクの失敗はありません",
+	"尚无检查或解析记录，可在来源和凭证中检查连接": "確認・解析の記録はまだありません。「ソースと認証情報」で接続を確認できます",
+	来源可读取: "ソースを読み取れます",
+	临时写入与清理通过: "一時ファイルの書き込みと削除に成功",
+	仅监听本机: "このパソコンのみで待ち受け",
+	访问安全: "アクセスの安全性",
+	缺封面: "カバーなし",
+	缺时长: "再生時間なし",
+	补资料失败: "情報補完の失敗",
+	识别失败: "識別の失敗",
+	源码运行: "ソースから実行",
+	"源码安装请先关闭开机自启并退出托盘，再手动移除项目与数据目录": "ソースからのインストールは、自動起動をオフにしてトレイを終了してから、プロジェクトとデータフォルダーを手動で削除してください",
+	"桌面快捷方式属于另一份 Peach 安装": "デスクトップのショートカットは別の Peach インストールのものです",
+	测试版: "テスト版",
+	"这个部署由配置文件管理服务；在本机编辑下方的设置文件。": "このデプロイでは設定ファイルでサービスを管理します。このパソコンで下の設定ファイルを編集してください。",
+	"匿名处理后上传馆藏与各类偏好明细。": "匿名化したうえで、ライブラリと各種の好みの明細をアップロードします。",
+	"公开列表不需要登录；帖子详情被 FANBOX 验证页拦住时，可用浏览器会话取得正文、多图和外部资源链接。": "公開リストにログインは不要です。投稿の詳細が FANBOX の認証ページに阻まれたときは、ブラウザーのセッションで本文・複数画像・外部リソースのリンクを取得できます。",
+	"登录 FANBOX 后，从一次成功的 api.fanbox.cc/post.info 请求复制整条 Cookie 请求头。": "FANBOX にログインしたあと、成功した api.fanbox.cc/post.info リクエストから Cookie ヘッダー全体をコピーしてください。",
+	"登录 Premium Gofile 账户后，在个人资料页复制 API token。": "Premium の Gofile アカウントにログインしたあと、プロフィールページで API トークンをコピーしてください。",
+	"登录后在账号设置页生成 API key，把 user_id 和 api_key 写进凭据文件。": "ログイン後、アカウント設定ページで API キーを生成し、user_id と api_key を認証情報ファイルに書き込んでください。",
+	"登录后从浏览器复制整条 Cookie 请求头，写进凭据文件的 cookie 字段。": "ログイン後、ブラウザーから Cookie ヘッダー全体をコピーし、認証情報ファイルの cookie フィールドに書き込んでください。",
+	"用于展开 Gofile 文件页，取得其中的图片和视频列表；Gofile 当前要求 Premium 才能读取 contents API，不配置仍会保留文件页链接。": "Gofile のファイルページを展開して画像と動画の一覧を取得するために使います。Gofile は現在 contents API の読み取りに Premium を要求します。未設定でもファイルページのリンクは残ります。",
+	"站点不让游客读帖，检查更新必须带登录会话；前面的 DDoS-Guard 对标准桌面浏览器标识不出质询，Peach 也不解任何质询，cookie 失效就原样报错。": "このサイトはゲストの閲覧を許可しないため、更新の確認にはログイン済みセッションが必要です。前段の DDoS-Guard は標準的なデスクトップブラウザーには認証を出さず、Peach もチャレンジを解きません。Cookie が失効した場合はそのままエラーを返します。",
+	"网页版挂了 Cloudflare 验证码，Peach 不绕验证码，只能走官方 API。": "Web 版は Cloudflare の CAPTCHA で保護されており、Peach は CAPTCHA を回避しないため、公式 API のみを使います。",
+	"发现更新不需要登录；只有取附件和 masked 下载链接才需要会话。": "更新の検出にログインは不要です。添付ファイルとマスクされたダウンロードリンクの取得にのみセッションが必要です。",
 	"Peach 数据目录不能为空": "Peach のデータフォルダーは空にできません",
 	"{path} 是一个文件，Peach 数据目录要是目录": "{path} はファイルです。Peach のデータフォルダーにはディレクトリを指定してください",
 	媒体目录不能为空: "メディアフォルダーは空にできません",
@@ -3092,7 +3141,14 @@ function S(e) {
 	if (n !== void 0) return n;
 	for (let { pattern: n, names: r, text: i } of x) {
 		let a = n.exec(e);
-		if (a) return i.replace(/\{(\w+)\}/g, (e, n) => a[r.indexOf(n) + 1] ?? e);
+		if (a) return i.replace(/\{(\w+)\}/g, (e, n) => {
+			let i = a[r.indexOf(n) + 1];
+			return i === void 0 ? e : f[i] ?? i;
+		});
+	}
+	if (e.includes("、")) {
+		let n = e.split("、"), r = n.map((e) => f[e] ?? e);
+		if (r.some((e, r) => e !== n[r])) return r.join("、");
 	}
 	return e;
 }
@@ -14264,7 +14320,7 @@ var R = (e) => document.querySelector(e), z = (e, n = "") => {
 		let e = s && (s.message || s.detail || s.error);
 		throw Error($t(e, o.status));
 	}
-	return Gt(e, s), s;
+	return Gt(e, s), C(s);
 }, rn = (e) => e?.name === "AbortError", an = async (e, n, r) => {
 	let i = [...e], a = Array(i.length), o = 0, s = async () => {
 		for (; o < i.length;) {
@@ -14456,7 +14512,7 @@ async function Vn(e, n) {
 		i = await r.json();
 	} catch {}
 	if (!r.ok) throw new zn(Bn(i) || T("请求失败（{status}）", { status: r.status }), r.status);
-	return Gt(e, i), i;
+	return Gt(e, i), C(i);
 }
 async function H(e, n, r = "POST", i) {
 	let a = await fetch(e, {
@@ -14472,8 +14528,8 @@ async function H(e, n, r = "POST", i) {
 	try {
 		o = await a.json();
 	} catch {}
-	if (!a.ok) throw new zn(Bn(o) || T("请求失败（{status}）", { status: a.status }), a.status, o);
-	return o;
+	if (!a.ok) throw new zn(C(Bn(o)) || T("请求失败（{status}）", { status: a.status }), a.status, o);
+	return C(o);
 }
 //#endregion
 //#region src/follow-sort.ts
@@ -48253,7 +48309,7 @@ function aSe(e) {
 	}) : n + r;
 }
 function oSe(e) {
-	let n = e.total ? T("{value} 项", { value: sj(e.checked, e.total) }) : e.current_action === "scanning_files" || e.stage === "扫描文件" ? T("已发现 {value} 个文件", { value: (e.scanned || 0).toLocaleString() }) : "";
+	let n = e.total ? T("{value} 项", { value: sj(e.checked, e.total) }) : e.current_action === "scanning_files" || e.stage === "扫描文件" || e.stage === C("扫描文件") ? T("已发现 {value} 个文件", { value: (e.scanned || 0).toLocaleString() }) : "";
 	return aSe(e) + (n ? ` · ${n}` : "");
 }
 function sSe(e) {
@@ -59715,7 +59771,7 @@ var Mz = (e) => Number(e).toLocaleString();
 function HEe(e) {
 	if (e.status === "running") {
 		let n = e.total ? `${Mz(Math.min(e.checked || 0, e.total))} / ${Mz(e.total)}` : T("准备中");
-		return e.stage === "修复" && e.message ? T("修复 {where} · {message}", {
+		return (e.stage === "修复" || e.stage === C("修复")) && e.message ? T("修复 {where} · {message}", {
 			where: n,
 			message: e.message
 		}) : `${C(e.stage) || T("扫描")} ${n}`;

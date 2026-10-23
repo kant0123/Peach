@@ -66,7 +66,17 @@ function localizeServerText(source: string): string {
   if (exact !== undefined) return exact;
   for (const { pattern, names, text } of serverTemplates) {
     const match = pattern.exec(source);
-    if (match) return text.replace(/\{(\w+)\}/g, (whole, name: string) => match[names.indexOf(name) + 1] ?? whole);
+    // 取到的可变部分若本身是已收录的整句（「尚无」之类）也换成译文，路径与名称保持原样。
+    if (match) return text.replace(/\{(\w+)\}/g, (whole, name: string) => {
+      const part = match[names.indexOf(name) + 1];
+      return part === undefined ? whole : (jaServerCatalog[part] ?? part);
+    });
+  }
+  // 「A、B、C」这样用顿号串起来的名称列表：逐项换，至少有一项换成译文才算命中。
+  if (source.includes('、')) {
+    const parts = source.split('、');
+    const translated = parts.map((part) => jaServerCatalog[part] ?? part);
+    if (translated.some((part, index) => part !== parts[index])) return translated.join('、');
   }
   return source;
 }
