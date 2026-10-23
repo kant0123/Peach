@@ -20,8 +20,8 @@ $Frontend = Join-Path $ProjectRoot 'frontend'
 $Build = Join-Path $ProjectRoot 'build'
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $ProjectRoot 'dist\ja\Peach' }
 
-function Git { & git -C $ProjectRoot @args; if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed." } }
-function Npm {
+function Invoke-Git { & git -C $ProjectRoot @args; if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed." } }
+function Invoke-Npm {
     Push-Location $Frontend
     try { & npm @args; if ($LASTEXITCODE -ne 0) { throw "npm $($args -join ' ') failed." } } finally { Pop-Location }
 }
@@ -29,7 +29,7 @@ function Npm {
 if ((& git -C $ProjectRoot status --porcelain)) { throw '工作区不干净。先提交或暂存改动再构建。' }
 
 if ($Sync) {
-    Git fetch $Remote
+    Invoke-Git fetch $Remote
     $Before = (& git -C $ProjectRoot rev-parse HEAD).Trim()
     & git -C $ProjectRoot merge --no-edit "$Remote/$UpstreamBranch"
     if ($LASTEXITCODE -ne 0) {
@@ -39,20 +39,20 @@ if ($Sync) {
             throw "合并冲突，需要手工解决后再运行：`n$($Unmerged -join "`n")`n解决后补译新增中文（ja.ts），提交，再不带 -Sync 运行本脚本。"
         }
         # 打包产物冲突不看内容：取任一侧占位，按合并后的源码重新构建再提交。
-        foreach ($File in $Unmerged) { Git checkout --ours -- $File }
-        Npm ci
-        Npm run build
-        Git add -- web/dist
-        Git commit --no-edit
+        foreach ($File in $Unmerged) { Invoke-Git checkout --ours -- $File }
+        Invoke-Npm ci
+        Invoke-Npm run build
+        Invoke-Git add -- web/dist
+        Invoke-Git commit --no-edit
     }
     $After = (& git -C $ProjectRoot rev-parse HEAD).Trim()
     Write-Host ($(if ($Before -eq $After) { '上游没有新提交。' } else { "已合并上游：$Before -> $After" }))
 }
 
 if (-not $SkipChecks) {
-    Npm ci
-    Npm run typecheck
-    Npm exec -- vitest run test/i18n-catalog.test.ts
+    Invoke-Npm ci
+    Invoke-Npm run typecheck
+    Invoke-Npm exec -- vitest run test/i18n-catalog.test.ts
     & node (Join-Path $Frontend 'scripts\scan-untranslated.mjs')
     if ($LASTEXITCODE -ne 0) { throw '有未包裹的新中文。按提示补 t() 与 ja.ts 译文后再构建。' }
 }
