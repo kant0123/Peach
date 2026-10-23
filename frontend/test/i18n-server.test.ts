@@ -33,3 +33,26 @@ describe('localizeServer', () => {
     expect(localizeServer({ label: '媒体库' })).toEqual({ label: '媒体库' });
   });
 });
+
+describe('localizeStaticShell', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '<button title="设置" aria-label="打开设置"></button><input placeholder="搜索馆藏"><h2 data-page-title>首页</h2>';
+  });
+
+  it('日语界面把页面骨架里写死的属性与标题换成译文', async () => {
+    const { localizeStaticShell } = await load('ja');
+    localizeStaticShell();
+    const button = document.querySelector('button')!;
+    expect(button.getAttribute('title')).toBe('設定');
+    expect(button.getAttribute('aria-label')).toBe('設定を開く');
+    expect(document.querySelector('input')!.getAttribute('placeholder')).toBe('ライブラリを検索');
+    expect(document.querySelector('[data-page-title]')!.textContent).toBe('ホーム');
+  });
+
+  it('简体中文界面保持原样', async () => {
+    const { localizeStaticShell } = await load('zh-CN');
+    localizeStaticShell();
+    expect(document.querySelector('button')!.getAttribute('title')).toBe('设置');
+  });
+});

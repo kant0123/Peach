@@ -25,7 +25,7 @@ import {
   previewOrganize, rememberTemplates, startOrganize, withOrganizeJob,
   type OrganizeCommand, type OrganizeData, type OrganizeJob, type OrganizePlan,
 } from './organize';
-import { t } from '../../i18n';
+import { localizeServer, t } from '../../i18n';
 
 const APPLY_BODY = (name: string) => t('将按这两份模板改动「{name}」上的文件名与目录，目标已存在的行会整行跳过。', { name })
   + t('这一批可以从「回滚上一批」整批退回。');
@@ -102,7 +102,7 @@ export function OrganizeCard(
   const plan = preview.data;
   const changes = Number(plan?.counts?.change || 0);
   const name = LOC[location] || location;
-  const hint = (data?.placeholders ?? []).map((item) => `{${item.key}} ${item.label}`).join(' · ');
+  const hint = (data?.placeholders ?? []).map((item) => `{${item.key}} ${localizeServer(item.label)}`).join(' · ');
 
   const runPreview = () => {
     if (preview.isPending || !location) return;
@@ -191,10 +191,10 @@ export function OrganizeCard(
         {data?.presets?.length
           ? <div className="flex flex-wrap gap-2">
               {data.presets.map((preset) => (
-                <Button key={preset.label} variant="secondary" title={preset.label}
+                <Button key={preset.label} variant="secondary" title={localizeServer(preset.label)}
                   className="max-w-full [&>span]:min-w-0 [&>span]:shrink"
                   onClick={() => { edit({ file: preset.file, dir: preset.dir }); setInvalid(null) }}>
-                  <span className="truncate">{preset.label}</span>
+                  <span className="truncate">{localizeServer(preset.label)}</span>
                 </Button>
               ))}
             </div>

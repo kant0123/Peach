@@ -82,6 +82,20 @@ export function localizeServer<T>(value: T): T {
   return value;
 }
 
+/** `web/index.html` 里直接写死的提示与标题：日语界面下启动时按整句换成译文，属性与标题文字都处理。 */
+export function localizeStaticShell(root: ParentNode = document): void {
+  if (current !== 'ja') return;
+  const known = (text: string) => jaCatalog[text] ?? localizeServerText(text);
+  for (const element of root.querySelectorAll('[title], [aria-label], [placeholder]')) {
+    for (const attribute of ['title', 'aria-label', 'placeholder']) {
+      const value = element.getAttribute(attribute);
+      if (value && /[一-鿿]/.test(value)) element.setAttribute(attribute, known(value));
+    }
+  }
+  const heading = root.querySelector('[data-page-title]');
+  if (heading?.textContent) heading.textContent = known(heading.textContent.trim());
+}
+
 export function t(source: string, params?: Record<string, string | number | undefined | null>): string {
   const text = current === 'ja' ? (jaCatalog[source] ?? source) : source;
   if (!params) return text;

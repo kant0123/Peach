@@ -20,10 +20,11 @@ import { installSearch20, installSearch22 } from './search.js';
 import { installComposition24 } from './composition.js';
 import { installChrome25 } from './chrome.js';
 import { applicationEffects } from './effects';
-import { applyDocumentLanguage, t } from '../i18n';
+import { applyDocumentLanguage, localizeStaticShell, t } from '../i18n';
 
 export function initializeApplication() {
   applyDocumentLanguage();
+  localizeStaticShell();
   const skipLink = document.querySelector('.skiplink');
   if (skipLink) skipLink.textContent = t('跳到正文');
   installLifecycle1();

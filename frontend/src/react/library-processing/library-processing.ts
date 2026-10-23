@@ -105,7 +105,7 @@ export function remainingTime(state: LibraryProcessingData): string {
   const end = Math.max(start, Math.ceil(high / unit * precision) / precision);
   const span = start === end ? `${end}` : `${start}–${end}`;
   const rough = state.eta_initial || state.eta_kind !== 'measured' ? t('（粗估）') : '';
-  return t('预计剩余约 {span} {label}{rough}{value}', { span, label, rough, value: state.eta_scope ? ` · ${state.eta_scope}` : '' });
+  return t('预计剩余约 {span} {label}{rough}{value}', { span, label, rough, value: state.eta_scope ? ` · ${localizeServer(state.eta_scope)}` : '' });
 }
 
 export const fetchLibraryProcessing = (signal?: AbortSignal) =>
