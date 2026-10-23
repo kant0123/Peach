@@ -23,4 +23,4 @@
 3. 缺少媒体工具时从上游最新发布取 FFmpeg、untrunc、cloudflared 的制品，哈希由 `build_windows.ps1` 校验。
 4. 以 `VITE_DEFAULT_LOCALE=ja` 调 `build_windows.ps1 -Installer`，产物为 `dist/ja/Peach-<版本>-ja-windows-x64-setup.exe`，随后还原 `web/dist`。
 
-构建机需要 Node 24、64 位 Python 3.14 与 uv、Inno Setup 6（`winget install JRSoftware.InnoSetup`）。不监视上游：有需要时手动运行。安装器自身的向导文字仍是简体中文。
+构建机需要 Node 24、64 位 Python 3.14 与 uv、Inno Setup 6（`winget install JRSoftware.InnoSetup`）。不监视上游：有需要时手动运行。本分支的安装器（`scripts/installer/peach.iss`）整体改为日语：向导文字用官方 `Japanese.isl`，自定义文案同为日语，不再保留简体中文。上游改动 `peach.iss` 时，合并后要把新增文案译成日语。

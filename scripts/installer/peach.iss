@@ -1,4 +1,4 @@
-; Peach Windows 安装包。由 scripts/build_windows.ps1 -Installer 调用 ISCC 编译：
+﻿; Peach Windows 安装包。由 scripts/build_windows.ps1 -Installer 调用 ISCC 编译：
 ;   ISCC /DAppVersion=<版本> /DSourceDir=<独立目录包 Peach\> /DOutputDir=<输出目录> peach.iss
 ; 装的内容与免安装包逐字节相同，安装器提供目录选择、开始菜单项和「应用和功能」里的登记。
 ; 自更新、开机自启、桌面图标和应用内卸载仍由 Peach 管，约定见 src/peach/desktop_installer.py。
@@ -47,25 +47,25 @@ CloseApplications=yes
 RestartApplications=no
 
 [Languages]
-Name: "chs"; MessagesFile: "ChineseSimplified.isl"
+Name: "ja"; MessagesFile: "compiler:Languages\Japanese.isl"
 
 [CustomMessages]
-chs.StillRunning=Peach 仍在运行，未能自动退出。请从托盘菜单退出 Peach 后重试。
-chs.TaskCheckFailed=无法确认后台任务状态，安装已取消。请等待任务结束后重试。
-chs.MigrationFailed=本地数据库未能更新到新版本，Peach 启动后可能出错。升级前的备份在数据目录的 database 文件夹里，文件名以 ledger.pre-migrate- 开头。
-chs.DataKept=Peach 已卸载。设置、本地数据库和观看记录保留在 %1，需要时可手动删除；媒体文件不受影响。
-chs.DirectoryOverlapsData=程序目录不能与 Peach 数据目录重叠。请选择独立的程序文件夹。
-chs.DirectoryNotDedicated=请选择空文件夹或已有的 Peach 安装目录。卸载 Peach 时会移除整个程序文件夹。
-chs.DirectoryNotWritable=当前用户无法写入程序目录或其上级目录。请选择有写入权限的位置，以便安装和更新 Peach。
-chs.DirectoryLink=程序目录和数据目录不能经过目录链接。请选择普通文件夹。
-chs.DirectoryMove=请先卸载现有 Peach（保留数据），再选择新的安装目录。
-chs.ReportingFailed=版本统计与错误诊断选项未能保存。首次设置或设置页可再次选择；未保存的同意不会启用上传。
-chs.LibrarySharingFailed=馆藏与口味上传选项未能保存。可在设置页重新选择。
+ja.StillRunning=Peach が実行中で、自動的に終了できませんでした。トレイのメニューから Peach を終了してから、もう一度お試しください。
+ja.TaskCheckFailed=バックグラウンドタスクの状態を確認できないため、インストールを中止しました。タスクの終了を待ってから、もう一度お試しください。
+ja.MigrationFailed=ローカルデータベースを新しいバージョンに更新できませんでした。Peach の起動後にエラーが出る可能性があります。更新前のバックアップは、データフォルダー内の database フォルダーにあり、ファイル名は ledger.pre-migrate- で始まります。
+ja.DataKept=Peach をアンインストールしました。設定、ローカルデータベース、視聴履歴は %1 に残っています。不要になったら手動で削除してください。メディアファイルには影響しません。
+ja.DirectoryOverlapsData=プログラムフォルダーを Peach のデータフォルダーと重ねることはできません。独立したフォルダーを選択してください。
+ja.DirectoryNotDedicated=空のフォルダー、または既存の Peach のインストール先を選択してください。Peach をアンインストールすると、プログラムフォルダー全体が削除されます。
+ja.DirectoryNotWritable=現在のユーザーはプログラムフォルダーまたはその親フォルダーに書き込めません。Peach のインストールと更新のため、書き込み権限のある場所を選択してください。
+ja.DirectoryLink=プログラムフォルダーとデータフォルダーに、ディレクトリリンクを経由する場所は使えません。通常のフォルダーを選択してください。
+ja.DirectoryMove=先に既存の Peach をアンインストール(データは保持)してから、新しいインストール先を選択してください。
+ja.ReportingFailed=バージョン統計とエラー診断の選択を保存できませんでした。初回セットアップまたは設定ページで、もう一度選択できます。保存されていない同意ではアップロードは有効になりません。
+ja.LibrarySharingFailed=ライブラリと好みのアップロード設定を保存できませんでした。設定ページで選び直せます。
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "reporting"; Description: "发送版本统计与错误诊断（推荐）：版本、系统信息、故障类型、代码位置与发生次数"; GroupDescription: "数据上传（可在设置页关闭）："
-Name: "librarysharing"; Description: "上传馆藏与各类偏好明细（匿名化处理）"; GroupDescription: "数据上传（可在设置页关闭）："; Flags: unchecked
+Name: "reporting"; Description: "バージョン統計とエラー診断を送信する(推奨): バージョン、システム情報、障害の種類、コードの位置、発生回数"; GroupDescription: "データのアップロード(設定ページでオフにできます):"
+Name: "librarysharing"; Description: "ライブラリと各種の好みの明細をアップロードする(匿名化されます)"; GroupDescription: "データのアップロード(設定ページでオフにできます):"; Flags: unchecked
 
 [InstallDelete]
 ; PyInstaller 的依赖都在 _internal 里；覆盖安装留下上一版多出来的库会被新版误加载。
@@ -86,7 +86,7 @@ Name: "{userdesktop}\Peach"; Filename: "{app}\Peach.exe"; Parameters: "--show"; 
 
 [Run]
 Filename: "{app}\Peach.exe"; Parameters: "--show"; Description: "{cm:LaunchProgram,Peach}"; Flags: nowait postinstall skipifsilent
-Filename: "https://github.com/peach-mitao/peach"; Description: "打开 Peach 仓库，给项目加星"; Flags: shellexec postinstall skipifsilent unchecked
+Filename: "https://github.com/peach-mitao/peach"; Description: "Peach のリポジトリを開いてプロジェクトにスターを付ける"; Flags: shellexec postinstall skipifsilent unchecked
 
 [UninstallDelete]
 ; 自更新整目录换过之后，卸载记录里的文件清单不再完整，按目录整个移除。
@@ -107,16 +107,16 @@ function GetCurrentProcessId(): LongWord;
 procedure InitializeWizard();
 begin
   LibrarySharingPage := CreateOutputMsgMemoPage(wpSelectTasks,
-    '馆藏与口味明细上传', '用于 Peach 用户群体的馆藏结构与偏好研究。',
-    '继续表示同意每周上传以下明细；不参与可返回取消勾选。', '');
+    'ライブラリと好みの明細のアップロード', 'Peach ユーザー全体のライブラリ構成と好みの傾向の研究に使います。',
+    '続行すると、以下の明細を毎週アップロードすることに同意したことになります。参加しない場合は、戻ってチェックを外してください。', '');
   LibrarySharingPage.RichEditViewer.Text :=
-    '作品：去重后的作品编号、评分、喜欢、不喜欢、已看、稍后看、播放次数、观看比例与手动添加的标签。' + #13#10#13#10 +
-    '偏好汇总：出演者、创作者、厂牌、系列、手动标签、年代与时长分组的收藏、喜欢、不喜欢、观看数量和评分分布（有编号作品与无编号条目分开），以及主动收藏的实体名称。' + #13#10#13#10 +
-    '馆藏覆盖：文件数量、有编号作品数量与无编号条目数量。无编号馆藏只参与本机汇总。' + #13#10#13#10 +
-    '版本与周期：Peach 版本、字段版本、UTC 自然周。' + #13#10#13#10 +
-    '不上传账号、设备或安装标识、内部行号、文件名、路径、标题、媒体、网址、搜索词及逐条浏览或观看记录。' + #13#10#13#10 +
-    '完整明细可反映成人内容偏好；接收服务为独立 Sentry 项目，可见连接 IP。' + #13#10#13#10 +
-    '可在设置页查看完整本机预览或关闭。关闭停止后续发送，已发送数据无法通过本机开关撤回。';
+    '作品: 重複を除いた作品番号、評価、好き、嫌い、視聴済み、あとで見る、再生回数、視聴割合、手動で付けたタグ。' + #13#10#13#10 +
+    '好みの集計: 出演者、クリエイター、レーベル、シリーズ、手動タグ、年代・再生時間の区分ごとのお気に入り、好き、嫌い、視聴数と評価の分布(番号のある作品と番号のない項目は別集計)、および自分で登録したエンティティ名。' + #13#10#13#10 +
+    'ライブラリの範囲: ファイル数、番号のある作品数、番号のない項目数。番号のないライブラリはこのパソコン内の集計にのみ使います。' + #13#10#13#10 +
+    'バージョンと期間: Peach のバージョン、項目のバージョン、UTC の暦週。' + #13#10#13#10 +
+    'アカウント、端末やインストールの識別子、内部の行番号、ファイル名、パス、タイトル、メディア、URL、検索語、個々の閲覧・視聴履歴はアップロードしません。' + #13#10#13#10 +
+    '完全な明細にはアダルトコンテンツの好みが反映されます。受信サービスは独立した Sentry プロジェクトで、接続元 IP が見えます。' + #13#10#13#10 +
+    '設定ページでこのパソコン上の完全なプレビューを確認したり、オフにしたりできます。オフにすると以後の送信は止まりますが、送信済みのデータはこのスイッチでは取り消せません。';
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
@@ -195,8 +195,8 @@ begin
   if not ToolsPrepared then
   begin
     if ToolsPage = nil then
-      ToolsPage := CreateOutputMarqueeProgressPage('准备媒体工具', '已有工具会校验后复用，缺少时自动下载。');
-    ToolsPage.SetText('正在检查、下载并校验媒体工具，请稍候。', '下载失败可重试，现有安装会保留。');
+      ToolsPage := CreateOutputMarqueeProgressPage('メディアツールの準備', '既存のツールは検証して再利用し、無い場合は自動でダウンロードします。');
+    ToolsPage.SetText('メディアツールを確認・ダウンロード・検証しています。しばらくお待ちください。', 'ダウンロードに失敗した場合は再試行できます。既存のインストールは保持されます。');
     ToolsPage.Show;
     ToolsPage.Animate;
     try
@@ -209,7 +209,7 @@ begin
     end;
     if not ToolsPrepared then
     begin
-      Result := '媒体工具未能准备完成，请检查网络后重试。';
+      Result := 'メディアツールの準備が完了しませんでした。ネットワークを確認してから、もう一度お試しください。';
       if LoadStringFromFile(ExpandConstant('{tmp}\Peach-preflight\tools-error.txt'), ErrorText) then
         Result := UTF8Decode(ErrorText);
       Exit;
