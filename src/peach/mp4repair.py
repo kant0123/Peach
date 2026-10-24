@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import struct
 import subprocess
 import threading
@@ -20,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .mp4index import _iter_boxes
+from .transcodes import background_process_flags
 
 LOGGER = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ def _display_order(ffprobe: Path, source: Path, decode_times: list[int]) -> list
     )
     try:
         completed = subprocess.run(command, capture_output=True, timeout=PROBE_TIMEOUT_SECONDS,
-                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                                   creationflags=background_process_flags())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RepairUnavailable(f"ffprobe 没跑完：{exc}") from exc
     if completed.returncode:

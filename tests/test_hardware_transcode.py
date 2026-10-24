@@ -145,7 +145,7 @@ class VaapiConsumerTests(unittest.TestCase):
                                         hardware=HardwareTranscoder())
             captured = []
 
-            async def run(command, session, registry):
+            async def run(command, session, registry, **_options):
                 captured.append(command)
                 if len(captured) <= failures:
                     return 1, b"hardware failed"

@@ -16,11 +16,30 @@ from .hardware_transcode import HardwareTranscoder
 from .mp4index import composition_offsets_present
 
 
-BROWSER_NATIVE_SUFFIXES = frozenset({".mp4", ".m4v", ".webm", ".ogv", ".ogg"})
+#: QuickTime 与 MP4 同属 ISO 基础媒体文件格式：同一套 moov 结构、同一套兼容判据。
+MP4_FAMILY_SUFFIXES = frozenset({".mp4", ".m4v", ".mov"})
+BROWSER_NATIVE_SUFFIXES = MP4_FAMILY_SUFFIXES | frozenset({".webm", ".ogv", ".ogg"})
+#: 视频是 H.264 时可以只拷视频流装进 HLS 分片的容器。实测 TS 的时间轴带起始偏移，
+#: 按关键帧起切后视频整段丢失；AVI 的 H.264 没有显示时刻，封装 MPEG-TS 直接报错，两者不在此列。
+REMUX_SUFFIXES = frozenset({".mkv"})
+REMUX_COPY_AUDIO = frozenset({"", "aac", "mp3"})
 DIRECT_MP4_PIXEL_FORMATS = frozenset({"yuv420p", "yuvj420p"})
 TRANSCODE_TIMEOUT_SECONDS = 3600
+#: 整片转码缓存的总量上限，超出从最久没用的删起；整片能重新生成，丢了只是再转一次。
+TRANSCODE_CACHE_BYTES = 2 << 30
 PROBE_TIMEOUT_SECONDS = 20
 logger = logging.getLogger(__name__)
+
+
+def background_process_flags(*, low_priority: bool = True) -> int:
+    """FFmpeg 子进程的创建标志：不弹窗；编码类再让出 CPU 给界面和其它请求（仅 Windows）。
+
+    ffprobe 是起播路上的短查询，低优先级只会在机器忙时把它饿住，调用方传 False。
+    """
+    if os.name != "nt":
+        return 0
+    return subprocess.CREATE_NO_WINDOW | (
+        subprocess.BELOW_NORMAL_PRIORITY_CLASS if low_priority else 0)
 
 
 @dataclass(frozen=True)
@@ -32,6 +51,8 @@ class _MediaProfile:
     duration: float = 0.0
     #: 有 B 帧却没有 ctts：容器声明的显示时刻其实是解码顺序，直接播会掉帧。
     decode_order_timestamps: bool = False
+    #: 容器报的起始时刻（秒）。切片时间轴按它对齐，非零的片源不拷流。
+    start_time: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -48,6 +69,10 @@ class TranscodeCancelled(TranscodeUnavailable):
     pass
 
 
+class TranscodeNotStarted(TranscodeUnavailable):
+    """调用方不允许起新的整片转码，而缓存里也没有现成的。"""
+
+
 class TranscodeService:
     """Create immutable browser-playable MP4 cache entries without touching sources."""
 
@@ -58,7 +83,9 @@ class TranscodeService:
         *,
         max_concurrent: int = 2,
         prefer_hardware: bool | None = None,
+        cache_bytes: int = TRANSCODE_CACHE_BYTES,
     ):
+        self.cache_bytes = cache_bytes
         self.resolver = resolver
         self.cache_root = cache_root
         self.prefer_hardware = prefer_hardware is not False
@@ -80,6 +107,24 @@ class TranscodeService:
             return False
         profile = self._profile_for(source, session, registry)
         return profile is None or not self._browser_compatible(source, profile)
+
+    def remux_audio(self, source: Path, *, session: str = "", registry=None) -> str | None:
+        """H.264 的 MKV 可以只拷视频进 HLS 分片：返回音频处理 `copy` 或 `aac`，不适用返回 None。
+
+        判据只看容器自报的事实：视频 H.264 且像素格式是 yuv420p 一族、时长可知、
+        起始时刻为零。音频已是 aac/mp3 原样拷，其余编码转成 aac。
+        """
+        if source.suffix.lower() not in REMUX_SUFFIXES or self.resolver.ffprobe() is None:
+            return None
+        try:
+            profile = self._profile_for(source, session, registry)
+        except OSError:
+            return None
+        if (profile is None or profile.video_codec != "h264"
+                or profile.pixel_format not in DIRECT_MP4_PIXEL_FORMATS
+                or profile.duration <= 0 or abs(profile.start_time) > 0.05):
+            return None
+        return "copy" if profile.audio_codec in REMUX_COPY_AUDIO else "aac"
 
     def decode_order_timestamps(self, source: Path, *, session: str = "", registry=None) -> bool:
         """是不是只有时间戳错乱的那一类：有 B 帧却没有 ctts，码流本身浏览器解得出来。
@@ -121,6 +166,7 @@ class TranscodeService:
 
     def browser_path(
         self, asset_id: int, source: Path, *, session: str = "", registry=None,
+        allow_transcode: bool = True, stop: threading.Event | None = None,
     ) -> tuple[Path, bool]:
         profile = None
         if not self.needs_transcode(source):
@@ -144,7 +190,10 @@ class TranscodeService:
 
         target = self.cache_root / f"{asset_id}-{stat.st_size}-{stat.st_mtime_ns}.mp4"
         if target.is_file() and target.stat().st_size:
+            self._touch(target)
             return target, True
+        if not allow_transcode:
+            raise TranscodeNotStarted("whole-file transcode not allowed here")
 
         with self._lock_for(asset_id):
             if target.is_file() and target.stat().st_size:
@@ -156,7 +205,7 @@ class TranscodeService:
             completed = False
             try:
                 with self._slots:
-                    self._raise_if_cancelled(session, registry)
+                    self._raise_if_cancelled(session, registry, stop)
                     if profile is None:
                         profile = self._probe(source, session, registry, deadline)
                     for attempt in self._attempts(
@@ -170,6 +219,7 @@ class TranscodeService:
                                 registry=registry,
                                 deadline=deadline,
                                 label=attempt.name,
+                                stop=stop,
                             )
                         except TranscodeCancelled:
                             raise
@@ -181,6 +231,7 @@ class TranscodeService:
                         if (returncode == 0 and temporary.is_file()
                                 and temporary.stat().st_size):
                             temporary.replace(target)
+                            self._trim_cache(target)
                             logger.info("整片转码完成：%s", attempt.name)
                             completed = True
                             break
@@ -198,7 +249,7 @@ class TranscodeService:
 
     @staticmethod
     def _browser_compatible(source: Path, profile: _MediaProfile) -> bool:
-        if source.suffix.lower() in {".mp4", ".m4v"}:
+        if source.suffix.lower() in MP4_FAMILY_SUFFIXES:
             return (profile.video_codec == "h264"
                     and profile.pixel_format in DIRECT_MP4_PIXEL_FORMATS
                     and profile.audio_codec in {"", "aac", "mp3"}
@@ -217,7 +268,7 @@ class TranscodeService:
             return None
         command = (
             str(choice.path), "-v", "error", "-show_entries",
-            "stream=codec_type,codec_name,pix_fmt,has_b_frames:format=duration",
+            "stream=codec_type,codec_name,pix_fmt,has_b_frames:format=duration,start_time",
             "-of", "json", str(source),
         )
         try:
@@ -249,12 +300,17 @@ class TranscodeService:
             duration = float((report.get("format") or {}).get("duration") or 0.0)
         except (TypeError, ValueError):
             duration = 0.0
+        try:
+            start_time = float((report.get("format") or {}).get("start_time") or 0.0)
+        except (TypeError, ValueError):
+            start_time = 1.0
         return _MediaProfile(
             video_codec=codec,
             pixel_format=str(video.get("pix_fmt") or "").lower(),
             audio_codec=str(audio.get("codec_name") or "").lower(),
             duration=max(0.0, duration),
             decode_order_timestamps=self._decode_order_timestamps(source, video),
+            start_time=start_time,
         )
 
     @staticmethod
@@ -280,7 +336,7 @@ class TranscodeService:
         判据放在探测里做一次，结论跟 profile 一起缓存：`moov` 动辄几 MB，每个分片请求
         都读一遍等于把挂载网盘反复拉一遍。
         """
-        if source.suffix.lower() not in {".mp4", ".m4v"}:
+        if source.suffix.lower() not in MP4_FAMILY_SUFFIXES:
             return False
         try:
             reorder_depth = int(video.get("has_b_frames") or 0)
@@ -344,8 +400,9 @@ class TranscodeService:
         deadline: float,
         label: str,
         capture_stdout: bool = False,
+        stop: threading.Event | None = None,
     ) -> tuple[int, bytes, bytes]:
-        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        creationflags = background_process_flags(low_priority=label != "ffprobe")
         process = subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,
@@ -366,7 +423,8 @@ class TranscodeService:
                     stdout, stderr = process.communicate(timeout=0.5)
                     break
                 except subprocess.TimeoutExpired:
-                    if registry is not None and session and registry.is_cancelled(session):
+                    if (registry is not None and session and registry.is_cancelled(session)) or (
+                            stop is not None and stop.is_set()):
                         process.kill()
                         process.communicate()
                         raise TranscodeCancelled(session)
@@ -374,7 +432,7 @@ class TranscodeService:
                         process.kill()
                         process.communicate()
                         raise TranscodeUnavailable(f"{label} timed out")
-            self._raise_if_cancelled(session, registry)
+            self._raise_if_cancelled(session, registry, stop)
             return (
                 process.returncode if process.returncode is not None else -1,
                 stdout or b"",
@@ -385,9 +443,42 @@ class TranscodeService:
                 registry.unregister_process(session, process)
 
     @staticmethod
-    def _raise_if_cancelled(session: str, registry) -> None:
-        if registry is not None and session and registry.is_cancelled(session):
+    def _raise_if_cancelled(session: str, registry, stop: threading.Event | None = None) -> None:
+        if (registry is not None and session and registry.is_cancelled(session)) or (
+                stop is not None and stop.is_set()):
             raise TranscodeCancelled(session)
+
+    @staticmethod
+    def _touch(target: Path) -> None:
+        """命中缓存就续期，淘汰按最后使用时间。"""
+        try:
+            os.utime(target, None)
+        except OSError:
+            pass
+
+    def _trim_cache(self, keep: Path) -> None:
+        """整片缓存总量超过上限时，从最久没用的删起；刚生成的那份不动。"""
+        entries = []
+        for item in self.cache_root.glob("*.mp4"):
+            if item == keep or ".tmp." in item.name:
+                continue
+            try:
+                stat = item.stat()
+            except OSError:
+                continue
+            entries.append((stat.st_mtime, stat.st_size, item))
+        try:
+            total = keep.stat().st_size + sum(size for _, size, _ in entries)
+        except OSError:
+            return
+        for _, size, item in sorted(entries):
+            if total <= self.cache_bytes:
+                return
+            try:
+                item.unlink()
+            except OSError:
+                continue
+            total -= size
 
     @contextmanager
     def _lock_for(self, asset_id: int):
