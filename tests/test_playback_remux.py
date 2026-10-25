@@ -83,7 +83,7 @@ class DecisionTableTests(unittest.TestCase):
             service = self._service(root)
             with mock.patch("peach.transcodes.subprocess.Popen", side_effect=_probe_process(streams, **probe)):
                 return (service.requires_conversion(source, caps=caps),
-                        service.remux_audio(source))
+                        service.remux_audio(source, caps=caps))
 
     def test_table(self):
         cases = (
@@ -144,6 +144,33 @@ class DecisionTableTests(unittest.TestCase):
             with self.subTest(name=name, codec=codec, pix=pix, audio=audio, tag=tag, caps=sorted(caps)):
                 got = self._decide(name, _streams(codec, pix, audio, tag), frozenset(caps))[0]
                 self.assertEqual(got, convert)
+
+    def test_mkv_with_other_codecs_goes_through_fmp4_only_when_the_device_can_decode_them(self):
+        none = frozenset()
+        cases = (
+            # 视频, 像素, 音频, 能力, 拷流处理
+            ("hevc", "yuv420p", "aac", none, None),
+            ("hevc", "yuv420p", "aac", {"hevc"}, "fmp4-copy"),
+            ("hevc", "yuv420p", "mp3", {"hevc"}, "fmp4-copy"),
+            ("hevc", "yuv420p", "ac3", {"hevc"}, "fmp4-aac"),
+            ("hevc", "yuv420p", "ac3", {"hevc", "ac3"}, "fmp4-copy"),
+            ("hevc", "yuv420p", "dts", {"hevc", "ac3", "eac3", "opus", "flac"}, "fmp4-aac"),
+            ("hevc", "yuv420p10le", "aac", {"hevc"}, None),
+            ("hevc", "yuv420p10le", "aac", {"hevc-10"}, "fmp4-copy"),
+            ("av1", "yuv420p", "opus", {"av1", "opus"}, "fmp4-copy"),
+            ("av1", "yuv420p", "vorbis", {"av1"}, "fmp4-aac"),
+            ("vp9", "yuv420p", "aac", {"vp9"}, "fmp4-copy"),
+            ("vp9", "yuv420p", "aac", {"hevc", "av1"}, None),
+            ("h264", "yuv420p10le", "aac", {"h264-10"}, "fmp4-copy"),
+            ("h264", "yuv420p10le", "aac", none, None),
+            ("h264", "yuv420p", "aac", {"hevc"}, "copy"),
+            ("hevc", "yuv422p10le", "aac", {"hevc", "hevc-10"}, None),
+            ("mpeg2video", "yuv420p", "mp2", {"hevc", "av1", "vp9"}, None),
+        )
+        for codec, pix, audio, caps, expected in cases:
+            with self.subTest(codec=codec, pix=pix, audio=audio, caps=sorted(caps)):
+                got = self._decide("a.mkv", _streams(codec, pix, audio, "[0][0][0][0]"), frozenset(caps))[1]
+                self.assertEqual(got, expected)
 
     def test_whole_file_copy_is_used_for_playable_codecs_and_tags_hevc_hvc1(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -475,12 +502,89 @@ class HlsPlanRoutingTests(unittest.TestCase):
             ("aac", plan, plan, REMUX_AAC_AUDIO),
             ("aac", None, [(0.0, 6.0)], True),      # 关键帧表不合格：回到转码
             (None, plan, [(0.0, 6.0)], True),       # 不是 H.264 的 MKV：转码
+            ("fmp4-copy", plan, plan, segments.FMP4_COPY_AUDIO),
+            ("fmp4-aac", plan, plan, segments.FMP4_AAC_AUDIO),
+            ("fmp4-copy", None, [(0.0, 6.0)], True),
         )
         for audio, remux_plan, expected_plan, expected_mode in cases:
             with self.subTest(audio=audio, plan=bool(remux_plan)):
                 state = self._state(audio, remux_plan)
                 _, _, got_plan, mode = _hls_plan(state, 1, "s", True)
                 self.assertEqual((got_plan, mode), (expected_plan, expected_mode))
+
+
+class Fmp4SegmentTests(unittest.TestCase):
+    @staticmethod
+    def _box(kind: bytes, payload: bytes = b"") -> bytes:
+        import struct
+        return struct.pack(">I4s", 8 + len(payload), kind) + payload
+
+    def test_a_segment_is_split_into_init_and_media_and_loses_the_index(self):
+        from peach.fmp4 import Fmp4Error, split_segment
+        raw = (self._box(b"ftyp", b"cmfc") + self._box(b"moov", b"HEAD")
+               + self._box(b"moof", b"one") + self._box(b"mdat", b"AAA")
+               + self._box(b"moof", b"two") + self._box(b"mdat", b"BBB")
+               + self._box(b"mfra", b"index"))
+        init, media = split_segment(raw)
+        self.assertEqual(init, self._box(b"ftyp", b"cmfc") + self._box(b"moov", b"HEAD"))
+        self.assertEqual(media, self._box(b"moof", b"one") + self._box(b"mdat", b"AAA")
+                         + self._box(b"moof", b"two") + self._box(b"mdat", b"BBB"))
+        with self.assertRaises(Fmp4Error):
+            split_segment(self._box(b"ftyp", b"x") + self._box(b"moov", b"y"))
+        with self.assertRaises(Fmp4Error):
+            split_segment(raw[:-3])
+
+    def test_playlist_declares_the_init_segment_for_fmp4_only(self):
+        plan = [(0.0, 8.0), (8.0, 8.0)]
+        ts = segments.build_hls_playlist(plan, lambda i: f"{i}.ts")
+        fmp4 = segments.build_hls_playlist(plan, lambda i: f"{i}.m4s", init_url="init.mp4?s=1")
+        self.assertIn("#EXT-X-VERSION:3", ts)
+        self.assertNotIn("EXT-X-MAP", ts)
+        self.assertIn("#EXT-X-VERSION:7", fmp4)
+        self.assertIn('#EXT-X-MAP:URI="init.mp4?s=1"', fmp4)
+        self.assertIn("0.m4s", fmp4)
+
+    def test_commands_copy_the_video_tag_hevc_hvc1_and_keep_the_source_timeline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service = HlsSegmentService(_Resolver(Path(tmp)), Path(tmp) / "work")
+            for codec, tag in (("hevc", True), ("av1", False)):
+                for mode, audio in ((segments.FMP4_COPY_AUDIO, "copy"), (segments.FMP4_AAC_AUDIO, "aac")):
+                    command = service._attempts(
+                        Path("ffmpeg"), Path("a.mkv"), 8.0, 8.0, False, codec, mode)[0][1](Path("out.mp4"))
+                    self.assertEqual(command[command.index("-c:v") + 1], "copy")
+                    self.assertEqual(command[command.index("-c:a") + 1], audio)
+                    self.assertEqual("-tag:v" in command, tag)
+                    if tag:
+                        self.assertEqual(command[command.index("-tag:v") + 1], "hvc1")
+                    self.assertIn("-copyts", command)
+                    self.assertEqual(command[command.index("-movflags") + 1], "cmaf+frag_discont")
+                    self.assertEqual(command[command.index("-f") + 1], "mp4")
+                    self.assertNotIn("mpegts", command)
+
+    def test_cache_paths_and_init_live_together(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "a.mkv"
+            source.write_bytes(b"x")
+            service = HlsSegmentService(_Resolver(root), root / "work")
+            segment = service.cached_path(source, 1, 3, remux=segments.FMP4_COPY_AUDIO)
+            self.assertEqual(segment.name, "3.m4s")
+            self.assertEqual(service.init_path(source, 1, segments.FMP4_COPY_AUDIO),
+                             segment.with_name("init.mp4"))
+
+    def test_open_gop_keyframes_are_not_segment_boundaries(self):
+        """HEVC 的 CRA 后面紧跟显示时刻更早的前导帧，从这里切开后一片开头缺参考。"""
+        lines = [
+            "0.0,N/A,K__,", "0.16,N/A,___,", "0.08,0.0,___,",           # 关键帧 0.0：后面都不早于它
+            "8.0,7.92,K__,", "7.92,7.96,___,", "7.96,8.0,___,",         # 8.0 之后有 7.92 的前导帧
+            "16.0,15.92,K__,", "16.16,15.96,___,", "16.08,16.0,___,",   # 16.0 干净
+        ]
+
+        class Result:
+            returncode = 0
+            stdout = "\n".join(lines).encode()
+        with mock.patch.object(segments.subprocess, "run", return_value=Result):
+            self.assertEqual(segments._probe_keyframes(Path("ffprobe"), Path("a.mkv")), [0.0, 16.0])
 
 
 class IdleReapTests(unittest.TestCase):

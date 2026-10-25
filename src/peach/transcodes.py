@@ -165,11 +165,16 @@ class TranscodeService:
         profile = self._profile_for(source, session, registry)
         return profile is None or not self._browser_compatible(source, profile, caps)
 
-    def remux_audio(self, source: Path, *, session: str = "", registry=None) -> str | None:
-        """H.264 的 MKV 可以只拷视频进 HLS 分片：返回音频处理 `copy` 或 `aac`，不适用返回 None。
+    def remux_audio(
+        self, source: Path, *, session: str = "", registry=None, caps: frozenset[str] = frozenset(),
+    ) -> str | None:
+        """MKV 可以只拷视频进 HLS 分片：返回封装与音频处理，不适用返回 None。
 
-        判据只看容器自报的事实：视频 H.264 且像素格式是 yuv420p 一族、时长可知、
-        起始时刻为零。音频已是 aac/mp3 原样拷，其余编码转成 aac。
+        - `copy` / `aac`：8bit H.264，装 MPEG-TS；音频已是 aac/mp3 原样拷，其余转 aac。
+        - `fmp4-copy` / `fmp4-aac`：设备申报能解的其它视频（HEVC、AV1、VP9、10bit H.264），
+          装 fMP4（MPEG-TS 里的 HEVC/AV1 浏览器不认）；音频设备能解就原样拷，其余转 aac。
+
+        判据只看容器自报的事实：时长可知、起始时刻为零。
         """
         if source.suffix.lower() not in REMUX_SUFFIXES or self.resolver.ffprobe() is None:
             return None
@@ -177,11 +182,14 @@ class TranscodeService:
             profile = self._profile_for(source, session, registry)
         except OSError:
             return None
-        if (profile is None or profile.video_codec != "h264"
-                or profile.pixel_format not in DIRECT_MP4_PIXEL_FORMATS
-                or profile.duration <= 0 or abs(profile.start_time) > 0.05):
+        if profile is None or profile.duration <= 0 or abs(profile.start_time) > 0.05:
             return None
-        return "copy" if profile.audio_codec in REMUX_COPY_AUDIO else "aac"
+        if profile.video_codec == "h264" and profile.pixel_format in DIRECT_MP4_PIXEL_FORMATS:
+            return "copy" if profile.audio_codec in REMUX_COPY_AUDIO else "aac"
+        # MKV 里的 HEVC 没有 MP4 标签，输出统一写 hvc1，所以标签不参与判据。
+        if video_playable(replace(profile, video_tag="hvc1"), caps):
+            return "fmp4-copy" if audio_playable(profile.audio_codec, caps) else "fmp4-aac"
+        return None
 
     def decode_order_timestamps(
         self, source: Path, *, session: str = "", registry=None, caps: frozenset[str] = frozenset(),

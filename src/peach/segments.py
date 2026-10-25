@@ -14,6 +14,7 @@ from pathlib import Path
 from .ffmpeg import FFmpegResolver
 from .hardware_transcode import HardwareTranscoder
 from .mp4index import keyframe_seconds, segment_plan
+from .fmp4 import Fmp4Error, split_segment
 from .streaming import StreamSessionRegistry
 from .transcodes import background_process_flags
 
@@ -26,7 +27,13 @@ PROBE_TIMEOUT_SECONDS = 20
 #: 拷流分片：视频原样封装，音频按需转 aac。值同时是 `_hls_plan` 第四项与缓存目录的标记。
 REMUX_COPY_AUDIO = "remux-copy"
 REMUX_AAC_AUDIO = "remux-aac"
-REMUX_MODES = frozenset({REMUX_COPY_AUDIO, REMUX_AAC_AUDIO})
+#: 视频不是 H.264（或是 10bit）时装 fMP4：MPEG-TS 里的 HEVC/AV1 浏览器不认。
+FMP4_COPY_AUDIO = "fmp4-copy"
+FMP4_AAC_AUDIO = "fmp4-aac"
+FMP4_MODES = frozenset({FMP4_COPY_AUDIO, FMP4_AAC_AUDIO})
+REMUX_MODES = frozenset({REMUX_COPY_AUDIO, REMUX_AAC_AUDIO}) | FMP4_MODES
+#: fMP4 的统一时间偏移：全部分片同向平移，起点不贴着 0，片头的重排延迟不会落到负时间。
+FMP4_TS_OFFSET = 1.0
 #: 关键帧表要把整个文件解复用一遍；超过这个体积或时限就放弃拷流，回到重编码。
 REMUX_SCAN_MAX_BYTES = 3 << 30
 REMUX_SCAN_TIMEOUT_SECONDS = 20
@@ -37,6 +44,8 @@ REMUX_FIRST_KEYFRAME_SECONDS = 1.0
 #: 输入 `-ss` 要比关键帧时刻略大：恰好落在关键帧上的目标时刻会 seek 到上一个关键帧，
 #: 每段多带一整个 GOP。依次尝试，产出的分片起点对不上计划就换下一个。
 REMUX_SEEK_MARGINS = (0.25, 0.12, 0.5, 0.0)
+#: 关键帧后往后看这么多个包，查有没有显示时刻更早的前导帧。
+REMUX_LEADING_LOOKAHEAD = 16
 #: 分片首个视频包的显示时刻允许偏离计划起点的范围（秒）。B 帧重排会让它略晚于起点。
 REMUX_START_TOLERANCE = (-0.05, 0.3)
 #: 全部拷流分片统一晚 0.1 秒：开头有 B 帧的片源第一个 dts 为负，muxer 会只把第一片整体推后，
@@ -72,21 +81,34 @@ def _probe_keyframes(ffprobe: Path, source: Path) -> list[float] | None:
         return None
     if result.returncode:
         return None
-    times: list[float] = []
+    moments: list[float | None] = []
+    keyframes: list[int] = []
     for line in result.stdout.decode("utf-8", "replace").splitlines():
         fields = line.strip().rstrip(",").split(",")
-        if len(fields) < 3 or "K" not in fields[2]:
+        if len(fields) < 3:
             continue
+        moment = None
         for raw in fields[:2]:
             try:
-                times.append(float(raw))
+                moment = float(raw)
                 break
             except ValueError:
                 continue
-    return sorted(set(times)) or None
+        if "K" in fields[2] and moment is not None:
+            keyframes.append(len(moments))
+        moments.append(moment)
+    # 开放 GOP：关键帧之后解码顺序紧跟着显示时刻更早的前导帧（HEVC 的 CRA + RASL）。
+    # 从这里切开，后一片开头的前导帧缺参考，被解码器丢掉或时间戳错乱，所以不当作分片边界。
+    safe = []
+    for index in keyframes:
+        here = moments[index]
+        if all(later is None or later >= here for later in moments[index + 1:index + 1 + REMUX_LEADING_LOOKAHEAD]):
+            safe.append(here)
+    return sorted(set(safe)) or None
 
 
-def _remux_aligned(ffprobe: Path, path: Path, start: float, duration: float) -> bool:
+def _remux_aligned(ffprobe: Path, path: Path, start: float, duration: float,
+                   offset: float = REMUX_TS_OFFSET) -> bool:
     """拷流分片的真实内容对得上计划吗：第一个视频包在起点上，音频不早于起点太多。
 
     `-ss` 落在哪个关键帧由容器索引决定，ffmpeg 退出码 0 也可能多带或少带一个 GOP；
@@ -116,7 +138,7 @@ def _remux_aligned(ffprobe: Path, path: Path, start: float, duration: float) -> 
     if "0" not in first:
         return False
     low, high = REMUX_START_TOLERANCE
-    start += REMUX_TS_OFFSET
+    start += offset
     if not start + low <= first["0"] <= start + high:
         return False
     if last["0"] > start + duration + 1.0:
@@ -139,7 +161,7 @@ class SegmentCancelled(RuntimeError):
     pass
 
 
-def build_hls_playlist(plan: list[tuple[float, float]], segment_url) -> str:
+def build_hls_playlist(plan: list[tuple[float, float]], segment_url, init_url: str | None = None) -> str:
     """按真实分片计划生成 VOD 播放列表。
 
     时长必须写实际值。按 6 秒等分声明的话，`-c copy` 只能切在关键帧上，
@@ -148,11 +170,14 @@ def build_hls_playlist(plan: list[tuple[float, float]], segment_url) -> str:
     target = max(1, round(max(length for _, length in plan)))
     lines = [
         "#EXTM3U",
-        "#EXT-X-VERSION:3",
+        # fMP4 分片要 EXT-X-MAP，协议版本至少 6；MPEG-TS 保持 3。
+        f"#EXT-X-VERSION:{7 if init_url else 3}",
         f"#EXT-X-TARGETDURATION:{target}",
         "#EXT-X-PLAYLIST-TYPE:VOD",
         "#EXT-X-MEDIA-SEQUENCE:0",
     ]
+    if init_url:
+        lines.extend(("#EXT-X-INDEPENDENT-SEGMENTS", f'#EXT-X-MAP:URI="{init_url}"'))
     for index, (_, length) in enumerate(plan):
         lines.extend((f"#EXTINF:{length:.3f},", str(segment_url(index))))
     lines.extend(("#EXT-X-ENDLIST", ""))
@@ -267,7 +292,12 @@ class HlsSegmentService:
         # 版本号跟着转码命令走：命令一变，磁盘上按另一套命令转出来的片段就得失效，
         # 否则换了解码器，播放器拿到的仍是缓存里那些绿帧。
         flavor = '-h264-v2' if transcode else (f'-{remux}-v1' if remux else '')
-        return self.work_root / str(asset_id) / f"{size}-{mtime}-{self.segment_seconds}{flavor}" / f"{index}.ts"
+        suffix = "m4s" if remux in FMP4_MODES else "ts"
+        return self.work_root / str(asset_id) / f"{size}-{mtime}-{self.segment_seconds}{flavor}" / f"{index}.{suffix}"
+
+    def init_path(self, source: Path, asset_id: int, remux: str) -> Path:
+        """fMP4 的初始化段，与同一模式的媒体段放在一个目录里。"""
+        return self.cached_path(source, asset_id, 0, remux=remux).with_name("init.mp4")
 
     def conversion_plan(self, duration: float) -> list[tuple[float, float]]:
         """编码片段各自以关键帧开始，覆盖完整的播放时间轴。"""
@@ -275,7 +305,8 @@ class HlsSegmentService:
                 for start in range(0, math.ceil(duration), self.segment_seconds)]
 
     def _evict(self) -> None:
-        files = [item for item in self.work_root.rglob("*.ts") if item.is_file()]
+        files = [item for pattern in ("*.ts", "*.m4s") for item in self.work_root.rglob(pattern)
+                 if item.is_file()]
         total = 0
         stats = []
         for item in files:
@@ -338,23 +369,35 @@ class HlsSegmentService:
         if registry.is_cancelled(session):
             raise SegmentCancelled(session)
         target.parent.mkdir(parents=True, exist_ok=True)
-        codec = await self.video_codec(source) if transcode and self.hardware.enabled else ""
+        codec = await self.video_codec(source) if (
+            (transcode and self.hardware.enabled) or remux in FMP4_MODES) else ""
         detail = ""
         async with self._gate():
             attempts = await asyncio.to_thread(
                 self._attempts, choice.path, source, start, duration, transcode, codec, remux,
             )
             for name, build in attempts:
-                temporary = target.with_name(f"{uuid.uuid4().hex}.tmp.ts")
+                temporary = target.with_name(
+                    f"{uuid.uuid4().hex}.tmp.{'mp4' if remux in FMP4_MODES else 'ts'}")
                 try:
                     returncode, stderr = await self._run(
                         build(temporary), session, registry, low_priority=transcode)
                     if returncode == 0 and temporary.is_file() and temporary.stat().st_size:
                         if remux and not await asyncio.to_thread(
-                                _remux_aligned, self._probe_binary(), temporary, start, duration):
+                                _remux_aligned, self._probe_binary(), temporary, start, duration,
+                                FMP4_TS_OFFSET if remux in FMP4_MODES else REMUX_TS_OFFSET):
                             detail = f"{name}: 分片起点与关键帧计划对不上"
                             continue
-                        temporary.replace(target)
+                        if remux in FMP4_MODES:
+                            try:
+                                await asyncio.to_thread(
+                                    self._finish_fmp4, temporary, target,
+                                    target.with_name("init.mp4"))
+                            except (Fmp4Error, OSError) as exc:
+                                detail = f"{name}: fMP4 分片整理失败：{exc}"
+                                continue
+                        else:
+                            temporary.replace(target)
                         logger.info("HLS 分片完成：%s", name)
                         self._evict()
                         return target
@@ -374,6 +417,21 @@ class HlsSegmentService:
                 finally:
                     temporary.unlink(missing_ok=True)
         raise SegmentUnavailable(detail)
+
+    @staticmethod
+    def _finish_fmp4(raw: Path, target: Path, init: Path) -> None:
+        """把 FFmpeg 的分片 MP4 拆成初始化段与媒体段后落盘。"""
+        head, media = split_segment(raw.read_bytes())
+        if not init.is_file():
+            pending = init.with_name(f"{uuid.uuid4().hex}.tmp.init")
+            pending.write_bytes(head)
+            pending.replace(init)
+        pending = target.with_name(f"{uuid.uuid4().hex}.tmp.m4s")
+        try:
+            pending.write_bytes(media)
+            pending.replace(target)
+        finally:
+            pending.unlink(missing_ok=True)
 
     def _probe_binary(self) -> Path:
         choice = self.resolver.ffprobe()
@@ -396,6 +454,16 @@ class HlsSegmentService:
         prefix = [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
         mapping = ["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn"]
         mux = ["-muxdelay", "0", "-muxpreload", "0", "-f", "mpegts"]
+        if remux in FMP4_MODES:
+            audio = ["-c:a", "copy"] if remux == FMP4_COPY_AUDIO else ["-c:a", "aac", "-b:a", "160k"]
+            # WebKit 只认 hvc1，MKV 里的 HEVC 没有 MP4 标签，统一写 hvc1。
+            tag = ["-tag:v", "hvc1"] if codec == "hevc" else []
+            return [(f"fmp4+{margin:g}", lambda out, margin=margin: prefix + ["-noaccurate_seek",
+                     "-ss", f"{start + margin:.3f}", "-i", str(source), "-to", f"{start + duration:.3f}"]
+                     + mapping + ["-c:v", "copy"] + tag + audio
+                     + ["-copyts", "-output_ts_offset", f"{FMP4_TS_OFFSET}", "-f", "mp4",
+                        "-movflags", "cmaf+frag_discont", str(out)])
+                    for margin in REMUX_SEEK_MARGINS]
         if remux:
             # 视频原样封装；音频不是 aac/mp3 才转 aac。`-noaccurate_seek` 让转码的音频也从
             # 落点起算，不然按 `-ss` 精确裁掉的那一小段会在每个分片开头留下静音缺口。
