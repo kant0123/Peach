@@ -50975,6 +50975,10 @@ function DCe({ item: e, variant: n, layout: r, selected: i, selectMode: a, seekS
 			n.preventDefault(), c.toggleSelection(e.id, n.shiftKey);
 			return;
 		}
+		if (r.closest("[data-media-link]")) {
+			n.preventDefault(), l(e, i);
+			return;
+		}
 		if (r.closest("[data-open]")) {
 			l(e, i);
 			return;
@@ -51003,6 +51007,13 @@ function DCe({ item: e, variant: n, layout: r, selected: i, selectMode: a, seekS
 				"data-media-nopic": "",
 				children: T("无预览")
 			}),
+			!a && e.disposal !== "trash" ? /* @__PURE__ */ (0, L.jsx)("a", {
+				"data-media-link": "",
+				href: `/assets/${e.id}`,
+				tabIndex: -1,
+				"aria-hidden": "true",
+				draggable: !1
+			}) : null,
 			/* @__PURE__ */ (0, L.jsx)("div", {
 				"data-media-badge": "",
 				dangerouslySetInnerHTML: { __html: s.badgeHtml(e.location || "", e.cost || "") }
