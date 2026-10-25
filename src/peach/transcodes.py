@@ -256,9 +256,7 @@ class TranscodeService:
         except OSError as exc:
             raise TranscodeUnavailable("source unavailable") from exc
 
-        # 能力不同，同一个源可能走拷流或重编码，产物不能互相顶替。
-        flavor = f"-{hashlib.sha1(','.join(sorted(caps)).encode()).hexdigest()[:6]}" if caps else ""
-        target = self.cache_root / f"{asset_id}-{stat.st_size}-{stat.st_mtime_ns}{flavor}.mp4"
+        target = self._cache_target(asset_id, stat, caps)
         if target.is_file() and target.stat().st_size:
             self._touch(target)
             return target, True
@@ -524,6 +522,11 @@ class TranscodeService:
         if (registry is not None and session and registry.is_cancelled(session)) or (
                 stop is not None and stop.is_set()):
             raise TranscodeCancelled(session)
+
+    def _cache_target(self, asset_id: int, stat, caps: frozenset[str]) -> Path:
+        """整片转码的缓存文件。能力不同，同一个源可能走拷流或重编码，产物不能互相顶替。"""
+        flavor = f"-{hashlib.sha1(','.join(sorted(caps)).encode()).hexdigest()[:6]}" if caps else ""
+        return self.cache_root / f"{asset_id}-{stat.st_size}-{stat.st_mtime_ns}{flavor}.mp4"
 
     @staticmethod
     def _touch(target: Path) -> None:
