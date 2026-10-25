@@ -31,6 +31,26 @@ PROBE_TIMEOUT_SECONDS = 20
 logger = logging.getLogger(__name__)
 
 
+#: 端能力串里认的词。视频：`h264-10` 等是 10bit 或高规格的变体（8bit 的 H.264 人人能解，不用申报）；
+#: `hev1` 表示放行 `hev1` 标签的 HEVC（WebKit 只认 `hvc1`）；其余是音频。
+CAPS_TOKENS = frozenset({
+    "h264-10", "hevc", "hevc-10", "hev1", "av1", "av1-10", "vp9", "vp9-10",
+    "ac3", "eac3", "opus", "flac",
+})
+
+
+def parse_caps(raw: str | None) -> frozenset[str]:
+    """`/api/stream-plan` 的 `caps` 查询串 → 能力集合；未知词丢弃，过长整串作废（按没有能力处理）。"""
+    if not raw or len(raw) > 200:
+        return frozenset()
+    return frozenset(item for item in (part.strip().lower() for part in raw.split(",")) if item in CAPS_TOKENS)
+
+
+def caps_query(caps: frozenset[str]) -> str:
+    """能力集合 → 追加在地址后的 `&caps=...`；没有能力时是空串，地址保持原样。"""
+    return f"&caps={','.join(sorted(caps))}" if caps else ""
+
+
 def background_process_flags(*, low_priority: bool = True) -> int:
     """FFmpeg 子进程的创建标志：不弹窗；编码类再让出 CPU 给界面和其它请求（仅 Windows）。
 

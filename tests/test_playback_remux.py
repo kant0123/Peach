@@ -54,6 +54,17 @@ def _streams(codec, pix="yuv420p", audio="aac"):
     return items
 
 
+class CapabilityParsingTests(unittest.TestCase):
+    def test_unknown_tokens_and_oversized_values_are_dropped(self):
+        from peach.transcodes import caps_query, parse_caps
+        self.assertEqual(parse_caps("hevc, AV1 ,bogus,hevc-10"), frozenset({"hevc", "av1", "hevc-10"}))
+        self.assertEqual(parse_caps(""), frozenset())
+        self.assertEqual(parse_caps(None), frozenset())
+        self.assertEqual(parse_caps("hevc," * 100), frozenset())
+        self.assertEqual(caps_query(frozenset()), "")
+        self.assertEqual(caps_query(frozenset({"hevc", "av1"})), "&caps=av1,hevc")
+
+
 class DecisionTableTests(unittest.TestCase):
     def _service(self, root: Path):
         return TranscodeService(_Resolver(root), root / "cache", prefer_hardware=False)

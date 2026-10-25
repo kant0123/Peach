@@ -58,7 +58,9 @@ from .segments import (
     build_hls_playlist, segment_options,
 )
 from .streaming import BufferedFileResponse, CancellableFileResponse, SplicedMp4Response
-from .transcodes import TranscodeCancelled, TranscodeNotStarted, TranscodeUnavailable
+from .transcodes import (
+    TranscodeCancelled, TranscodeNotStarted, TranscodeUnavailable, caps_query, parse_caps,
+)
 
 router = APIRouter()
 
@@ -314,8 +316,10 @@ def _stream_response(request: Request, id: int, session: str, stop: threading.Ev
 
 
 @router.get("/api/stream-plan")
-def stream_plan(request: Request, id: int, session: str = "", mode: str = "", args: dict[str, str] = Depends(require_auth)):
+def stream_plan(request: Request, id: int, session: str = "", mode: str = "", caps: str = "", args: dict[str, str] = Depends(require_auth)):
     state = request.app.state
+    capabilities = parse_caps(caps)
+    suffix = caps_query(capabilities)
     if session and len(session) > 128:
         return JSONResponse({"error": "invalid session"}, status_code=400)
     if session and state.stream_sessions.is_cancelled(session):
@@ -348,12 +352,13 @@ def stream_plan(request: Request, id: int, session: str = "", mode: str = "", ar
             "duration": round(sum(length for _, length in resolved[2]), 3),
             "segment_seconds": plan.segment_seconds,
             "segments": len(resolved[2]),
-            "src": f"/stream/hls/{id}/index.m3u8?session={quote(session, safe='')}",
+            "src": f"/stream/hls/{id}/index.m3u8?session={quote(session, safe='')}{suffix}",
             "reason": plan.reason,
         }
     source = f"/stream?id={id}"
     if session:
         source += f"&session={quote(session, safe='')}"
+    source += suffix
     return {
         "id": id,
         "protocol": "range",
@@ -379,7 +384,7 @@ def strm_resource(request: Request, id: int, key: str, session: str = '',
 
 
 @router.get("/stream/hls/{id}/index.m3u8")
-def hls_playlist(request: Request, id: int, session: str = "", args: dict[str, str] = Depends(require_auth)):
+def hls_playlist(request: Request, id: int, session: str = "", caps: str = "", args: dict[str, str] = Depends(require_auth)):
     state = request.app.state
     # 分片必须带 session 才能被取消，播放列表这层就要求它；
     # 否则会生成一份每个分片都必然 400 的目录。
@@ -394,7 +399,7 @@ def hls_playlist(request: Request, id: int, session: str = "", args: dict[str, s
         return PlainTextResponse("hls unavailable", status_code=404)
     if resolved is None:
         return PlainTextResponse("hls unavailable", status_code=404)
-    query = f"?session={quote(session, safe='')}"
+    query = f"?session={quote(session, safe='')}{caps_query(parse_caps(caps))}"
     playlist = build_hls_playlist(
         resolved[2], lambda index: f"/stream/hls/{id}/{index}.ts{query}",
     )
