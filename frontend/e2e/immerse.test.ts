@@ -223,4 +223,30 @@ describe('沉浸模式', () => {
       await opened.close();
     }
   });
+
+  it('局域网 http 打开（非安全上下文，没有 crypto.randomUUID）：竖屏与横屏都照常出画、加载提示收起', async () => {
+    for (const orientation of ['tall', 'wide'] as const) {
+      const opened = await visit(browser, '/', DESKTOP, (page) => page.addInitScript(() => {
+        // 非安全上下文里 `crypto.randomUUID` 是 undefined，其余接口照旧。
+        Reflect.deleteProperty(Crypto.prototype, 'randomUUID');
+      }));
+      const { page } = opened;
+      try {
+        assert.equal(await page.evaluate(() => typeof crypto.randomUUID), 'undefined');
+        const clips = await pickClips(page);
+        const clip = clips[orientation];
+        await pinQueue(page, [clip]);
+        await muteVideos(page);
+        await openImmerse(page, clip.id);
+        const shown = await page.evaluate((selector) => {
+          const video = document.querySelector<HTMLVideoElement>(selector)!;
+          return { wide: video.videoWidth > video.videoHeight, loaded: document.querySelector<HTMLElement>('[data-immerse-loader]')!.hidden };
+        }, currentVideo);
+        assert.deepEqual(shown, { wide: orientation === 'wide', loaded: true });
+        assert.deepEqual(opened.problems, [], JSON.stringify(opened.problems));
+      } finally {
+        await opened.close();
+      }
+    }
+  });
 });

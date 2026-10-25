@@ -10,6 +10,7 @@ import { LoadingDots } from '../components/loading-dots';
 import { Disclosure, ErrorText, ExternalLink, Footer, Help, Section, Stack } from './section';
 import { busyProps, useAction } from './use-action';
 import { t } from '../../i18n';
+import { randomId } from '../../random-id';
 
 const URL = '/api/configuration/indexers';
 interface Indexer {
@@ -67,7 +68,7 @@ function IndexerForm({ initial, receipt }: { initial: State; receipt(message: st
       </Stack>
       <Footer>
         <Button variant="secondary" type="button" disabled={Boolean(action.busy) || rows.length >= initial.max_indexers}
-          onClick={() => setRows([...rows, { key: crypto.randomUUID(), name: '', url: '', enabled: true, api_key_set: false }])}>
+          onClick={() => setRows([...rows, { key: randomId(), name: '', url: '', enabled: true, api_key_set: false }])}>
           {t('添加索引器')}
         </Button>
         <Button type="submit" {...busyProps(action.busy === 'save')}>{t('保存配置')}</Button>

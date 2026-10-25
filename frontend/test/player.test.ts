@@ -153,6 +153,21 @@ describe('沉浸模式的每一格', () => {
     expect(cancels.map((call) => call.url)).toEqual(['/api/stream-cancel?session=imm-1']);
   });
 
+  it('播放器挂载抛错（例如非安全上下文）：退回原生 video 直读，仍回调 onLoaded，加载提示不会停住', async () => {
+    stubFetch((url) => (url.startsWith('/api/stream-plan')
+      ? { protocol: 'hls', src: '/stream/hls/8/index.m3u8' } : { cancelled: 1 }));
+    const factory = vi.fn(() => { throw new TypeError('crypto.randomUUID is not a function') });
+    vi.spyOn(videojsLoader, 'ensureVideojs').mockResolvedValue(factory as unknown as Awaited<ReturnType<typeof videojsLoader.ensureVideojs>>);
+    const video = document.createElement('video');
+    const onLoaded = vi.fn();
+    const dispose = mountPlayer(video, { kind: 'immerse', item: { id: 8 }, session: 'imm-3', onLoaded });
+    await flush(); await flush();
+    expect(factory).toHaveBeenCalledOnce();
+    expect(video.getAttribute('src')).toBe('/stream?id=8&session=imm-3');
+    expect(onLoaded).toHaveBeenCalledOnce();
+    dispose();
+  });
+
   it('片源还没解析出来就拆掉：不再挂播放器，也不回调', async () => {
     stubFetch(() => ({ protocol: 'direct', src: '/stream?id=9' }));
     const { factory } = fakeVideojs();
