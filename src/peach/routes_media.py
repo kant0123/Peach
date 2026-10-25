@@ -139,7 +139,13 @@ def _repaired_header(state, asset_id: int, source: Path):
     return None if store is None else store.lookup(asset_id, source)
 
 
-def _needs_conversion(state, asset_id: int, source: Path, session: str) -> bool:
+def _caps_kw(caps: frozenset[str]) -> dict:
+    """没有能力时不传 `caps`，调用方的老签名与替身照常工作。"""
+    return {"caps": caps} if caps else {}
+
+
+def _needs_conversion(state, asset_id: int, source: Path, session: str,
+                      caps: frozenset[str] = frozenset()) -> bool:
     """起播时要不要转码。只有 `/api/stream-plan` 问这一句。
 
     缺 ctts 的片子只是时间戳错乱，重建一份头就能直接按 Range 播，不必重编码。头还没
@@ -149,11 +155,11 @@ def _needs_conversion(state, asset_id: int, source: Path, session: str) -> bool:
     会让固定 6 秒的计划换成按关键帧切的，剩下的分片索引全对不上。
     """
     if not state.transcode_service.requires_conversion(
-            source, session=session, registry=state.stream_sessions):
+            source, session=session, registry=state.stream_sessions, **_caps_kw(caps)):
         return False
     store = getattr(state, "header_repairs", None)
     if store is None or not state.transcode_service.decode_order_timestamps(
-            source, session=session, registry=state.stream_sessions):
+            source, session=session, registry=state.stream_sessions, **_caps_kw(caps)):
         return True
     if store.lookup(asset_id, source) is not None:
         return False
@@ -161,7 +167,8 @@ def _needs_conversion(state, asset_id: int, source: Path, session: str) -> bool:
     return True
 
 
-def _hls_plan(state, asset_id: int, session: str = "", conversion: bool | None = None):
+def _hls_plan(state, asset_id: int, session: str = "", conversion: bool | None = None,
+              caps: frozenset[str] = frozenset()):
     """解析 HLS 的片源路径与分片计划；任何一步不成立就返回 None 走 Range。
 
     要重编码的片源按固定 6 秒切，时长先看账本，账本没记或记成负数就用 ffprobe 报的；
@@ -179,7 +186,7 @@ def _hls_plan(state, asset_id: int, session: str = "", conversion: bool | None =
     source = state.media_engine.filesystem.file_for(asset, thumbnail=False)
     duration = asset.duration if asset.duration and asset.duration > 0 else 0.0
     if conversion if conversion is not None else state.transcode_service.requires_conversion(
-            source, session=session, registry=state.stream_sessions):
+            source, session=session, registry=state.stream_sessions, **_caps_kw(caps)):
         duration = duration or state.transcode_service.media_duration(
             source, session=session, registry=state.stream_sessions)
         if duration > 0:
@@ -252,14 +259,15 @@ def external_playlist(request: Request, id: int, ticket: str, origin: str = ''):
 
 
 @router.api_route("/stream", methods=["GET", "HEAD"])
-async def stream(request: Request, id: int, session: str = "", args: dict[str, str] = Depends(require_auth)):
+async def stream(request: Request, id: int, session: str = "", caps: str = "", args: dict[str, str] = Depends(require_auth)):
     """直读或整片转码后直读。
 
     整片转码要几分钟，期间这个请求只是在等；浏览器关掉播放页、换掉 `<video>` 的片源
     都不会通知服务端，所以这里自己盯连接，断开就让转码的 FFmpeg 停下并丢掉半成品。
     """
     stop = threading.Event()
-    work = asyncio.ensure_future(run_in_threadpool(_stream_response, request, id, session, stop))
+    work = asyncio.ensure_future(run_in_threadpool(
+        _stream_response, request, id, session, stop, parse_caps(caps)))
     try:
         while True:
             done, _ = await asyncio.wait({work}, timeout=0.5)
@@ -273,7 +281,8 @@ async def stream(request: Request, id: int, session: str = "", args: dict[str, s
             await asyncio.gather(work, return_exceptions=True)
 
 
-def _stream_response(request: Request, id: int, session: str, stop: threading.Event):
+def _stream_response(request: Request, id: int, session: str, stop: threading.Event,
+                     caps: frozenset[str] = frozenset()):
     state = request.app.state
     asset = state.media_engine.asset(id)
     path = state.media_engine.filesystem.file_for(asset, thumbnail=False)
@@ -292,6 +301,7 @@ def _stream_response(request: Request, id: int, session: str, stop: threading.Ev
         path, transcoded = state.transcode_service.browser_path(
             id, path, session=session, registry=state.stream_sessions,
             allow_transcode=bool(session) and request.method != "HEAD", stop=stop,
+            **_caps_kw(caps),
         )
     except TranscodeCancelled:
         return Response(status_code=410, headers={"Cache-Control": "no-store"})
@@ -341,8 +351,8 @@ def stream_plan(request: Request, id: int, session: str = "", mode: str = "", ca
                 'src': f'/stream?id={id}&session={quote(session, safe="")}', 'reason': 'strm-pointer'}
     if source_path.suffix.lower() in strm.DISC_SUFFIXES:
         return JSONResponse({'error': 'ISO 原盘请使用作品详情中的外部播放器打开'}, status_code=415)
-    conversion = _needs_conversion(state, id, source_path, session)
-    resolved = (_hls_plan(state, id, session, conversion)
+    conversion = _needs_conversion(state, id, source_path, session, capabilities)
+    resolved = (_hls_plan(state, id, session, conversion, capabilities)
                 if conversion or plan.protocol == "hls" else None)
     if resolved and session:
         return {

@@ -47,11 +47,16 @@ def _probe_process(streams, duration="180.0", start_time="0.000000"):
     return Process
 
 
-def _streams(codec, pix="yuv420p", audio="aac"):
-    items = [{"codec_type": "video", "codec_name": codec, "pix_fmt": pix}]
+def _streams(codec, pix="yuv420p", audio="aac", tag=""):
+    items = [{"codec_type": "video", "codec_name": codec, "pix_fmt": pix, "codec_tag_string": tag}]
     if audio:
         items.append({"codec_type": "audio", "codec_name": audio})
     return items
+
+
+def segments_profile(video, pix, audio, tag=""):
+    from peach.transcodes import _MediaProfile
+    return _MediaProfile(video_codec=video, pixel_format=pix, audio_codec=audio, duration=60.0, video_tag=tag)
 
 
 class CapabilityParsingTests(unittest.TestCase):
@@ -69,7 +74,7 @@ class DecisionTableTests(unittest.TestCase):
     def _service(self, root: Path):
         return TranscodeService(_Resolver(root), root / "cache", prefer_hardware=False)
 
-    def _decide(self, name, streams, **probe):
+    def _decide(self, name, streams, caps=frozenset(), **probe):
         """返回 (需要转码吗, 拷流音频处理)。"""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
@@ -77,7 +82,8 @@ class DecisionTableTests(unittest.TestCase):
             source.write_bytes(b"x")
             service = self._service(root)
             with mock.patch("peach.transcodes.subprocess.Popen", side_effect=_probe_process(streams, **probe)):
-                return service.requires_conversion(source), service.remux_audio(source)
+                return (service.requires_conversion(source, caps=caps),
+                        service.remux_audio(source))
 
     def test_table(self):
         cases = (
@@ -103,6 +109,84 @@ class DecisionTableTests(unittest.TestCase):
         for name, codec, pix, audio, convert, remux in cases:
             with self.subTest(name=name, codec=codec, pix=pix, audio=audio):
                 self.assertEqual(self._decide(name, _streams(codec, pix, audio)), (convert, remux))
+
+    def test_capabilities_decide_which_codecs_are_sent_straight(self):
+        none = frozenset()
+        cases = (
+            # 名字, 视频, 像素, 音频, 标签, 能力, 需要转码
+            ("a.mp4", "hevc", "yuv420p", "aac", "hvc1", none, True),
+            ("a.mp4", "hevc", "yuv420p", "aac", "hvc1", {"hevc"}, False),
+            ("a.mov", "hevc", "yuv420p", "aac", "hvc1", {"hevc"}, False),
+            ("a.mp4", "hevc", "yuv420p", "aac", "hev1", {"hevc"}, True),
+            ("a.mp4", "hevc", "yuv420p", "aac", "hev1", {"hevc", "hev1"}, False),
+            ("a.mp4", "hevc", "yuv420p10le", "aac", "hvc1", {"hevc"}, True),
+            ("a.mp4", "hevc", "yuv420p10le", "aac", "hvc1", {"hevc-10"}, False),
+            ("a.mp4", "hevc", "yuv422p10le", "aac", "hvc1", {"hevc", "hevc-10"}, True),
+            ("a.mp4", "av1", "yuv420p", "aac", "av01", none, True),
+            ("a.mp4", "av1", "yuv420p", "aac", "av01", {"av1"}, False),
+            ("a.mp4", "av1", "yuv420p10le", "aac", "av01", {"av1"}, True),
+            ("a.mp4", "av1", "yuv420p10le", "aac", "av01", {"av1", "av1-10"}, False),
+            ("a.mp4", "vp9", "yuv420p", "aac", "vp09", {"vp9"}, False),
+            ("a.mp4", "vp9", "yuv420p", "aac", "vp09", {"av1"}, True),
+            ("a.mp4", "h264", "yuv420p10le", "aac", "avc1", none, True),
+            ("a.mp4", "h264", "yuv420p10le", "aac", "avc1", {"h264-10"}, False),
+            ("a.mp4", "h264", "yuv444p", "aac", "avc1", {"h264-10"}, True),
+            ("a.mp4", "h264", "yuv420p", "ac3", "avc1", none, True),
+            ("a.mp4", "h264", "yuv420p", "ac3", "avc1", {"ac3"}, False),
+            ("a.mp4", "h264", "yuv420p", "opus", "avc1", {"opus"}, False),
+            ("a.mp4", "h264", "yuv420p", "dts", "avc1", {"ac3", "eac3", "opus", "flac"}, True),
+            ("a.mp4", "hevc", "yuv420p", "ac3", "hvc1", {"hevc"}, True),
+            ("a.mp4", "hevc", "yuv420p", "ac3", "hvc1", {"hevc", "ac3"}, False),
+            ("a.mp4", "mpeg4", "yuv420p", "aac", "mp4v", {"hevc", "av1", "vp9"}, True),
+            ("a.mp4", "h264", "yuv420p", "aac", "avc1", {"hevc"}, False),
+        )
+        for name, codec, pix, audio, tag, caps, convert in cases:
+            with self.subTest(name=name, codec=codec, pix=pix, audio=audio, tag=tag, caps=sorted(caps)):
+                got = self._decide(name, _streams(codec, pix, audio, tag), frozenset(caps))[0]
+                self.assertEqual(got, convert)
+
+    def test_whole_file_copy_is_used_for_playable_codecs_and_tags_hevc_hvc1(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            service = self._service(root)
+            source = root / "a.mkv"
+            source.write_bytes(b"x")
+            profile = segments_profile(video="hevc", pix="yuv420p", audio="ac3", tag="hev1")
+            names = lambda caps: [a.name for a in service._attempts(
+                root / "ffmpeg.exe", source, root / "o.mp4", profile, caps)]
+            self.assertNotIn("video-copy", names(frozenset()))
+            attempts = list(service._attempts(
+                root / "ffmpeg.exe", source, root / "o.mp4", profile, frozenset({"hevc", "hev1"})))
+            copy = attempts[0]
+            self.assertEqual(copy.name, "video-copy")
+            self.assertEqual(copy.command[copy.command.index("-tag:v") + 1], "hvc1")
+            self.assertEqual(copy.command[copy.command.index("-c:a") + 1], "aac")
+
+    def test_cache_names_differ_by_capabilities(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            source = root / "a.mkv"
+            source.write_bytes(b"x")
+            service = self._service(root)
+            streams = _streams("hevc", "yuv420p", "aac", "hvc1")
+            produced = []
+
+            class Process:
+                returncode = 0
+
+                def __init__(self, command, **_kwargs):
+                    self.command = list(command)
+
+                def communicate(self, timeout=None):
+                    if Path(self.command[0]).stem.lower() == "ffprobe":
+                        return json.dumps({"streams": streams, "format": {"duration": "10"}}).encode(), b""
+                    Path(self.command[-1]).write_bytes(b"mp4")
+                    return b"", b""
+
+            with mock.patch("peach.transcodes.subprocess.Popen", side_effect=Process):
+                for caps in (frozenset(), frozenset({"hevc"})):
+                    produced.append(service.browser_path(3, source, caps=caps)[0])
+            self.assertNotEqual(produced[0], produced[1])
 
     def test_mkv_with_a_nonzero_start_or_unknown_duration_is_not_copied(self):
         for probe in ({"start_time": "1.4"}, {"duration": "0"}, {"start_time": "N/A"}):
