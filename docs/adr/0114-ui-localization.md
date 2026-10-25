@@ -24,3 +24,7 @@
 4. 以 `VITE_DEFAULT_LOCALE=ja` 调 `build_windows.ps1 -Installer`，产物为 `dist/ja/Peach-<版本>-ja-windows-x64-setup.exe`，随后还原 `web/dist`。
 
 构建机需要 Node 24、64 位 Python 3.14 与 uv、Inno Setup 6（`winget install JRSoftware.InnoSetup`）。不监视上游：有需要时手动运行。本分支的安装器（`scripts/installer/peach.iss`）整体改为日语：向导文字用官方 `Japanese.isl`，自定义文案同为日语，不再保留简体中文。上游改动 `peach.iss` 时，合并后要把新增文案译成日语。
+
+## 不向上游推送
+
+本分支是日语化的本地派生，不向上游推送，也不推送任何 master。两层拦截：`scripts/githooks/pre-push` 拒绝推往 `peach-mitao/`、名为 `origin`／`upstream` 的远端，以及任何远端的 `refs/heads/master`（`tests/test_pre_push_hook.py` 守住）；`--no-verify` 能绕过钩子，所以本机另把 `origin` 的推送地址换成不可用的占位值（`git remote set-url --push origin DISABLED-no-push-to-upstream`，只改本机的 `.git/config`，拉取不受影响）。`release_tag.py --ship` 的推送因此也会被拒，这个派生不发版。需要推送时由人手动处理。
