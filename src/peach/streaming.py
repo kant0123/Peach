@@ -13,9 +13,10 @@ from starlette.responses import FileResponse, Response
 from starlette.types import Receive, Scope, Send
 
 RANGE_PREFIX = "bytes="
-#: 会话这么久没有任何请求，它名下还在跑的分片 FFmpeg 就是孤儿。播放器预取下一片的间隔是
-#: 几秒，一片重新生成只要几秒，取 60 秒既不误杀慢机器上的一片，也不让孤儿跑上几分钟。
-IDLE_REAP_SECONDS = 60.0
+#: 会话这么久没有任何请求，它名下还在跑的分片 FFmpeg 就是孤儿。分片请求在生成期间每 0.5 秒
+#: 续一次期（见 `routes_media._until_disconnect`），所以活着的会话不会被误杀，取 30 秒只是
+#: 取消请求与断开检测都落空时的兜底：标签页进程被强杀、设备断网睡眠。
+IDLE_REAP_SECONDS = 30.0
 IDLE_SWEEP_SECONDS = 10.0
 
 
@@ -35,6 +36,8 @@ class StreamSessionRegistry:
         #: 会话最近一次有请求的时刻。取消请求没送到（关标签页、断网）时靠它回收子进程。
         self._seen: dict[str, float] = {}
         self._reapable: set[Any] = set()
+        #: 被回收杀掉的进程。生成分片的协程醒来时据此判定这不是编码失败，不去试下一个编码器。
+        self._reaped: set[Any] = set()
         self._sweeper: threading.Thread | None = None
 
     def touch(self, session: str) -> None:
@@ -62,11 +65,21 @@ class StreamSessionRegistry:
         for process in victims:
             try:
                 if process.returncode is None:
+                    with self._lock:
+                        self._reaped.add(process)
                     process.kill()
                     killed += 1
             except (OSError, ProcessLookupError):
                 pass
         return killed
+
+    def consume_reaped(self, process: Any) -> bool:
+        """这个进程是不是被回收杀掉的；问过一次就忘。"""
+        with self._lock:
+            if process in self._reaped:
+                self._reaped.discard(process)
+                return True
+            return False
 
     def _ensure_sweeper(self) -> None:
         with self._lock:

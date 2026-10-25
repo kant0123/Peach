@@ -427,11 +427,14 @@ def hls_playlist(request: Request, id: int, session: str = "", caps: str = "", a
     return response
 
 
-async def _until_disconnect(request: Request, work):
+async def _until_disconnect(request: Request, work, *, alive=None):
     """跑 `work`，客户端先断开就取消它并抛 `SegmentCancelled`。
 
     分片请求被浏览器掐掉后，Starlette 不会取消处理函数，排在信号量后面的生成会
     一片接一片地把 FFmpeg 跑完；取消协程会让 `_run` 杀掉它的子进程，排队的也不再启动。
+
+    `alive` 在客户端还连着的每个轮询周期调一次：生成一片可能比会话的空闲回收线还久（慢盘、
+    网盘冷读），请求还在等就不是空闲，不能让回收线把它名下的 FFmpeg 杀掉。
     """
     task = asyncio.ensure_future(work)
     try:
@@ -441,6 +444,8 @@ async def _until_disconnect(request: Request, work):
                 return task.result()
             if await request.is_disconnected():
                 raise SegmentCancelled("client disconnected")
+            if alive is not None:
+                alive()
     finally:
         if not task.done():
             task.cancel()
@@ -491,7 +496,7 @@ async def _serve_segment(request: Request, id: int, index: int, session: str, ca
             source, start, duration, asset_id=id, index=index,
             session=session, registry=state.stream_sessions,
             **segment_options(conversion),
-        ))
+        ), alive=lambda: state.stream_sessions.touch(session))
     except SegmentCancelled:
         return Response(status_code=410, headers={"Cache-Control": "no-store"})
     except TranscodeCancelled:

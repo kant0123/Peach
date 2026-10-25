@@ -523,6 +523,9 @@ class HlsSegmentService:
             raise
         finally:
             registry.unregister_process(session, process)
+        if registry.consume_reaped(process):
+            # 会话久无请求被回收杀掉的，不是编码器的错：不试下一个编码器，也不写失败日志。
+            raise SegmentCancelled(session)
         return process.returncode, stderr or b""
 
 
