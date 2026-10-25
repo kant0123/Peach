@@ -15,7 +15,8 @@ const cjk = /[぀-ヿ一-鿿]/;
 const walk = (dir) => readdirSync(dir).flatMap((name) => {
   const full = join(dir, name);
   if (statSync(full).isDirectory()) return name === 'i18n' ? [] : walk(full);
-  return /\.(ts|tsx)$/.test(name) && !name.endsWith('.d.ts') ? [full] : [];
+  // 译文目录与标签译名表本身就是中日对照的数据，不是漏译。
+  return /\.(ts|tsx)$/.test(name) && !name.endsWith('.d.ts') && name !== 'tag-names-ja.ts' ? [full] : [];
 });
 
 const isTranslationCall = (node) => node?.type === 'CallExpression' && node.callee?.type === 'Identifier' && node.callee.name === 't';

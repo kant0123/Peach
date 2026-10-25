@@ -4,7 +4,7 @@
  * queryKey。首屏由 `prefetchTasks` 写进 Query 缓存，组件挂上去读的就是它。 */
 import { apiGet } from '../../api';
 import { queryClient } from '../query';
-import { t } from '../../i18n';
+import { localizeServer, t } from '../../i18n';
 
 export const TASKS_URL = '/api/tasks';
 /** 整页共用这一个键：三段是同一次响应的三个字段。 */
@@ -104,6 +104,9 @@ const SUMMARY_LABELS: Record<string, string> = {
   followups: t('派出后继'), followups_duplicate: t('已在排队'), followups_truncated: t('超上限未派'),
   followups_depth_exceeded: t('超深度未派'), outcome: t('结果'), name: t('档案名称'),
   matched: t('图库命中'), size: t('尺寸'), source: t('来源'), cover_network: t('封面连不上图片主机'),
+  stage: t('阶段'), error: t('错误'), previews: t('预览'), probed: t('已探测'),
+  auto_applied: t('自动保存'), auto_rejected: t('自动驳回'), performer_aliases: t('女优别名'),
+  performer_avatars: t('女优头像'), performer_profile_conflicts: t('资料冲突'), performer_profile_failed: t('资料失败'),
 };
 
 /** 把一批任务按 `parent_run_id` 归到各自的父任务下。没有父的那些留在外面。 */
@@ -205,6 +208,9 @@ export function momentText(stamp: string | null | undefined): string {
    英文键和纪元秒。 */
 const SUMMARY_HIDDEN = new Set([
   'blocked_by', 'status', 'run_id', 'request_id', 'started_at', 'completed_at', 'finished_at',
+  // 处理进度的内部簿记：请求的阶段、速度档、剩余时间估算的各项与基准、水位线。进度条与耗时已经说过。
+  'requested_stage', 'speed_mode', 'eta_seconds_min', 'eta_seconds_max', 'eta_kind', 'eta_scope', 'eta_basis',
+  'estimate_file_count', 'estimate_bytes', 'scanned_bytes', 'entity_watermark', 'paused_count',
 ]);
 
 /** 摘要压成一行。只取标量：明细留在各域自己的页面和日志里。 */
@@ -213,6 +219,6 @@ export function summaryText(summary: Record<string, unknown>): string {
     .filter(([key, value]) => !SUMMARY_HIDDEN.has(key)
       && (typeof value === 'number' || typeof value === 'string')
       && String(value) !== '')
-    .map(([key, value]) => `${SUMMARY_LABELS[key] || key} ${typeof value === 'number' ? value.toLocaleString() : value}`)
+    .map(([key, value]) => `${SUMMARY_LABELS[key] || key} ${typeof value === 'number' ? value.toLocaleString() : localizeServer(value)}`)
     .join(' · ');
 }
