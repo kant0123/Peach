@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import re
+import threading
 import time
 from functools import partial
 from dataclasses import replace
@@ -27,6 +28,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import (
     FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response,
 )
+from starlette.concurrency import run_in_threadpool
 from starlette.staticfiles import StaticFiles
 
 from . import (
@@ -51,9 +53,12 @@ from .previews import ENTITY_THUMB_TYPE, PreviewUnavailable, entity_image_key
 from .remote_media_cache import AVATAR_REFRESH_SECONDS, FAVICON_REFRESH_SECONDS, cache_for
 from .preview_cache import PreviewCache
 from .routes_auth import require_auth
-from .segments import SegmentCancelled, SegmentUnavailable, build_hls_playlist
+from .segments import (
+    REMUX_AAC_AUDIO, REMUX_COPY_AUDIO, SegmentCancelled, SegmentUnavailable,
+    build_hls_playlist, segment_options,
+)
 from .streaming import BufferedFileResponse, CancellableFileResponse, SplicedMp4Response
-from .transcodes import TranscodeCancelled, TranscodeUnavailable
+from .transcodes import TranscodeCancelled, TranscodeNotStarted, TranscodeUnavailable
 
 router = APIRouter()
 
@@ -159,6 +164,8 @@ def _hls_plan(state, asset_id: int, session: str = "", conversion: bool | None =
 
     要重编码的片源按固定 6 秒切，时长先看账本，账本没记或记成负数就用 ffprobe 报的；
     探测也拿不到才放弃，否则浏览器只能退回 `/stream`，那条路要先把整部片转完才出第一个字节。
+    视频已是 H.264 的 MKV 改按关键帧切，只拷视频、音频按需转 aac，第四项是 `REMUX_*`
+    标记；关键帧表读不出或不合格就回到固定 6 秒的重编码。
     原样封装的 HLS 仍要账本时长与关键帧表。
 
     `conversion` 是起播时已经得出的结论。给不出时按片源本身判：播放列表和分片端点走的
@@ -173,6 +180,12 @@ def _hls_plan(state, asset_id: int, session: str = "", conversion: bool | None =
             source, session=session, registry=state.stream_sessions):
         duration = duration or state.transcode_service.media_duration(
             source, session=session, registry=state.stream_sessions)
+        if duration > 0:
+            audio = state.transcode_service.remux_audio(
+                source, session=session, registry=state.stream_sessions)
+            remux = state.hls_service.remux_plan(source, duration) if audio else None
+            if remux:
+                return asset, source, remux, REMUX_COPY_AUDIO if audio == "copy" else REMUX_AAC_AUDIO
         plan = state.hls_service.conversion_plan(duration) if duration > 0 else []
         return (asset, source, plan, True) if plan else None
     if choice.protocol != "hls" or duration <= 0:
@@ -237,7 +250,28 @@ def external_playlist(request: Request, id: int, ticket: str, origin: str = ''):
 
 
 @router.api_route("/stream", methods=["GET", "HEAD"])
-def stream(request: Request, id: int, session: str = "", args: dict[str, str] = Depends(require_auth)):
+async def stream(request: Request, id: int, session: str = "", args: dict[str, str] = Depends(require_auth)):
+    """直读或整片转码后直读。
+
+    整片转码要几分钟，期间这个请求只是在等；浏览器关掉播放页、换掉 `<video>` 的片源
+    都不会通知服务端，所以这里自己盯连接，断开就让转码的 FFmpeg 停下并丢掉半成品。
+    """
+    stop = threading.Event()
+    work = asyncio.ensure_future(run_in_threadpool(_stream_response, request, id, session, stop))
+    try:
+        while True:
+            done, _ = await asyncio.wait({work}, timeout=0.5)
+            if done:
+                return work.result()
+            if await request.is_disconnected():
+                return Response(status_code=499, headers={"Cache-Control": "no-store"})
+    finally:
+        if not work.done():
+            stop.set()
+            await asyncio.gather(work, return_exceptions=True)
+
+
+def _stream_response(request: Request, id: int, session: str, stop: threading.Event):
     state = request.app.state
     asset = state.media_engine.asset(id)
     path = state.media_engine.filesystem.file_for(asset, thumbnail=False)
@@ -252,15 +286,21 @@ def stream(request: Request, id: int, session: str = "", args: dict[str, str] = 
             path, header, session=session, registry=state.stream_sessions,
         )
     try:
+        # 没有会话号的请求（卡片悬停预览）没人能取消它，也不值得为它整片转码。
         path, transcoded = state.transcode_service.browser_path(
             id, path, session=session, registry=state.stream_sessions,
+            allow_transcode=bool(session) and request.method != "HEAD", stop=stop,
         )
     except TranscodeCancelled:
         return Response(status_code=410, headers={"Cache-Control": "no-store"})
+    except TranscodeNotStarted:
+        return JSONResponse({"error": "transcode needs a session"}, status_code=415,
+                            headers={"Cache-Control": "no-store"})
     except TranscodeUnavailable:
         LOGGER.exception("browser transcode failed for asset %s", id)
         return JSONResponse({"error": "transcode unavailable"}, status_code=503)
-    media_type = "video/mp4" if transcoded else None
+    # QuickTime 容器按 MP4 发：播放器那边起播计划写的也是 video/mp4。
+    media_type = "video/mp4" if transcoded or path.suffix.lower() == ".mov" else None
     response = (
         CancellableFileResponse(
             path, session=session, registry=state.stream_sessions, media_type=media_type,
@@ -280,6 +320,7 @@ def stream_plan(request: Request, id: int, session: str = "", mode: str = "", ar
         return JSONResponse({"error": "invalid session"}, status_code=400)
     if session and state.stream_sessions.is_cancelled(session):
         return JSONResponse({"error": "stream cancelled"}, status_code=410)
+    state.stream_sessions.touch(session)
     asset = state.media_engine.asset(id)
     plan = state.media_engine.stream_plan(id, mode=mode or "auto")
     # 只有真的能读出关键帧才宣告 HLS，否则客户端会拿到一个必然 404 的播放列表。
@@ -346,6 +387,7 @@ def hls_playlist(request: Request, id: int, session: str = "", args: dict[str, s
         return PlainTextResponse("session required", status_code=400)
     if state.stream_sessions.is_cancelled(session):
         return PlainTextResponse("stream cancelled", status_code=410)
+    state.stream_sessions.touch(session)
     try:
         resolved = _hls_plan(state, id, session)
     except (MediaUnavailable, TranscodeUnavailable):
@@ -361,6 +403,26 @@ def hls_playlist(request: Request, id: int, session: str = "", args: dict[str, s
     return response
 
 
+async def _until_disconnect(request: Request, work):
+    """跑 `work`，客户端先断开就取消它并抛 `SegmentCancelled`。
+
+    分片请求被浏览器掐掉后，Starlette 不会取消处理函数，排在信号量后面的生成会
+    一片接一片地把 FFmpeg 跑完；取消协程会让 `_run` 杀掉它的子进程，排队的也不再启动。
+    """
+    task = asyncio.ensure_future(work)
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if done:
+                return task.result()
+            if await request.is_disconnected():
+                raise SegmentCancelled("client disconnected")
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
 @router.get("/stream/hls/{id}/{index}.ts")
 async def hls_segment(request: Request, id: int, index: int, session: str = "", args: dict[str, str] = Depends(require_auth)):
     state = request.app.state
@@ -368,6 +430,7 @@ async def hls_segment(request: Request, id: int, index: int, session: str = "", 
         return JSONResponse({"error": "invalid session"}, status_code=400)
     if state.stream_sessions.is_cancelled(session):
         return Response(status_code=410, headers={"Cache-Control": "no-store"})
+    state.stream_sessions.touch(session)
     try:
         loop = asyncio.get_running_loop()
         resolved = await loop.run_in_executor(
@@ -379,11 +442,11 @@ async def hls_segment(request: Request, id: int, index: int, session: str = "", 
         if index < 0 or index >= len(plan):
             return JSONResponse({"error": "invalid segment"}, status_code=416)
         start, duration = plan[index]
-        path = await state.hls_service.generate(
+        path = await _until_disconnect(request, state.hls_service.generate(
             source, start, duration, asset_id=id, index=index,
             session=session, registry=state.stream_sessions,
-            **({"transcode": True} if conversion else {}),
-        )
+            **segment_options(conversion),
+        ))
     except SegmentCancelled:
         return Response(status_code=410, headers={"Cache-Control": "no-store"})
     except TranscodeCancelled:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 from collections.abc import MutableSet
 from pathlib import Path
 from time import monotonic
@@ -12,17 +13,77 @@ from starlette.responses import FileResponse, Response
 from starlette.types import Receive, Scope, Send
 
 RANGE_PREFIX = "bytes="
+#: 会话这么久没有任何请求，它名下还在跑的分片 FFmpeg 就是孤儿。播放器预取下一片的间隔是
+#: 几秒，一片重新生成只要几秒，取 60 秒既不误杀慢机器上的一片，也不让孤儿跑上几分钟。
+IDLE_REAP_SECONDS = 60.0
+IDLE_SWEEP_SECONDS = 10.0
 
 
 class StreamSessionRegistry:
     """Track addressable browser stream requests so the UI can cancel them."""
 
-    def __init__(self, *, tombstone_seconds: float = 300.0) -> None:
+    def __init__(self, *, tombstone_seconds: float = 300.0,
+                 idle_seconds: float = IDLE_REAP_SECONDS,
+                 sweep_seconds: float = IDLE_SWEEP_SECONDS) -> None:
         self._active: dict[str, MutableSet[asyncio.Task[object]]] = {}
         self._processes: dict[str, MutableSet[Any]] = {}
         self._cancelled: dict[str, float] = {}
         self._tombstone_seconds = tombstone_seconds
         self._lock = threading.RLock()
+        self._idle_seconds = idle_seconds
+        self._sweep_seconds = sweep_seconds
+        #: 会话最近一次有请求的时刻。取消请求没送到（关标签页、断网）时靠它回收子进程。
+        self._seen: dict[str, float] = {}
+        self._reapable: set[Any] = set()
+        self._sweeper: threading.Thread | None = None
+
+    def touch(self, session: str) -> None:
+        """记一次这个会话的请求活动；空会话号不记。"""
+        if session:
+            with self._lock:
+                self._seen[session] = monotonic()
+
+    def reap_idle(self) -> int:
+        """杀掉久无请求的会话名下的可回收子进程（HLS 分片的 FFmpeg），返回杀掉的个数。
+
+        只杀进程，不给会话立墓碑：播放器暂停几分钟后继续，会话照旧可用，只是
+        被杀的那一片要重新生成。
+        """
+        now = monotonic()
+        victims = []
+        with self._lock:
+            for session, processes in self._processes.items():
+                if now - self._seen.get(session, 0.0) >= self._idle_seconds:
+                    victims.extend(item for item in processes if item in self._reapable)
+            for session in [key for key, moment in self._seen.items()
+                            if now - moment >= self._idle_seconds * 10 and key not in self._processes]:
+                self._seen.pop(session, None)
+        killed = 0
+        for process in victims:
+            try:
+                if process.returncode is None:
+                    process.kill()
+                    killed += 1
+            except (OSError, ProcessLookupError):
+                pass
+        return killed
+
+    def _ensure_sweeper(self) -> None:
+        with self._lock:
+            if self._sweeper is not None and self._sweeper.is_alive():
+                return
+            self._sweeper = threading.Thread(target=self._sweep, name="PeachStreamReaper", daemon=True)
+            self._sweeper.start()
+
+    def _sweep(self) -> None:
+        """有子进程在跑时定期回收；没有了就退出，下次登记再起。"""
+        while True:
+            time.sleep(self._sweep_seconds)
+            self.reap_idle()
+            with self._lock:
+                if not self._reapable:
+                    self._sweeper = None
+                    return
 
     def _prune(self, now: float) -> None:
         expired = [
@@ -40,17 +101,28 @@ class StreamSessionRegistry:
             self._active.setdefault(session, set()).add(task)
             return True
 
-    def register_process(self, session: str, process: Any) -> bool:
-        """把生成 HLS 片段的子进程纳入同一个可取消会话。"""
+    def register_process(self, session: str, process: Any, *, reapable: bool = False) -> bool:
+        """把生成 HLS 片段的子进程纳入同一个可取消会话。
+
+        `reapable` 的进程在会话久无请求时会被回收；整片转码的请求本身就是唯一的活动，
+        不能按这个判据杀，所以默认不可回收。
+        """
         with self._lock:
-            self._prune(monotonic())
+            now = monotonic()
+            self._prune(now)
             if session in self._cancelled:
                 return False
             self._processes.setdefault(session, set()).add(process)
-            return True
+            if reapable:
+                self._reapable.add(process)
+                self._seen[session] = now
+        if reapable:
+            self._ensure_sweeper()
+        return True
 
     def unregister_process(self, session: str, process: Any) -> None:
         with self._lock:
+            self._reapable.discard(process)
             processes = self._processes.get(session)
             if not processes:
                 return
@@ -76,8 +148,10 @@ class StreamSessionRegistry:
         with self._lock:
             self._prune(monotonic())
             self._cancelled[session] = monotonic()
+            self._seen.pop(session, None)
             tasks = tuple(self._active.pop(session, ()))
             processes = tuple(self._processes.pop(session, ()))
+            self._reapable.difference_update(processes)
         for task in tasks:
             task.cancel()
         for process in processes:
