@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -24,11 +25,63 @@ BROWSER_NATIVE_SUFFIXES = MP4_FAMILY_SUFFIXES | frozenset({".webm", ".ogv", ".og
 REMUX_SUFFIXES = frozenset({".mkv"})
 REMUX_COPY_AUDIO = frozenset({"", "aac", "mp3"})
 DIRECT_MP4_PIXEL_FORMATS = frozenset({"yuv420p", "yuvj420p"})
+TEN_BIT_PIXEL_FORMATS = frozenset({"yuv420p10le"})
+#: 浏览器直接解得了、不用申报的音频；其余按能力串里的词放行。
+UNIVERSAL_AUDIO = frozenset({"", "aac", "mp3"})
+AUDIO_CAPS = {"opus": "opus", "ac3": "ac3", "eac3": "eac3", "flac": "flac"}
 TRANSCODE_TIMEOUT_SECONDS = 3600
 #: 整片转码缓存的总量上限，超出从最久没用的删起；整片能重新生成，丢了只是再转一次。
 TRANSCODE_CACHE_BYTES = 2 << 30
 PROBE_TIMEOUT_SECONDS = 20
 logger = logging.getLogger(__name__)
+
+
+#: 端能力串里认的词。视频：`h264-10` 等是 10bit 或高规格的变体（8bit 的 H.264 人人能解，不用申报）；
+#: `hev1` 表示放行 `hev1` 标签的 HEVC（WebKit 只认 `hvc1`）；其余是音频。
+CAPS_TOKENS = frozenset({
+    "h264-10", "hevc", "hevc-10", "hev1", "av1", "av1-10", "vp9", "vp9-10",
+    "ac3", "eac3", "opus", "flac",
+})
+
+
+def parse_caps(raw: str | None) -> frozenset[str]:
+    """`/api/stream-plan` 的 `caps` 查询串 → 能力集合；未知词丢弃，过长整串作废（按没有能力处理）。"""
+    if not raw or len(raw) > 200:
+        return frozenset()
+    return frozenset(item for item in (part.strip().lower() for part in raw.split(",")) if item in CAPS_TOKENS)
+
+
+def caps_query(caps: frozenset[str]) -> str:
+    """能力集合 → 追加在地址后的 `&caps=...`；没有能力时是空串，地址保持原样。"""
+    return f"&caps={','.join(sorted(caps))}" if caps else ""
+
+
+def video_playable(profile: "_MediaProfile", caps: frozenset[str]) -> bool:
+    """浏览器（按它申报的能力）能不能直接解这条视频流。
+
+    H.264 的 8bit 人人能解；其余编码、10bit 与带 `hev1` 标签的 HEVC 必须由设备申报，
+    没申报就当解不了。像素格式只认 4:2:0 的 8/10bit，4:2:2、4:4:4 一律不直放。
+    """
+    codec, pixel = profile.video_codec, profile.pixel_format
+    if pixel in DIRECT_MP4_PIXEL_FORMATS:
+        suffix = ""
+    elif pixel in TEN_BIT_PIXEL_FORMATS:
+        suffix = "-10"
+    else:
+        return False
+    if codec == "h264":
+        return suffix == "" or "h264-10" in caps
+    if codec not in {"hevc", "av1", "vp9"}:
+        return False
+    if f"{codec}{suffix}" not in caps:
+        return False
+    if codec == "hevc" and profile.video_tag not in {"hvc1", "dvh1"} and "hev1" not in caps:
+        return False
+    return True
+
+
+def audio_playable(audio_codec: str, caps: frozenset[str]) -> bool:
+    return audio_codec in UNIVERSAL_AUDIO or AUDIO_CAPS.get(audio_codec) in caps
 
 
 def background_process_flags(*, low_priority: bool = True) -> int:
@@ -53,6 +106,8 @@ class _MediaProfile:
     decode_order_timestamps: bool = False
     #: 容器报的起始时刻（秒）。切片时间轴按它对齐，非零的片源不拷流。
     start_time: float = 0.0
+    #: 视频流的编码标签（`hvc1` / `hev1` 等）。WebKit 只播 `hvc1`。
+    video_tag: str = ""
 
 
 @dataclass(frozen=True)
@@ -99,20 +154,27 @@ class TranscodeService:
     def needs_transcode(source: Path) -> bool:
         return source.suffix.lower() not in BROWSER_NATIVE_SUFFIXES
 
-    def requires_conversion(self, source: Path, *, session: str = "", registry=None) -> bool:
+    def requires_conversion(
+        self, source: Path, *, session: str = "", registry=None, caps: frozenset[str] = frozenset(),
+    ) -> bool:
         """按容器和内部编码选择浏览器兼容路径，不生成整片缓存。"""
         if self.needs_transcode(source):
             return True
         if self.resolver.ffprobe() is None:
             return False
         profile = self._profile_for(source, session, registry)
-        return profile is None or not self._browser_compatible(source, profile)
+        return profile is None or not self._browser_compatible(source, profile, caps)
 
-    def remux_audio(self, source: Path, *, session: str = "", registry=None) -> str | None:
-        """H.264 的 MKV 可以只拷视频进 HLS 分片：返回音频处理 `copy` 或 `aac`，不适用返回 None。
+    def remux_audio(
+        self, source: Path, *, session: str = "", registry=None, caps: frozenset[str] = frozenset(),
+    ) -> str | None:
+        """MKV 可以只拷视频进 HLS 分片：返回封装与音频处理，不适用返回 None。
 
-        判据只看容器自报的事实：视频 H.264 且像素格式是 yuv420p 一族、时长可知、
-        起始时刻为零。音频已是 aac/mp3 原样拷，其余编码转成 aac。
+        - `copy` / `aac`：8bit H.264，装 MPEG-TS；音频已是 aac/mp3 原样拷，其余转 aac。
+        - `fmp4-copy` / `fmp4-aac`：设备申报能解的其它视频（HEVC、AV1、VP9、10bit H.264），
+          装 fMP4（MPEG-TS 里的 HEVC/AV1 浏览器不认）；音频设备能解就原样拷，其余转 aac。
+
+        判据只看容器自报的事实：时长可知、起始时刻为零。
         """
         if source.suffix.lower() not in REMUX_SUFFIXES or self.resolver.ffprobe() is None:
             return None
@@ -120,13 +182,18 @@ class TranscodeService:
             profile = self._profile_for(source, session, registry)
         except OSError:
             return None
-        if (profile is None or profile.video_codec != "h264"
-                or profile.pixel_format not in DIRECT_MP4_PIXEL_FORMATS
-                or profile.duration <= 0 or abs(profile.start_time) > 0.05):
+        if profile is None or profile.duration <= 0 or abs(profile.start_time) > 0.05:
             return None
-        return "copy" if profile.audio_codec in REMUX_COPY_AUDIO else "aac"
+        if profile.video_codec == "h264" and profile.pixel_format in DIRECT_MP4_PIXEL_FORMATS:
+            return "copy" if profile.audio_codec in REMUX_COPY_AUDIO else "aac"
+        # MKV 里的 HEVC 没有 MP4 标签，输出统一写 hvc1，所以标签不参与判据。
+        if video_playable(replace(profile, video_tag="hvc1"), caps):
+            return "fmp4-copy" if audio_playable(profile.audio_codec, caps) else "fmp4-aac"
+        return None
 
-    def decode_order_timestamps(self, source: Path, *, session: str = "", registry=None) -> bool:
+    def decode_order_timestamps(
+        self, source: Path, *, session: str = "", registry=None, caps: frozenset[str] = frozenset(),
+    ) -> bool:
         """是不是只有时间戳错乱的那一类：有 B 帧却没有 ctts，码流本身浏览器解得出来。
 
         这类片源不必重编码，重建一份头就够了；其余不兼容的原因（编码、像素格式、容器）
@@ -136,7 +203,7 @@ class TranscodeService:
             return False
         profile = self._profile_for(source, session, registry)
         return bool(profile and profile.decode_order_timestamps
-                    and self._decodes_in_browser(source, profile))
+                    and self._decodes_in_browser(source, profile, caps))
 
     def media_duration(self, source: Path, *, session: str = "", registry=None) -> float:
         """ffprobe 报的总时长（秒）；账本没记时长的片源靠它切片。探测不到返回 0。"""
@@ -167,6 +234,7 @@ class TranscodeService:
     def browser_path(
         self, asset_id: int, source: Path, *, session: str = "", registry=None,
         allow_transcode: bool = True, stop: threading.Event | None = None,
+        caps: frozenset[str] = frozenset(),
     ) -> tuple[Path, bool]:
         profile = None
         if not self.needs_transcode(source):
@@ -176,7 +244,7 @@ class TranscodeService:
                 profile = self._profile_for(source, session, registry)
             except OSError as exc:
                 raise TranscodeUnavailable("source unavailable") from exc
-            if profile is not None and self._decodes_in_browser(source, profile):
+            if profile is not None and self._decodes_in_browser(source, profile, caps):
                 return source, False
 
         choice = self.resolver.ffmpeg()
@@ -188,7 +256,7 @@ class TranscodeService:
         except OSError as exc:
             raise TranscodeUnavailable("source unavailable") from exc
 
-        target = self.cache_root / f"{asset_id}-{stat.st_size}-{stat.st_mtime_ns}.mp4"
+        target = self._cache_target(asset_id, stat, caps)
         if target.is_file() and target.stat().st_size:
             self._touch(target)
             return target, True
@@ -209,7 +277,7 @@ class TranscodeService:
                     if profile is None:
                         profile = self._probe(source, session, registry, deadline)
                     for attempt in self._attempts(
-                        choice.path, source, temporary, profile,
+                        choice.path, source, temporary, profile, caps,
                     ):
                         temporary.unlink(missing_ok=True)
                         try:
@@ -248,11 +316,12 @@ class TranscodeService:
             return target, True
 
     @staticmethod
-    def _browser_compatible(source: Path, profile: _MediaProfile) -> bool:
+    def _browser_compatible(
+        source: Path, profile: _MediaProfile, caps: frozenset[str] = frozenset(),
+    ) -> bool:
         if source.suffix.lower() in MP4_FAMILY_SUFFIXES:
-            return (profile.video_codec == "h264"
-                    and profile.pixel_format in DIRECT_MP4_PIXEL_FORMATS
-                    and profile.audio_codec in {"", "aac", "mp3"}
+            return (video_playable(profile, caps)
+                    and audio_playable(profile.audio_codec, caps)
                     and not profile.decode_order_timestamps)
         if source.suffix.lower() == ".webm":
             return (profile.video_codec in {"vp8", "vp9", "av1"}
@@ -268,7 +337,7 @@ class TranscodeService:
             return None
         command = (
             str(choice.path), "-v", "error", "-show_entries",
-            "stream=codec_type,codec_name,pix_fmt,has_b_frames:format=duration,start_time",
+            "stream=codec_type,codec_name,codec_tag_string,pix_fmt,has_b_frames:format=duration,start_time",
             "-of", "json", str(source),
         )
         try:
@@ -311,10 +380,13 @@ class TranscodeService:
             duration=max(0.0, duration),
             decode_order_timestamps=self._decode_order_timestamps(source, video),
             start_time=start_time,
+            video_tag=str(video.get("codec_tag_string") or "").lower(),
         )
 
     @staticmethod
-    def _decodes_in_browser(source: Path, profile: _MediaProfile) -> bool:
+    def _decodes_in_browser(
+        source: Path, profile: _MediaProfile, caps: frozenset[str] = frozenset(),
+    ) -> bool:
         """浏览器能不能解出画面。时间戳错乱不算解不出来。
 
         整片转码要占满一个编码位、写一份和原片同量级的缓存，只有编码本身不被支持才值得。
@@ -322,7 +394,7 @@ class TranscodeService:
         就够。卡片悬停预览直接打 `/stream`，鼠标划过一张卡片不能启动一次整片转码。
         """
         return TranscodeService._browser_compatible(
-            source, replace(profile, decode_order_timestamps=False),
+            source, replace(profile, decode_order_timestamps=False), caps,
         )
 
     @staticmethod
@@ -352,6 +424,7 @@ class TranscodeService:
         source: Path,
         temporary: Path,
         profile: _MediaProfile | None,
+        caps: frozenset[str] = frozenset(),
     ):
         prefix = (
             str(ffmpeg), "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
@@ -359,16 +432,18 @@ class TranscodeService:
         mapping = ("-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn")
         finish = ("-movflags", "+faststart", str(temporary))
 
-        if (profile is not None and profile.video_codec == "h264"
-                and profile.pixel_format in DIRECT_MP4_PIXEL_FORMATS):
+        if profile is not None and video_playable(profile, caps):
             audio = (
                 ("-c:a", "copy")
                 if profile.audio_codec in {"", "aac"}
+                or (profile.audio_codec in AUDIO_CAPS and audio_playable(profile.audio_codec, caps))
                 else ("-c:a", "aac", "-b:a", "160k")
             )
+            # WebKit 只认 hvc1 标签，原片标成 hev1 的 HEVC 换标签不重编码。
+            tag = ("-tag:v", "hvc1") if profile.video_codec == "hevc" else ()
             yield _TranscodeAttempt(
                 "video-copy",
-                prefix + ("-i", str(source)) + mapping + ("-c:v", "copy") + audio + finish,
+                prefix + ("-i", str(source)) + mapping + ("-c:v", "copy") + tag + audio + finish,
             )
 
         fast_audio = (
@@ -447,6 +522,11 @@ class TranscodeService:
         if (registry is not None and session and registry.is_cancelled(session)) or (
                 stop is not None and stop.is_set()):
             raise TranscodeCancelled(session)
+
+    def _cache_target(self, asset_id: int, stat, caps: frozenset[str]) -> Path:
+        """整片转码的缓存文件。能力不同，同一个源可能走拷流或重编码，产物不能互相顶替。"""
+        flavor = f"-{hashlib.sha1(','.join(sorted(caps)).encode()).hexdigest()[:6]}" if caps else ""
+        return self.cache_root / f"{asset_id}-{stat.st_size}-{stat.st_mtime_ns}{flavor}.mp4"
 
     @staticmethod
     def _touch(target: Path) -> None:
