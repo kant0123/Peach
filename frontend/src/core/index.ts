@@ -33,7 +33,7 @@ const api=async(p:string,o?:RequestInit):Promise<unknown>=>{
   try{payload=await response.json()}catch{}
   if(!response.ok){
     const detail=payload&&(payload.message||payload.detail||payload.error);
-    throw new Error(requestErrorMessage(detail,response.status));
+    throw new Error(requestErrorMessage(localizeServer(detail),response.status));
   }
   registerResponseEntities(p,payload);
   return localizeServer(payload);

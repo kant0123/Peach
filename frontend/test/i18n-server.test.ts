@@ -39,6 +39,13 @@ describe('localizeServer', () => {
     expect(localizeServer('追更检查 · 手动')).toBe('新作チェック · 手動');
   });
 
+  it('实体分类名与常见的接口错误换成译文', async () => {
+    const { localizeServer } = await load('ja');
+    expect(localizeServer({ label: '女优' })).toEqual({ label: '女優' });
+    expect(localizeServer('请在运行 Peach 的电脑上打开配置')).toBe('Peach を実行しているパソコンで設定を開いてください');
+    expect(localizeServer('配置保存失败：磁盘已满')).toBe('設定を保存できませんでした: 磁盘已满');
+  });
+
   it('没有译文的句子原样返回', async () => {
     const { localizeServer } = await load('ja');
     expect(localizeServer('没有收录的句子')).toBe('没有收录的句子');
