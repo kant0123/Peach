@@ -634,7 +634,113 @@ class IdleReapTests(unittest.TestCase):
         self.assertTrue(process.killed)
 
 
+    def test_a_reaped_process_is_reported_exactly_once(self):
+        registry = StreamSessionRegistry(idle_seconds=60.0, sweep_seconds=3600.0)
+        process, other = self._Process(), self._Process()
+        with mock.patch("peach.streaming.monotonic", return_value=1000.0):
+            registry.register_process("s", process, reapable=True)
+        with mock.patch("peach.streaming.monotonic", return_value=1100.0):
+            registry.reap_idle()
+        self.assertTrue(registry.consume_reaped(process))
+        self.assertFalse(registry.consume_reaped(process))
+        self.assertFalse(registry.consume_reaped(other))
+
+    def test_a_cancelled_session_is_not_reported_as_reaped(self):
+        registry = StreamSessionRegistry(idle_seconds=60.0, sweep_seconds=3600.0)
+        process = self._Process()
+        registry.register_process("s", process, reapable=True)
+        registry.cancel("s")
+        self.assertTrue(process.killed)
+        self.assertFalse(registry.consume_reaped(process))
+
+    def test_the_default_window_clears_orphans_within_half_a_minute(self):
+        self.assertLessEqual(StreamSessionRegistry()._idle_seconds, 30.0)
+
+
+class ReapedSegmentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_reaped_encoder_ends_the_segment_instead_of_trying_the_next_one(self):
+        """回收杀掉 FFmpeg 后退出码非零，生成循环若当成编码失败，会接着起下一个编码器的进程。"""
+        registry = StreamSessionRegistry(idle_seconds=0.0, sweep_seconds=3600.0)
+        finished = asyncio.Event()
+
+        class Process:
+            returncode = None
+
+            async def communicate(self):
+                await finished.wait()
+                return b"", b""
+
+            def kill(self):
+                self.returncode = 1
+                finished.set()
+
+        spawned = []
+
+        async def spawn(*command, **_kwargs):
+            spawned.append(command)
+            return Process()
+
+        service = HlsSegmentService.__new__(HlsSegmentService)
+        with mock.patch.object(segments.asyncio, "create_subprocess_exec", spawn):
+            running = asyncio.ensure_future(service._run(["ffmpeg"], "s", registry))
+            while not spawned:
+                await asyncio.sleep(0.01)
+            await asyncio.sleep(0.01)
+            self.assertEqual(registry.reap_idle(), 1)
+            with self.assertRaises(segments.SegmentCancelled):
+                await asyncio.wait_for(running, 5)
+        self.assertEqual(len(spawned), 1)
+        self.assertFalse(registry.is_cancelled("s"), "回收不立墓碑，暂停后继续播放的请求照常重新生成这一片")
+
+        class Finishing:
+            returncode = 0
+
+            async def communicate(self):
+                return b"", b""
+
+        async def spawn_again(*command, **_kwargs):
+            return Finishing()
+
+        with mock.patch.object(segments.asyncio, "create_subprocess_exec", spawn_again):
+            self.assertEqual(await service._run(["ffmpeg"], "s", registry), (0, b""))
+
+
 class DisconnectTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_waiting_segment_request_keeps_its_session_alive(self):
+        """生成一片比空闲回收线还久时，请求还连着，会话不是空闲。"""
+        from peach.routes_media import _until_disconnect
+
+        touched = []
+
+        async def generation():
+            await asyncio.sleep(1.3)
+            return "segment"
+
+        class Request:
+            async def is_disconnected(self):
+                return False
+
+        result = await _until_disconnect(Request(), generation(), alive=lambda: touched.append(1))
+        self.assertEqual(result, "segment")
+        self.assertGreaterEqual(len(touched), 2)
+
+    async def test_a_dropped_segment_request_stops_touching_its_session(self):
+        from peach.routes_media import _until_disconnect
+
+        touched = []
+
+        async def generation():
+            await asyncio.sleep(30)
+
+        class Request:
+            async def is_disconnected(self):
+                return True
+
+        with self.assertRaises(segments.SegmentCancelled):
+            await asyncio.wait_for(
+                _until_disconnect(Request(), generation(), alive=lambda: touched.append(1)), 10)
+        self.assertEqual(touched, [])
+
     async def test_a_dropped_segment_request_cancels_its_generation(self):
         from peach.routes_media import _until_disconnect
 
@@ -668,6 +774,92 @@ class DisconnectTests(unittest.IsolatedAsyncioTestCase):
                 return False
 
         self.assertEqual(await _until_disconnect(Request(), generation()), "segment")
+
+
+class RealServerDisconnectTests(unittest.TestCase):
+    """真 uvicorn、真应用的中间件栈：浏览器关掉标签页，处理函数里要看得到客户端走了。
+
+    用假 `Request` 的用例证明不了这一点。`BaseHTTPMiddleware` 包住应用时，
+    `request.is_disconnected()` 永远返回 False，FFmpeg 就一直跑到自然结束。
+    """
+
+    def _serve(self):
+        """起一台挂着真实应用的 uvicorn，返回 (app, 连接函数)。"""
+        import socket
+        import time
+
+        import uvicorn
+
+        from peach.api import create_app
+        from peach.config import PeachSettings
+        from support.ledger import fresh_ledger
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name).resolve()
+        app = create_app(PeachSettings(
+            configured=True, db_path=fresh_ledger(root), follow_state_root=root / "state",
+            allowed_media_roots=(root,)))
+        self.addCleanup(app.state.http_transport.close)
+        server = uvicorn.Server(uvicorn.Config(
+            app, host="127.0.0.1", port=0, log_level="error", lifespan="off"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 10)
+        self.addCleanup(setattr, server, "should_exit", True)
+        deadline = time.monotonic() + 20
+        while not server.started and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertTrue(server.started)
+        port = server.servers[0].sockets[0].getsockname()[1]
+
+        def request_then_close(target: str):
+            client = socket.create_connection(("127.0.0.1", port), timeout=5)
+            client.sendall(f"GET {target} HTTP/1.1\r\nHost: peach.test\r\n\r\n".encode())
+            time.sleep(0.5)
+            client.close()
+
+        return app, request_then_close
+
+    def test_a_handler_behind_the_app_middleware_sees_the_client_leave(self):
+        from starlette.responses import PlainTextResponse
+        from starlette.routing import Route
+
+        app, request_then_close = self._serve()
+        seen = threading.Event()
+        answered = threading.Event()
+
+        async def probe(request):
+            for _ in range(100):
+                if await request.is_disconnected():
+                    seen.set()
+                    break
+                await asyncio.sleep(0.05)
+            answered.set()
+            return PlainTextResponse("done")
+
+        app.router.routes.insert(0, Route("/__probe", probe))
+        request_then_close("/__probe")
+        self.assertTrue(answered.wait(10))
+        self.assertTrue(seen.is_set(), "客户端已关闭连接，处理函数却没有看到断开")
+
+    def test_closing_the_tab_stops_a_whole_file_conversion(self):
+        """`/stream` 在等整片转码时浏览器走了：转码线程要收到停止信号，FFmpeg 随之被杀。"""
+        app, request_then_close = self._serve()
+        started = threading.Event()
+        stopped = threading.Event()
+
+        def converting(request, asset_id, session, stop, caps=frozenset()):
+            started.set()
+            if stop.wait(20):
+                stopped.set()
+            from starlette.responses import Response
+            return Response(status_code=410)
+
+        with mock.patch("peach.routes_media._stream_response", converting):
+            request_then_close("/stream?id=1&session=tab")
+            self.assertTrue(started.wait(10), "转码没有开始")
+            self.assertTrue(stopped.wait(10), "标签页关闭之后转码仍在继续")
 
 
 if __name__ == "__main__":
