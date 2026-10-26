@@ -31,6 +31,14 @@ describe('localizeServer', () => {
     expect(localizeServer('Prestige、FALENO')).toBe('Prestige、FALENO');
   });
 
+  it('任务登记表的名字、带分隔符的句子逐段换成译文', async () => {
+    const { localizeServer } = await load('ja');
+    expect(localizeServer('订阅源拉取')).toBe('購読フィードの取得');
+    expect(localizeServer('扫描与采集：处理中')).toBe('スキャンと収集：处理中');
+    expect(localizeServer('409 项需要处理，可重试未完成的部分。')).toBe('409 件の処理が必要です。未完了の部分は再試行できます。');
+    expect(localizeServer('追更检查 · 手动')).toBe('新作チェック · 手動');
+  });
+
   it('没有译文的句子原样返回', async () => {
     const { localizeServer } = await load('ja');
     expect(localizeServer('没有收录的句子')).toBe('没有收录的句子');

@@ -23,6 +23,19 @@ function mounted() {
 }
 
 describe('Video.js 10 播放会话', () => {
+  it('非安全上下文（局域网 http）没有 crypto.randomUUID，也能挂载并给容器一个 id', () => {
+    const real = globalThis.crypto;
+    vi.stubGlobal('crypto', { getRandomValues: real.getRandomValues.bind(real) });
+    try {
+      expect(typeof crypto.randomUUID).toBe('undefined');
+      const { player } = mounted();
+      expect(player.el().id).toMatch(/^peach-player-[0-9a-f-]{36}$/);
+      player.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('片源交给异步 adapter 后立即播放，原生 play 使用已挂载的片源', async () => {
     const { video, player, media } = mounted();
     Object.defineProperty(media, 'source', { set: (value: { src: string }) => {

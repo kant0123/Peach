@@ -72,11 +72,12 @@ function localizeServerText(source: string): string {
       return part === undefined ? whole : (jaServerCatalog[part] ?? part);
     });
   }
-  // 「A、B、C」这样用顿号串起来的名称列表：逐项换，至少有一项换成译文才算命中。
-  if (source.includes('、')) {
-    const parts = source.split('、');
-    const translated = parts.map((part) => jaServerCatalog[part] ?? part);
-    if (translated.some((part, index) => part !== parts[index])) return translated.join('、');
+  // 「A、B、C」「A · B」「标题：内容」这样用分隔符串起来的句子：逐段换，至少有一段换成译文才算命中。
+  for (const separator of ['、', ' · ', '：']) {
+    if (!source.includes(separator)) continue;
+    const parts = source.split(separator);
+    const translated = parts.map(localizeServerText);
+    if (translated.some((part, index) => part !== parts[index])) return translated.join(separator);
   }
   return source;
 }

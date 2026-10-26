@@ -217,6 +217,8 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
       actions.toggleSelection(item.id, event.shiftKey);
       return;
     }
+    // 封面上的透明链接：左键由卡片自己打开详情，不让浏览器整页跳转。
+    if (target.closest('[data-media-link]')) { event.preventDefault(); onOpen(item, el); return }
     if (target.closest('[data-open]')) { onOpen(item, el); return }
     const entity = target.closest<HTMLElement>('[data-entity-kind]');
     if (entity && el.contains(entity)) {
@@ -235,6 +237,8 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
       {artwork.html
         ? <ArtSlot artwork={artwork} identity={identity} relayout={(root) => relayoutCovers(root, size)} />
         : <span data-media-nopic="">{t('无预览')}</span>}
+      {/* 封面上盖一层透明链接：右键得到「在新标签页中打开链接」，而不是「图片」的菜单；普通左键仍走卡片的点击处理。 */}
+      {!selectMode && item.disposal !== 'trash' ? <a data-media-link="" href={`/assets/${item.id}`} tabIndex={-1} aria-hidden="true" draggable={false} /> : null}
       <div data-media-badge="" dangerouslySetInnerHTML={{ __html: helpers.badgeHtml(item.location || '', item.cost || '') }} />
       <span data-media-check=""><Icon name="check" /></span>
       <span data-media-trash-mark=""><Icon name="trash" /><b>{t('回收站')}</b></span>
