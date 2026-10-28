@@ -28,10 +28,11 @@ LOGGER = logging.getLogger(__name__)
 CONTAINERS = frozenset({b"moov", b"trak", b"mdia", b"minf", b"stbl", b"edts"})
 #: 头部盒子加起来的上限；超过这个数就不是我们认识的片源，宁可不修。
 HEADER_LIMIT = 64 << 20
-#: 解一遍片子的时限下限，以及按片长放宽的倍数。1080p60 在 4 核机器上忙时实测约
-#: 0.11 倍片长（300 秒内容 33 秒），两个半小时的片子要十几分钟，固定时限会把长片全判成修不了。
+#: 解一遍片子的时限下限，以及按片长放宽的倍数。1080p60 在 4 核机器上实测空闲约 0.11 倍
+#: 片长，与媒体整理、全量测试同时跑时一部 9308 秒的片子用了 3349 秒（约 0.36 倍）。
+#: 固定时限会把长片全判成修不了，倍数按忙时实测再留足余量。
 PROBE_TIMEOUT_SECONDS = 900
-PROBE_SECONDS_PER_MEDIA_SECOND = 0.5
+PROBE_SECONDS_PER_MEDIA_SECOND = 1.0
 SIDECAR_MAGIC = b"PEACHMP4\x01"
 SIDECAR_SUFFIX = ".mp4hdr"
 

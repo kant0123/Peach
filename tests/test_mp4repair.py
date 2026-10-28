@@ -211,8 +211,8 @@ class Mp4HeaderRepairTests(unittest.TestCase):
             return mp4repair._Box(b"moov", None, [mp4repair._Box(b"mvhd", payload, [])])
 
         self.assertEqual(mp4repair._probe_timeout(mvhd(60)), mp4repair.PROBE_TIMEOUT_SECONDS)
-        self.assertEqual(mp4repair._probe_timeout(mvhd(9300)),
-                         9300 * mp4repair.PROBE_SECONDS_PER_MEDIA_SECOND)
+        self.assertGreaterEqual(mp4repair._probe_timeout(mvhd(9300)), 9300 * 0.36 * 2,
+                                "忙时实测 0.36 倍片长，时限至少要留一倍余量")
 
     def test_the_decode_runs_with_the_deadline_it_was_given(self):
         seen = {}
