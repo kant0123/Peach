@@ -30,12 +30,15 @@ def minimal_mp4(
     keyframe_every: int,
     composition_offsets: bool = False,
     edit_list: tuple[int, int] | None = None,
+    moov_last: bool = False,
+    trailer: bytes = b"",
 ) -> bytes:
     """够 `peach.mp4index` 解析关键帧、够 `peach.mp4repair` 重建头的最小 MP4。
 
     `composition_offsets` 决定视频轨里有没有 `ctts`。有 B 帧的片源缺了这张表，容器
     声明的显示时刻就是解码顺序，浏览器会把倒着走的帧全丢掉。
     `edit_list` 是 `(段长, media_time)`，给不出就不写 `edts`。
+    `moov_last` 把 `moov` 放到 `mdat` 后面，`trailer` 是接在文件最末的字节。
     """
     duration = samples * sample_delta
     mvhd = box(b"mvhd", struct.pack(">IIIII", 0, 0, 0, MOVIE_TIMESCALE, duration)
@@ -55,14 +58,20 @@ def minimal_mp4(
     stsc = box(b"stsc", struct.pack(">IIIII", 0, 1, 1, 1, 1))
     stsz = box(b"stsz", struct.pack(">III", 0, SAMPLE_SIZE, samples))
 
-    def head(chunk_start: int) -> bytes:
+    ftyp = box(b"ftyp", b"isom" + bytes(8))
+    mdat_header = struct.pack(">I", samples * SAMPLE_SIZE + 8) + b"mdat"
+
+    def moov(chunk_start: int) -> bytes:
         stco = box(b"stco", struct.pack(">II", 0, samples) + b"".join(
             struct.pack(">I", chunk_start + index * SAMPLE_SIZE) for index in range(samples)))
         stbl = box(b"stbl", stts + stss + ctts + stsc + stsz + stco)
         mdia = box(b"mdia", mdhd + hdlr + box(b"minf", stbl))
-        return (box(b"ftyp", b"isom" + bytes(8))
-                + box(b"moov", mvhd + box(b"trak", tkhd + edts + mdia))
-                + struct.pack(">I", samples * SAMPLE_SIZE + 8) + b"mdat")
+        return box(b"moov", mvhd + box(b"trak", tkhd + edts + mdia))
+
+    if moov_last:
+        start = len(ftyp) + len(mdat_header)
+        return ftyp + mdat_header + sample_bytes(samples) + moov(start) + trailer
 
     # 块偏移是文件内的绝对位置，得先知道头有多长；条目数固定，两遍长度必然相同。
-    return head(len(head(0))) + sample_bytes(samples)
+    start = len(ftyp) + len(moov(0)) + len(mdat_header)
+    return ftyp + moov(start) + mdat_header + sample_bytes(samples) + trailer
