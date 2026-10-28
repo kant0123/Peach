@@ -163,6 +163,17 @@ describe('读数卡', () => {
     expect(server.unknown).toEqual([]);
   });
 
+  it('首屏不等垃圾文件读数：它还在算时整页已经画出，那一张卡自己等', async () => {
+    let answer: (value: unknown) => void = () => {};
+    const pending = new Promise((resolve) => { answer = resolve });
+    const { host } = await openPage(withRoots, { '/api/ads?limit=1': () => pending });
+    expect(entry(host, 'trash')?.textContent).toContain('9 项在回收站');
+    expect(entry(host, 'ads')?.textContent).not.toContain('个待判断');
+    answer({ pending_total: 5, dismissed_total: 2, counts: { video: 4, url: 1 } });
+    await settle();
+    expect(entry(host, 'ads')?.textContent).toContain('5 个待判断');
+  });
+
   it('一张卡取不到只把那一张写成「读取失败」', async () => {
     const { host } = await openPage(withRoots, { '/api/review?counts=1': failWith(500) });
     expect(entry(host, 'review')?.textContent).toContain('读取失败');

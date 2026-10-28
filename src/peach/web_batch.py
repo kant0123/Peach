@@ -68,6 +68,9 @@ BATCH_LABELS = {
     "region": "批量判定产地",
 }
 
+#: 垃圾评分读到的账本表（`junk.scored_candidates`）：资产本身与用户确认不是垃圾的决定。
+JUNK_TABLES = ("asset", "review_decision")
+
 
 def q_ads(contract: WebContract, limit=200, offset=0, kind="", status="pending"):
     """疑似垃圾复核队列 —— **不自动删**，只排队让人看证据确认。
@@ -104,8 +107,10 @@ def q_ads(contract: WebContract, limit=200, offset=0, kind="", status="pending")
         raise ValueError("invalid junk kind")
     if status not in {"pending", "dismissed"}:
         raise ValueError("invalid junk status")
+    # 判据只读资产与复核决定两张表。整库评分在大库上要十几秒，后台任务写别的表时
+    # 不该让它重算；同时打开的几个请求也共用这一次计算。
     out, dismissed_ids = contract.cached_until_changed(
-        "junk-scored", lambda: _scored_junk(contract))
+        "junk-scored", lambda: _scored_junk(contract), tables=JUNK_TABLES)
     pending = [item for item in out if item["id"] not in dismissed_ids]
     dismissed = [item for item in out if item["id"] in dismissed_ids]
     pool = dismissed if status == "dismissed" else pending
