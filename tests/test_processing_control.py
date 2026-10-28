@@ -440,6 +440,25 @@ class ProcessingControlTests(unittest.TestCase):
             checkpoint('frame')
             self.assertEqual(control.mode, 'high')
 
+    def test_installation_check_runs_at_refresh_cadence(self):
+        from peach.jobs import JobPaused
+        from peach import update_tasks
+        control = control_for(self.config)
+        clock = [100.0]
+        with patch('peach.processing_control.time.monotonic', side_effect=lambda: clock[0]), \
+                patch('peach.update_tasks.is_pausing', wraps=update_tasks.is_pausing) as pausing, \
+                control.bind('one', publish=lambda **_: None, active=lambda: True, db_path=self.db, mode='high'):
+            for _ in range(1000):
+                checkpoint('scan')
+            self.assertEqual(pausing.call_count, 1)
+            token = update_tasks.reserve(self.db)
+            try:
+                clock[0] += 0.6
+                with self.assertRaises(JobPaused):
+                    checkpoint('scan')
+            finally:
+                update_tasks.release(self.db, token)
+
     def test_high_history_is_normalized_for_every_initial_intensity(self):
         self.seed()
         control = control_for(self.config)
@@ -497,9 +516,9 @@ class ProcessingControlTests(unittest.TestCase):
         config = PeachConfig(self.root, self.root / 'config.toml', present=True,
                              locations={'local': ('R:\\Media', 'R:\\Other')})
         def scan(*_args, **kwargs):
-            kwargs['progress'](1, 10)
-            kwargs['progress'](2, 30)
-            return SimpleNamespace(files=2, total_bytes=30, new_ids=[])
+            kwargs['progress'](1, 10, 1)
+            kwargs['progress'](2, 30, 1)
+            return SimpleNamespace(files=2, total_bytes=30, new_ids=[7], added=1)
         with patch('peach.library_processing.scan_location', side_effect=scan), \
                 patch('peach.library_processing._online_source_root', return_value=self.root), \
                 patch('peach.library_processing._ffprobe_path', return_value=None), \
@@ -511,5 +530,6 @@ class ProcessingControlTests(unittest.TestCase):
         discovering = [row for row in reports if row.get('current_action') == 'scanning_files']
         self.assertEqual([row['scanned'] for row in discovering], [1, 2, 3, 4])
         self.assertEqual([row['scanned_bytes'] for row in discovering], [10, 30, 40, 60])
+        self.assertEqual([row['added'] for row in discovering], [1, 1, 2, 2])
         self.assertTrue(all(row['total'] == 0 for row in discovering))
-        self.assertEqual((result.scanned, result.scanned_bytes), (4, 60))
+        self.assertEqual((result.scanned, result.scanned_bytes, result.added), (4, 60, 2))

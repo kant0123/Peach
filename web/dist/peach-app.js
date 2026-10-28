@@ -45078,7 +45078,7 @@ function eSe(e) {
 	return e.current_asset_name ? `当前：${e.current_asset_name} · ${t}${n}` : t + n;
 }
 function tSe(e) {
-	let t = e.total ? `${XA(e.checked, e.total)} 项` : e.current_action === "scanning_files" || e.stage === "扫描文件" ? `已发现 ${(e.scanned || 0).toLocaleString()} 个文件` : "";
+	let t = e.total ? `${XA(e.checked, e.total)} 项` : e.current_action === "scanning_files" || e.stage === "扫描文件" ? `已检查 ${(e.scanned || 0).toLocaleString()} 个文件，新增 ${(e.added || 0).toLocaleString()} 个` : "";
 	return eSe(e) + (t ? ` · ${t}` : "");
 }
 function nSe(e) {
@@ -57171,7 +57171,7 @@ var aOe = "这一项耗时较长，暂时没有新进展。任务结束后可以
 	if (!t && !n && !r && !i) return "";
 	let a = [`补齐女优资料：别名 ${t} 个，头像 ${n} 张`];
 	return r && a.push(`${r} 个同名冲突交回人工`), i && a.push(`${i} 张头像未取得`), `${a.join("，")}。`;
-}, sOe = (e) => e.requested_stage === "previews" ? `已生成 ${e.previews || 0} 部视频预览。` : `已扫描 ${e.scanned || 0} 个文件，识别 ${e.identified || 0} 个番号，整理 ${e.candidates || 0} 组资料结果，自动保存 ${e.auto_applied || 0} 条。` + (e.previews ? `已生成 ${e.previews} 部视频预览。` : "") + oOe(e);
+}, sOe = (e) => e.requested_stage === "previews" ? `已生成 ${e.previews || 0} 部视频预览。` : `已扫描 ${e.scanned || 0} 个文件，新增 ${e.added || 0} 个，识别 ${e.identified || 0} 个番号，整理 ${e.candidates || 0} 组资料结果，自动保存 ${e.auto_applied || 0} 条。` + (e.previews ? `已生成 ${e.previews} 部视频预览。` : "") + oOe(e);
 function cOe({ state: e, problem: t, settled: n, onRetry: r, toast: i }) {
 	let a = nSe(e), o = e.status === "failed" && !!e.retryable_asset_ids?.length, s = $xe(e.notes || {}), c = ZP();
 	return /* @__PURE__ */ (0, C.jsxs)("div", {

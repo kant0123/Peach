@@ -155,6 +155,16 @@ class ProcessingControl:
         self.next_work = {}
         self.paused_seconds = 0.0
         self.reloaded_at = 0.0
+        self.maintenance_checked_at = None
+
+    def _check_maintenance(self):
+        """安装维护预约要持互斥文件锁读盘，一次约数毫秒；扫描逐个文件过停点，按刷新节奏查。"""
+        from .update_tasks import check_pause
+        now = time.monotonic()
+        if self.maintenance_checked_at is not None and now - self.maintenance_checked_at < 0.5:
+            return
+        check_pause(self.db_path)
+        self.maintenance_checked_at = now
 
     def refresh(self, force=False):
         with self.lock:
@@ -201,6 +211,7 @@ class ProcessingControl:
                 self.mode = valid_mode(mode)
             self.publish, self.active, self.db_path = publish, active, db_path
             self.next_work.clear()
+            self.maintenance_checked_at = None
             self._save()
         token = CURRENT.set(self)
         try:
@@ -210,10 +221,9 @@ class ProcessingControl:
             self.publish = None
 
     def checkpoint(self, kind='work'):
-        from .update_tasks import check_pause
         started = None
         while True:
-            check_pause(self.db_path)
+            self._check_maintenance()
             self.refresh()
             if not self.active():
                 raise InterruptedError('处理任务已停止')

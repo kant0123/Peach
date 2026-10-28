@@ -120,7 +120,7 @@ it('启动只提交一次，进度用 GET 读回来，完成后给出回执与�
     { status: 'idle' },
     (method) => method === 'POST'
       ? { status: 'running', job_id: 'one' }
-      : { status: 'complete', job_id: 'one', scanned: 9, identified: 4, candidates: 2 },
+      : { status: 'complete', job_id: 'one', scanned: 9, added: 3, identified: 4, candidates: 2 },
   );
   const host = await mount(card({ toast }));
   await click(buttonNamed('同步媒体库', host));
@@ -131,7 +131,7 @@ it('启动只提交一次，进度用 GET 读回来，完成后给出回执与�
   const receipt = host.querySelector('[role="status"]');
   expect(receipt?.textContent).toContain('处理完成');
   expect(receipt?.textContent).toContain(
-    '已扫描 9 个文件，识别 4 个番号，整理 2 组资料结果，自动保存 0 条。');
+    '已扫描 9 个文件，新增 3 个，识别 4 个番号，整理 2 组资料结果，自动保存 0 条。');
   // 这一趟没补任何女优资料，回执里就不出现那句话。
   expect(receipt?.textContent).not.toContain('补齐女优资料');
 });
@@ -486,9 +486,11 @@ it('处理较慢时各任务面显示等待进展，不沿用旧估时', async (
   }
 });
 
-it('扫描总量未知时显示已发现文件数，已知阶段显示完成数', () => {
-  expect(processingLine({ status: 'running', stage: '扫描文件', scanned: 12345 }))
-    .toBe('扫描文件 · 已发现 12,345 个文件');
+it('扫描总量未知时显示已检查与新增文件数，已知阶段显示完成数', () => {
+  expect(processingLine({ status: 'running', stage: '扫描文件', scanned: 12345, added: 1200 }))
+    .toBe('扫描文件 · 已检查 12,345 个文件，新增 1,200 个');
+  expect(processingLine({ status: 'running', stage: '扫描文件', scanned: 25520 }))
+    .toBe('扫描文件 · 已检查 25,520 个文件，新增 0 个');
   expect(processingLine({ status: 'paused', checked: 38, total: 100 })).toBe('已暂停 · 38 / 100 项');
 });
 

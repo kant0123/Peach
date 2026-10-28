@@ -151,19 +151,25 @@ class PosixShapeTests(_ScanCase):
         (self.media / saved['cursor']).write_bytes(b'changed after checkpoint')
         progress = []
         result, _ = self._scan('R:\\media', resume_state=saved,
-                               progress=lambda count, size: progress.append((count, size)), **options)
+                               progress=lambda count, size, added: progress.append((count, size)), **options)
         self.assertEqual((result.files, result.total_bytes), (3, 14))
         self.assertTrue(all(count >= 1 for count, _ in progress))
         self.assertEqual(len(self._paths()), 3)
 
-    def test_structured_progress_reports_discovered_files_and_bytes(self):
+    def test_structured_progress_reports_checked_and_added_files(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (str(self.media),)},
+                       windows=False)
         progress = []
-        result, _ = self._scan('R:\\media', declared_roots={'local': ('R:\\media',)},
-                               mounts={'local': (str(self.media),)}, windows=False,
-                               progress=lambda files, size: progress.append((files, size)))
+        result, _ = self._scan('R:\\media', **options,
+                               progress=lambda files, size, added: progress.append((files, size, added)))
         self.assertEqual(progress[0][0], 1)
-        self.assertEqual(progress[-1], (3, 14))
-        self.assertEqual(progress[-1], (result.files, result.total_bytes))
+        self.assertEqual(progress[-1], (3, 14, 3))
+        self.assertEqual(progress[-1][:2], (result.files, result.total_bytes))
+        progress.clear()
+        result, _ = self._scan('R:\\media', **options,
+                               progress=lambda files, size, added: progress.append((files, size, added)))
+        self.assertEqual(progress[-1], (3, 14, 0))
+        self.assertEqual(result.added, 0)
 
     DECLARED = {"local": (r"R:\media",)}
 

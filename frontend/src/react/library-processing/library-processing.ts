@@ -41,6 +41,8 @@ export interface LibraryProcessingData {
   total?: number;
   scanned?: number;
   scanned_bytes?: number;
+  /** 本趟扫描前账本里还没有的文件数。 */
+  added?: number;
   identified?: number;
   candidates?: number;
   auto_applied?: number;
@@ -168,11 +170,11 @@ export function currentLine(state: LibraryProcessingData): string {
     : action + waited;
 }
 
-/** 已知总量显示实际完成数；扫描目录期间显示持续发现的文件数。 */
+/** 已知总量显示实际完成数；扫描目录期间显示已检查的文件数和其中新登记的文件数。 */
 export function processingLine(state: LibraryProcessingData): string {
   const count = state.total ? `${progressText(state.checked, state.total)} 项`
     : state.current_action === 'scanning_files' || state.stage === '扫描文件'
-      ? `已发现 ${(state.scanned || 0).toLocaleString()} 个文件` : '';
+      ? `已检查 ${(state.scanned || 0).toLocaleString()} 个文件，新增 ${(state.added || 0).toLocaleString()} 个` : '';
   return currentLine(state) + (count ? ` · ${count}` : '');
 }
 

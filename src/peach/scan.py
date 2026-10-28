@@ -332,6 +332,8 @@ class ScanResult:
     reattached: int = 0
     #: 本次让几条「想要」标了已入库。
     acquired: int = 0
+    #: 本次扫描前账本里还没有的文件数。
+    added: int = 0
 
     def summary(self) -> str:
         return (f"✓ {self.location}: {self.files:,} 文件 / "
@@ -378,16 +380,31 @@ def _walk(top: Path, pending: list[str] | None = None):
 
 
 class _ScanProgress:
-    """结构化扫描进度按时间节流，首项与最终汇总始终报告。"""
+    """结构化扫描进度按时间节流，首项与最终汇总始终报告。
+
+    回调收 `(已检查文件数, 字节数, 新登记文件数)`；新登记数按已提交的批次计。
+    """
     def __init__(self, callback):
         self.callback = callback
         self.reported_at = 0.0
 
-    def __call__(self, files, total_bytes, *, force=False):
+    def __call__(self, files, total_bytes, added, *, force=False):
         now = time.monotonic()
         if force or files == 1 or now - self.reported_at >= 0.5:
-            self.callback(files, total_bytes)
+            self.callback(files, total_bytes, added)
             self.reported_at = now
+
+
+def _unregistered(connection, location: str, batch: list[tuple]) -> int:
+    """这一批里账本还没有的路径数：走 `(location, path)` 唯一索引，不扫整表。"""
+    paths = [row[1] for row in batch]
+    known = 0
+    for start in range(0, len(paths), 500):
+        chunk = paths[start:start + 500]
+        known += connection.execute(
+            f"SELECT COUNT(*) FROM asset WHERE location=? AND path IN ({','.join('?' * len(chunk))})",
+            (location, *chunk)).fetchone()[0]
+    return len(paths) - known
 
 
 def scan_location(db_path, location, root, **kwargs) -> ScanResult:
@@ -420,7 +437,7 @@ def _scan_location(
     db_path: str | os.PathLike[str], location: str, root: str, *,
     declared_roots: Mapping[str, str], mounts: Mapping[str, str | Path] | None = None,
     report: Callable[[str], None] = print, windows: bool | None = None,
-    progress: Callable[[int, int], None] = lambda files, total_bytes: None,
+    progress: Callable[[int, int, int], None] = lambda files, total_bytes, added: None,
     resume_state: dict | None = None,
     save_checkpoint: Callable[[dict], None] = lambda state: None,
 ) -> ScanResult:
@@ -444,9 +461,16 @@ def _scan_location(
     skipped = previous.get('sidecars', 0)
     tracks = previous.get('subtitles', 0)
     orphans = previous.get('orphan_subtitles', 0)
+    added = previous.get('added', 0)
     video_dirs = set(previous.get('video_dirs', []))
     pending = _pending_directories(previous, walk_root)
     batch: list[tuple] = []
+
+    def upsert():
+        nonlocal added
+        added += _unregistered(connection, location, batch)
+        connection.executemany(_UPSERT, batch)
+        batch.clear()
     # 文件批次提交后保存文件名游标；同目录的配对资料随断点保留。
     def save_directory(directory=None, cursor=None, here=None):
         artwork_parents = {os.path.dirname(value) for value in [*pending, *([directory] if directory else [])]
@@ -454,7 +478,7 @@ def _scan_location(
         video_dirs.intersection_update(artwork_parents)
         save_checkpoint(dict(scan_time=now, pending=list(pending), files=files,
                              total_bytes=total, sidecars=skipped, subtitles=tracks,
-                             orphan_subtitles=orphans, video_dirs=sorted(video_dirs),
+                             orphan_subtitles=orphans, added=added, video_dirs=sorted(video_dirs),
                              current_directory=directory, cursor=cursor, here=dict(here or {})))
     # 写事务只在每批 upsert 到 commit 之间打开，遍历与 stat 都在两次 commit 之间，不持锁。
     # 忙等时长与 `LedgerDatabase.connect` 一致。
@@ -492,11 +516,10 @@ def _scan_location(
                               stat.st_size, mtime, now, now))
                 files += 1
                 total += stat.st_size
-                progress(files, total)
+                progress(files, total, added)
                 if len(batch) >= BATCH_SIZE:
-                    connection.executemany(_UPSERT, batch)
+                    upsert()
                     connection.commit()
-                    batch.clear()
                     save_directory(directory, name, here)
                     report(f"  {time.time() - started:5.0f}s  {files:,} 文件  "
                            f"{total / 1024 ** 4:.2f} TB")
@@ -504,15 +527,14 @@ def _scan_location(
                 ledger_root.joinpath(*relative), here,
                 [name for name in here if medium_of(name) == "video"])
             if batch:
-                connection.executemany(_UPSERT, batch)
-                batch.clear()
+                upsert()
             directory_tracks, directory_orphans = subtitles.record(connection, location, sidecars, now)
             connection.commit()
             tracks += directory_tracks
             orphans += directory_orphans
             save_directory()
         if batch:
-            connection.executemany(_UPSERT, batch)
+            upsert()
         connection.commit()
         # 只有 INSERT 那一支写 `first_seen`，等于本次时刻的就是这一轮新建的行。
         new_ids = tuple(row[0] for row in connection.execute(
@@ -527,8 +549,8 @@ def _scan_location(
     finally:
         connection.close()
     result = ScanResult(location, root, files, total, time.time() - started, gone,
-                        tracks, orphans, skipped, new_ids, reattached, acquired)
+                        tracks, orphans, skipped, new_ids, reattached, acquired, added)
     save_checkpoint({'result': asdict(result)})
-    progress(files, total, force=True)
+    progress(files, total, added, force=True)
     report(result.summary())
     return result
