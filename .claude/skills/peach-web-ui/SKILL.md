@@ -1,12 +1,12 @@
 ---
 name: peach-web-ui
-description: 在新增、修改或复核 Peach 页面、控件、提示、错误、数据面板、响应式布局或视觉样式时使用。
+description: 在新增、修改或复核 Peach 页面、控件、提示、错误、数据面板、响应式布局或视觉样式时，以及发现未译文案时使用。
 ---
 
 # Peach Web UI 复用门槛
 
-最后复核：2026-10-18
-证据来源：现有 UI 契约、`docs/TESTING.md`、2026-09-19 本机会话工具记录、jakubkrehel/skills 与 emilkowalski/skills 摘录、`docs/reference-snapshots/open-claude-ui.md`。
+最后复核：2026-10-29
+证据来源：现有 UI 契约、`docs/TESTING.md`、2026-09-19 本机会话工具记录、jakubkrehel/skills 与 emilkowalski/skills 摘录、`docs/reference-snapshots/open-claude-ui.md`、用户 2026-10-29 关于未译起票的指示。
 
 ## 开工顺序
 
@@ -81,6 +81,17 @@ description: 在新增、修改或复核 Peach 页面、控件、提示、错误
 - 上一次跑完的结果不常态显示。它是那一刻的快照，进页面就铺开会被读成现在的状态，而页面上没有任何东西说它是旧的；只有仍在进行的任务才自动接管页面。
 - Empty State 的标题和说明必须同处组件内；全页空态与上方工具条统一留 16px，不得再套一层空卡片。
 - 任何先请求再重绘整页的入口都必须绑定导航代际；只比较 `location.pathname` 不能防住「离开后快速返回同一路径」的旧响应。
+
+## 未译文案
+
+界面文案经 `t()` 并在 `frontend/src/i18n/ja.ts` 补译，本任务改到的文案当场补齐（规则见 ADR-0114）。
+工作中看到、但不归本任务的未译（日语界面里露出的中文、`ja-server.ts` 没收的服务端句子、
+`untranslated-baseline.txt` 里其实该译的项）不顺手改，在 `kant0123/Peach` 起 issue，标签 `未訳`：
+
+1. 先查重：`gh issue list -R kant0123/Peach --label 未訳 --state open --search "<原文>"`；已有就在原 issue 补出现位置。
+2. 正文写进文件再起票：`gh issue create -R kant0123/Peach --label 未訳 --title "未訳: <原文>" --body-file <文件>`。
+   正文列原文、出现的页面或 `文件:行`、来源（前端字面量或服务端返回）与建议译文；一次发现的多条可合成一张。
+3. 收尾时报告起了哪些 issue 的链接。
 
 ## 验收门槛
 
