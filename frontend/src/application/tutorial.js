@@ -1,6 +1,6 @@
 /* tutorial 域控制器：本域状态与动作，启动由 Application 的生命周期统一安装。 */
 import { cameFromSetup, writeShell } from './../shell/index';
-import { isCurrentPostSetupTutorialRequest, nextPostSetupTutorialRequest, postSetupTutorialCollapsed, postSetupTutorialMarker, postSetupTutorialSignature, postSetupTutorialSkipped, resetPostSetupTutorialState, setPostSetupTutorialCollapsed, setPostSetupTutorialMarker, setPostSetupTutorialSkipped } from '../ui-kit';
+import { isCurrentPostSetupTutorialRequest, nextPostSetupTutorialRequest, postSetupTutorialCollapsed, postSetupTutorialMarker, postSetupTutorialErrorHtml, postSetupTutorialSignature, postSetupTutorialSkipped, resetPostSetupTutorialState, setCollapseRegionOpen, setPostSetupTutorialCollapsed, setPostSetupTutorialMarker, setPostSetupTutorialSkipped } from '../ui-kit';
 import { peachHistory, shellNavigate } from './../history/index';
 import { $, api, icon } from '../core';
 import { navigationState } from './navigation.js';
@@ -47,13 +47,16 @@ export async function syncPostSetupTutorial(){
     root.dataset.tutorialSignature=signature;root.removeAttribute('aria-busy');
     const next=pending[0];
     const collapse=root.querySelector('[data-tutorial-collapse]');
+    const body=root.querySelector('.post-setup-collapse-body');
+    body.inert=postSetupTutorialCollapsed();
+    body.classList.toggle('ui-fcollapse-settled',!body.inert);
     applicationEffects.handler(collapse, 'onclick', ()=>{
       const card=root.querySelector('.post-setup-notification');
       const collapsed=card.dataset.collapsed!=='true';
       card.dataset.collapsed=String(collapsed);setPostSetupTutorialCollapsed(collapsed);
       collapse.setAttribute('aria-expanded',String(!collapsed));
       collapse.setAttribute('aria-label',collapsed?t('展开安装教程'):t('折叠安装教程'));
-      collapse.innerHTML=icon(collapsed?'chevron-up':'chevron-down');
+      setCollapseRegionOpen(body,!collapsed);
     });
     root.querySelectorAll('[data-tutorial-skip]').forEach(button=>applicationEffects.handler(button, 'onclick', ()=>{
       const skippedNow=postSetupTutorialSkipped(),key=button.dataset.tutorialSkip;
@@ -75,10 +78,7 @@ export async function syncPostSetupTutorial(){
     if(!isCurrentPostSetupTutorialRequest(request))return;
     /* 取数失败时这张卡是死的：没有清单，也没有下一步。给一条重试和一个关闭，
        不然它只能一直杵在右下角占着地方。 */
-    root.innerHTML=`<article class="post-setup-notification post-setup-error">${icon('alert')}
-      <div><h2>${t('暂时无法检查安装进度')}</h2><p>${t('切换页面或重新打开后会再检查一次。')}</p>
-      <div class="post-setup-error-actions"><button class="geist-button" type="button" data-tutorial-retry>${t('重试')}</button>
-      <button class="geist-button" type="button" data-tutorial-dismiss>${t('关闭')}</button></div></div></article>`;
+    root.innerHTML=postSetupTutorialErrorHtml(icon('alert'));
     root.removeAttribute('aria-busy');
     applicationEffects.handler(root.querySelector('[data-tutorial-retry]'), 'onclick', ()=>{
       delete root.dataset.tutorialSignature;root.innerHTML='';void syncPostSetupTutorial();
@@ -100,13 +100,12 @@ if(cameFromSetup){
 }
 {
   const clean=new URL(location.href),flag=clean.searchParams.get('agentation');
-  if(flag==='on')localStorage.setItem('peach.agentation','on');
-  if(flag==='off')localStorage.removeItem('peach.agentation');
+  localStorage.removeItem('peach.agentation');
   if(flag!==null){
     clean.searchParams.delete('agentation');
     shellNavigate(clean,{replace:true,state:peachHistory.navigation.location.state});
   }
-  if(localStorage.getItem('peach.agentation')==='on')import('/dev/agentation.js').catch(()=>{});
+  if(flag==='on')import('/dev/agentation.js').catch(()=>{});
 }
 tutorialState.postSetupTutorialTasks = async()=>{
   const {library,scraping,taste,follow,credentials,review}=await api('/api/post-setup-tutorial');
@@ -162,13 +161,15 @@ tutorialState.postSetupTutorialHtml = (tasks,skippedCount,totalCount)=>{
   return `<article class="post-setup-notification" data-collapsed="${collapsed}">
       <header class="post-setup-notification-head">
         <span class="post-setup-notification-icon" aria-hidden="true">${icon('compass')}</span>
-        <div><h2>${t('完成 Peach 的安装教程')}</h2>
-        <p>${t('已处理 {done}/{total} 项。', { done: completeCount, total: totalCount })}</p></div>
-        <button class="post-setup-collapse" type="button" data-tutorial-collapse aria-controls="postSetupTaskList" aria-expanded="${!collapsed}"
-          aria-label="${collapsed?t('展开安装教程'):t('折叠安装教程')}">${icon(collapsed?'chevron-up':'chevron-down')}</button>
+        <div><h2>完成 Peach 的安装教程</h2>
+        <p>已处理 ${completeCount}/${totalCount} 项。</p></div>
+        <button class="post-setup-collapse" type="button" data-tutorial-collapse aria-controls="postSetupCollapseBody" aria-expanded="${!collapsed}"
+          aria-label="${collapsed?t('展开安装教程'):t('折叠安装教程')}">${icon('chevron-down')}</button>
       </header>
+      <div class="post-setup-collapse-body ui-fcollapse" id="postSetupCollapseBody"${collapsed?' hidden':''}>
       <ol class="post-setup-task-list" id="postSetupTaskList">${rows}</ol>
-      <footer><button class="geist-button" type="button" data-tutorial-action="next">${t('继续：{label}', { label: next.label })}</button></footer>
+      <footer><button class="geist-button" type="button" data-tutorial-action="next">继续：${next.label}</button></footer>
+      </div>
     </article>`;
 };
 tutorialState.writePostSetupTutorialDone = async done=>{

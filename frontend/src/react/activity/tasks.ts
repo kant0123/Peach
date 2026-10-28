@@ -3,6 +3,8 @@
  * 分三次取会出现「在跑那段是新的、完成那段是旧的」这种自相矛盾的一屏，所以只有一个
  * queryKey。首屏由 `prefetchTasks` 写进 Query 缓存，组件挂上去读的就是它。 */
 import { apiGet } from '../../api';
+import { fmtSize } from '@peach/legacy/core';
+import { requestErrorMessage } from '../../core/request-error';
 import { queryClient } from '../query';
 import { localizeServer, t } from '../../i18n';
 
@@ -42,12 +44,44 @@ export interface ActivityData {
   finished: TaskRunPayload[];
   /** 「最近完成」这一页后面还有更早的。 */
   finished_has_more?: boolean;
+  /** 自己已结束、后继还在排或在跑的父任务里，不在 `running` 与 `finished` 这一页上的那些。 */
+  working_parents?: TaskRunPayload[];
+  /** 父任务 id → 它直接派出的后继按状态各几条。下发的后继只是一部分，进度与「还在不在跑」看这份。 */
+  followup_counts?: FollowupCounts;
 }
+
+export type FollowupCounts = Record<string, Record<string, number>>;
 
 /** 往前翻的一页：只有「最近完成」，在跑与被挡下的由轮询那一份负责。 */
 export interface FinishedPage {
   finished: TaskRunPayload[];
   finished_has_more: boolean;
+  followup_counts?: FollowupCounts;
+}
+
+/** 几轮派出的后继合在一起数：共几条、结束了几条、还有几条在排或在跑。 */
+export function followupTally(counts: FollowupCounts | undefined, runs: TaskRunPayload[]) {
+  let total = 0, active = 0, failed = 0;
+  for (const run of runs) {
+    for (const [status, count] of Object.entries(counts?.[String(run.id)] || {})) {
+      total += count;
+      if (status === 'pending' || status === 'running') active += count;
+      if (status === 'failed' || status === 'interrupted') failed += count;
+    }
+  }
+  return { total, active, failed, settled: total - active };
+}
+
+/** 同一种任务连着派出的几轮合成一件事：自动修复每分钟派一批，一屏十几张「已完成」卡说的是同一件事。
+ *  每组按最新那一轮排在前面，`runs[0]` 是最新那一轮。 */
+export function foldByKind(rows: TaskRunPayload[]): RunFold[] {
+  const folds = new Map<string, RunFold>();
+  for (const run of rows) {
+    const fold = folds.get(run.task_key);
+    if (fold) fold.runs.push(run);
+    else folds.set(run.task_key, { run, runs: [run] });
+  }
+  return [...folds.values()];
 }
 
 /** 以 `oldest` 为游标取它之前的一页。游标是它的结束时刻加 id，与服务端的排序键一致。 */
@@ -88,26 +122,101 @@ export const TRIGGER_LABELS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   pending: t('排队中'), running: t('进行中'), succeeded: t('已完成'),
-  failed: t('失败'), cancelled: t('已取消'), interrupted: t('被打断'),
+  failed: t('失败'), cancelled: t('已取消'), interrupted: t('意外中断'),
 };
 
 /** 状态的中文名。表里的状态集是封闭的，认不出来只可能是表先改了，那就原样显示。 */
 export const statusLabel = (status: string): string => STATUS_LABELS[status] || status;
 
-/* 摘要里的键来自各域自己的状态字典，是英文标识；能认出来的翻成中文，认不出的原样
-   显示——瞎猜一个中文名比留着英文键更难查。 */
+/* 主摘要使用已定义的中文字段；原始状态字典由技术详情保留。 */
 const SUMMARY_LABELS: Record<string, string> = {
   checked: t('已检查'), total: t('总数'), scanned: t('已扫描'), identified: t('已识别'),
-  candidates: t('资料结果'), covers: t('封面'), changed: t('已改动'), operation: t('操作'),
+  candidates: t('作品资料'), covers: t('封面'), changed: t('已改动'), operation: t('操作'),
   ok: t('取得'), miss: t('未取得'), kept: t('保留'), planned: t('计划'), done: t('已处理'), added: t('新增'),
-  written: t('已写入'), removed: t('已移除'), exit_code: t('退出码'), issue_count: t('问题'),
-  followups: t('派出后继'), followups_duplicate: t('已在排队'), followups_truncated: t('超上限未派'),
-  followups_depth_exceeded: t('超深度未派'), outcome: t('结果'), name: t('档案名称'),
-  matched: t('图库命中'), size: t('尺寸'), source: t('来源'), cover_network: t('封面连不上图片主机'),
-  stage: t('阶段'), error: t('错误'), previews: t('预览'), probed: t('已探测'),
-  auto_applied: t('自动保存'), auto_rejected: t('自动驳回'), performer_aliases: t('女优别名'),
-  performer_avatars: t('女优头像'), performer_profile_conflicts: t('资料冲突'), performer_profile_failed: t('资料失败'),
+  written: t('已保存'), removed: t('已移除'), issue_count: t('需要处理'),
+  followups_duplicate: t('补充任务已在排队'), followups_truncated: t('补充任务超出数量上限'),
+  followups_depth_exceeded: t('补充任务超出层级上限'), name: t('名称'),
+  matched: t('匹配项'), size: t('尺寸'), source: t('来源'), cover_network: t('封面图片连接失败'),
+  probed: t('已读取媒体信息'), previews: t('预览图'), paused_count: t('等待来源恢复'),
+  auto_applied: t('已自动保存'), auto_rejected: t('未采用'), performer_avatars: t('女优头像'),
+  performer_profile_failed: t('女优资料采集失败'), performer_aliases: t('女优别名'),
+  performer_profile_conflicts: t('女优资料待复核'), conflicts: t('待复核冲突'),
+  gone_count: t('链接已失效'), unclear_count: t('链接访问失败'),
+  source_failed: t('来源检查失败'), source_warning: t('来源补查失败'),
+  resolve_failed: t('查找失败'), sources_found: t('找到来源'),
+  warning_count: t('需要留意'), profiles_checked: t('已读取浏览器资料'),
+  missing: t('文件已丢失'), purge: t('可删除记录'), vanish: t('需保留个人记录'),
+  empty: t('空目录'), unreadable: t('无法读取'), cache_files: t('可清理缓存文件'),
+  cache_bytes: t('可清理缓存大小'), bytes_reclaimed: t('已释放空间'),
+  cache_removed: t('已清理缓存文件'), cache_blocked_count: t('缓存清理失败'),
+  purged: t('已删除记录'), vanished: t('已标记文件丢失'), reattached: t('已转移记录'),
+  blocked_count: t('未能删除记录'), dirs_removed: t('已删除空目录'), dir_errors: t('目录清理失败'),
+  marked: t('已标记失效'), recovered: t('复查后可访问'), entities: t('涉及资料'),
+  found: t('发现待修复文件'), repaired: t('已修复'), failed: t('失败'), missing_tool: t('缺少修复工具'),
+  moved: t('已整理文件'), restored: t('已还原'), skipped: t('已跳过'), made: t('已生成预览图'),
+  fetched: t('已取得资料'), updated: t('已更新'), discovered: t('发现作品'), without_code: t('未识别番号'),
+  incomplete: t('资料或封面未取得'),
+  result: t('结果'),
 };
+
+const PROBLEM_COUNTS = [
+  'gone_count', 'unclear_count', 'source_failed', 'source_warning', 'resolve_failed',
+  'warning_count', 'missing', 'unreadable', 'cache_blocked_count', 'blocked_count', 'dir_errors',
+  'failed', 'missing_tool', 'issue_count', 'cover_network', 'performer_profile_failed',
+  'performer_profile_conflicts', 'conflicts', 'paused_count', 'miss', 'incomplete',
+];
+
+/** 这一轮缺了一项能力，结论按退回的旧判据得出。数字为 0 也算问题：没做成的不是那几件，是整件。 */
+const PROBLEM_FLAGS = ['face_match_unavailable'];
+
+/** 完成检查与检查结果有问题是两件事，问题不能被例行折叠隐藏。 */
+export const hasResultProblems = (run: TaskRunPayload): boolean => run.result_summary?.ok === false
+  || Boolean(run.result_summary?.error)
+  || PROBLEM_FLAGS.some((key) => run.result_summary?.[key] === true)
+  || PROBLEM_COUNTS.some((key) => Number(run.result_summary?.[key]) > 0);
+
+export interface TaskIssue { source: number; label: string; provider: string; kind: string; error: string }
+
+/** 问题明细绑定本轮快照，当前来源状态由对应管理页查看。 */
+export function taskIssues(run: TaskRunPayload): TaskIssue[] {
+  const issues = run.result_summary?.issues;
+  return Array.isArray(issues) ? issues.filter((item): item is TaskIssue => !!item
+    && typeof item === 'object' && typeof item.error === 'string' && typeof item.label === 'string') : [];
+}
+
+/** 处理入口只对同一种任务最新那一轮有意义的任务：目标页只显示最新一轮，更早的失败已经被后来的结果取代。
+ *  扫描与采集卡片上的问题清单与「重试未完成项」只认最新一轮的失败集合。 */
+const LATEST_ONLY = new Set(['library-processing']);
+
+export function problemDestination(run: TaskRunPayload, latest = true): { href: string; label: string } | null {
+  if (!hasResultProblems(run) && run.status !== 'failed') return null;
+  if (LATEST_ONLY.has(run.task_key) && !latest) return null;
+  const targets: Record<string, [string, string]> = {
+    'link-check': ['/data-cleanup#link-manager', t('查看有问题的链接')],
+    'link-prune': ['/data-cleanup#link-manager', t('查看有问题的链接')],
+    // 「需要处理」不收这里的可重试项：问题清单有几百项，先看清单再在那张卡上重试。
+    'library-processing': ['/data-cleanup#libraryProcessing', t('查看未完成项')],
+    'follow-check': ['/subscriptions', t('查看关注来源')],
+    'feed-check': ['/subscriptions', t('查看订阅源')],
+    'follow-resolve': ['/subscriptions?tab=add', t('查看来源查找')],
+    'resource-scan': ['/data-cleanup#resource-sync', t('查看资源同步')],
+    'resource-apply': ['/data-cleanup#resource-sync', t('查看资源同步')],
+    'media-repair': ['/data-cleanup#mediaRepair', t('查看媒体修复')],
+    'taste-refresh': ['/taste', t('查看口味数据来源')],
+  };
+  const target = targets[run.task_key];
+  return target ? { href: target[0], label: target[1] } : null;
+}
+
+/** `LATEST_ONLY` 里每种任务最新那一轮的 id。后继不算：它们挂在父任务下，不是这种任务的一轮。 */
+export function latestOfKind(rows: TaskRunPayload[]): Set<number> {
+  const newest = new Map<string, number>();
+  for (const row of rows) {
+    if (LATEST_ONLY.has(row.task_key) && !row.followup_key
+        && row.id > (newest.get(row.task_key) ?? 0)) newest.set(row.task_key, row.id);
+  }
+  return new Set(newest.values());
+}
 
 /** 把一批任务按 `parent_run_id` 归到各自的父任务下。没有父的那些留在外面。 */
 export function groupFollowups(rows: TaskRunPayload[]): Map<number, TaskRunPayload[]> {
@@ -151,6 +260,7 @@ export function foldRoutine(rows: TaskRunPayload[],
 /** 按时跑完、什么也没发生的一轮：定时触发、成功、没有新增也没派后继。 */
 export const isRoutine = (run: TaskRunPayload) => run.trigger === 'scheduled'
   && run.status === 'succeeded' && !run.error
+  && !hasResultProblems(run)
   && !(Number(run.result_summary?.added) > 0) && !(Number(run.result_summary?.followups) > 0);
 
 export const isActive = (run: TaskRunPayload) => run.status === 'pending' || run.status === 'running';
@@ -160,10 +270,12 @@ export const isActive = (run: TaskRunPayload) => run.status === 'pending' || run
 export function followupDetail(row: TaskRunPayload): string {
   const prefix = `${row.task_label}：`;
   const label = row.progress_label || '';
-  const item = label.startsWith(prefix) ? label.slice(prefix.length) : label === row.task_label ? '' : label;
+  const item = String(row.result_summary?.name || '')
+    || (label.startsWith(prefix) ? label.slice(prefix.length) : label === row.task_label ? '' : label);
   const total = row.progress_total || 0;
-  const tail = errorHeadline(row.error) || summaryText(row.result_summary)
-    || (isActive(row) && total > 0 ? t('{value} 项', { value: progressText(row.progress_current, total) }) : '');
+  const { name: _name, ...result } = row.result_summary || {};
+  const tail = readableErrorHeadline(row.error) || summaryText(result)
+    || (isActive(row) && total > 0 ? t('{progressText} 项', { progressText: progressText(row.progress_current, total) }) : '');
   return [item, tail].filter(Boolean).join(' · ');
 }
 
@@ -194,6 +306,37 @@ export function errorHeadline(text: string | null | undefined): string {
   return /^Traceback \(most recent call last\)/.test(lines[0]!) ? lines[lines.length - 1]! : lines[0]!;
 }
 
+/** 异常类型和原始堆栈由详情保留，摘要说明实际原因。 */
+export function readableErrorHeadline(text: string | null | undefined): string {
+  const head = errorHeadline(text);
+  const technical = head.match(/^(?:[\w.]*Error|Exception):\s*(.*)$/);
+  if (!technical) return head;
+  return requestErrorMessage(technical[1]);
+}
+
+const OUTCOME_LABELS: Record<string, string> = {
+  partial: t('处理已结束，部分项目需处理'), complete: t('处理完成'), interrupted: t('处理已中断'),
+  '没有新写法': t('未发现新别名'), '已装上': t('已保存资料图片'),
+  '已装着认得准的小图': t('已保留身份核对通过的小尺寸图片'),
+  '档案已不存在': t('资料记录已不存在'), '资料未过期': t('现有资料仍在有效期内'),
+  '图太小': t('图片分辨率不足'), '官网未取得': t('未取得厂牌官网信息'),
+  '两站都没有作品一览': t('两个来源均未提供作品列表'),
+  '哪一站都没对上她': t('未找到与该人物相符的资料页'),
+  '两站都没对上她': t('两个来源均未找到与该人物相符的资料页'),
+  '三站都没对上她': t('三个来源均未找到与该人物相符的资料页'),
+  '已有身份': t('已有创作者分类'), '已变': t('资料已被其他操作修改，本次未保存'),
+};
+const SOURCE_NAMES: Record<string, string> = { avwikidb: 'AVWikiDB', javdb: 'JavDB', 'minnano-av': t('みんなのAV') };
+const OPERATION_LABELS: Record<string, string> = {
+  like: t('标记喜欢'), seen: t('标记看过'), later: t('加入稍后看'), dispose: t('移入回收站'),
+  restore: t('还原'), delete: t('永久删除'), 'empty-trash': t('清空回收站'),
+  'dismiss-junk': t('确认不是垃圾'), 'reconsider-junk': t('重新判定垃圾'), region: t('判定产地'),
+};
+const outcomeText = (text: string): string => OUTCOME_LABELS[text] || text
+  .replace(/(avwikidb|javdb|minnano-av) (绑定|写入)/gi, (_, site: string, action: string) =>
+    action === '绑定' ? t('已关联 {value} 资料页', { value: SOURCE_NAMES[site.toLowerCase()] })
+      : t('已保存来自 {value} 的资料', { value: SOURCE_NAMES[site.toLowerCase()] }));
+
 /** 时间戳说成本地的「月-日 时:分」。数据库里存的是 UTC，界面上一律按本机时区读。 */
 export function momentText(stamp: string | null | undefined): string {
   if (!stamp) return '';
@@ -213,12 +356,30 @@ const SUMMARY_HIDDEN = new Set([
   'estimate_file_count', 'estimate_bytes', 'scanned_bytes', 'entity_watermark', 'paused_count',
 ]);
 
-/** 摘要压成一行。只取标量：明细留在各域自己的页面和日志里。 */
-export function summaryText(summary: Record<string, unknown>): string {
+/** 任务结果只展示面向使用者的字段。 */
+export function summaryItems(summary: Record<string, unknown>): string[] {
+  const items = fieldItems(summary);
+  // 「发现问题」要说得出是什么问题。原因已写进结论（「人脸模型不可用：…」「人像闸未生效…」）时不再说一遍。
+  if (summary?.face_match_unavailable === true && !items.some((line) => /不可用|未生效/.test(line))) {
+    items.push(t('人脸模型不可用，未做人脸核对'));
+  }
+  return items;
+}
+
+function fieldItems(summary: Record<string, unknown>): string[] {
   return Object.entries(summary || {})
     .filter(([key, value]) => !SUMMARY_HIDDEN.has(key)
+      && (key in SUMMARY_LABELS || key === 'outcome' || key === 'followups' || key === 'error')
       && (typeof value === 'number' || typeof value === 'string')
-      && String(value) !== '')
-    .map(([key, value]) => `${SUMMARY_LABELS[key] || key} ${typeof value === 'number' ? value.toLocaleString() : localizeServer(value)}`)
-    .join(' · ');
+      && String(value) !== '' && (value !== 0 || key === 'checked' || key === 'total'))
+    .map(([key, value]) => {
+      if (key === 'followups') return t('已安排 {value} 项补充任务', { value: Number(value).toLocaleString() });
+      if (key === 'error') return readableErrorHeadline(String(value));
+      if (key === 'outcome' || key === 'result') return outcomeText(String(value));
+      if (key === 'cache_bytes' || key === 'bytes_reclaimed') return `${SUMMARY_LABELS[key]} ${fmtSize(Number(value))}`;
+      if (key === 'operation') return t('操作：{value}', { value: OPERATION_LABELS[String(value)] || t('批量操作') });
+      return `${SUMMARY_LABELS[key]} ${typeof value === 'number' ? value.toLocaleString() : localizeServer(String(value))}`;
+    });
 }
+
+export const summaryText = (summary: Record<string, unknown>): string => summaryItems(summary).join(' · ');

@@ -26,8 +26,12 @@ export interface LibraryProcessingIssue {
 /** 一趟扫描与采集的快照。字段以 `q_library_processing`（`src/peach/web_library_processing.py`）为准。 */
 export interface LibraryProcessingData {
   metadata_only?: boolean;
-  /** `idle` | `running` | `pausing` | `paused` | `complete` | `failed`。 */
+  /** `idle` | `running` | `pausing` | `paused` | `stopping` | `cancelled` | `complete` | `failed`。 */
   status: string;
+  /** 本轮各阶段已处理完但留有问题，或执行中断。 */
+  outcome?: 'complete' | 'partial' | 'interrupted' | 'cancelled';
+  archived?: boolean;
+  new_asset_count?: number;
   speed_mode?: ProcessingSpeed;
   eta_seconds_min?: number | null;
   eta_seconds_max?: number | null;
@@ -42,14 +46,6 @@ export interface LibraryProcessingData {
   total?: number;
   scanned?: number;
   scanned_bytes?: number;
-  /** 本趟扫描前账本里还没有的文件数。 */
-  added?: number;
-  /** 本趟范围：`changed` 只处理有变化的，`full` 全部重新检查。 */
-  scope?: 'changed' | 'full';
-  /** 差分扫描里修改时间没变、没有重新列出的文件夹数。 */
-  unchanged_directories?: number;
-  /** 差分同步里输入没变、跳过的影片数。 */
-  unchanged_videos?: number;
   identified?: number;
   candidates?: number;
   auto_applied?: number;
@@ -73,40 +69,102 @@ export interface LibraryProcessingData {
   current_asset_name?: string;
   current_action?: string;
   current_started_at?: number;
+  /** 当前这一项正在等的外部来源；`network` 是它这次请求走的那条路。 */
+  current_source?: { key: string; label: string; network?: string };
+  skip_requested?: boolean;
   last_progress_at?: number;
   stalled?: boolean;
   waited_seconds?: number;
   completed_at?: number;
+  traffic?: ProcessingTraffic;
 }
+
+export interface TrafficWorkload {
+  video_files: number; jav_files: number; jav_titles: number;
+  pending_jav_titles?: number; metadata_average_bytes?: number;
+}
+export interface TrafficSource {
+  connection?: 'direct' | 'proxy' | 'system' | 'unknown';
+  workload?: TrafficWorkload;
+  estimated_bytes?: number;
+  key: string; label: string; root: string; location: string; metered: boolean;
+  used_bytes: number; estimated_min_bytes: number; estimated_max_bytes: number;
+  unobserved: string[];
+}
+export interface ProcessingTraffic {
+  disk?: {
+    estimated_bytes: number; temporary_bytes: number; can_fit: boolean | null; cache_unknown: boolean;
+    volumes: { path: string; labels: string[]; free_bytes: number | null; estimated_bytes: number;
+      temporary_bytes: number; reserve_bytes: number; required_bytes: number;
+      shortfall_bytes: number | null; can_fit: boolean | null }[];
+  };
+  unknown_route_estimated_bytes?: number;
+  workload?: TrafficWorkload;
+  inventory?: { complete: boolean; errors: number; token?: string };
+  estimated_bytes?: number; metered_estimated_bytes?: number;
+  used_bytes: number; estimated_min_bytes: number; estimated_max_bytes: number;
+  metered_used_bytes: number; metered_estimated_min_bytes: number; metered_estimated_max_bytes: number;
+  sources: TrafficSource[]; partial: boolean; unknown_files: boolean;
+}
+
+export const fetchProcessingEstimate = (command: LibraryProcessingCommand, signal?: AbortSignal, inventory?: string) => {
+  const params = new URLSearchParams({ estimate: '1', stage: command.stage || 'all' });
+  if (command.asset_ids) params.set('asset_ids', JSON.stringify(command.asset_ids));
+  if (command.scope) params.set('scope', command.scope);
+  if (command.incremental) params.set('incremental', '1');
+  if (inventory) params.set('inventory', inventory);
+  return apiGet<{ traffic: ProcessingTraffic }>(`${LIBRARY_PROCESSING_URL}?${params}`, signal);
+};
 
 /** 一次写操作的请求体：指定处理阶段与影片，或者按任务号重试失败项。 */
 export type ProcessingSpeed = 'low' | 'standard' | 'high';
-/** 一趟同步可选的步骤：扫描文件、检查配套文件、媒体属性与预览、外部资料与封面。 */
-export type SyncStep = 'sources' | 'local' | 'media' | 'collect';
 export interface LibraryProcessingCommand {
+  incremental?: boolean;
+  scope?: 'new';
   stage?: 'scan' | 'collect' | 'previews' | 'metadata';
-  /** 给出时取代 `stage`。 */
-  steps?: SyncStep[];
-  /** `changed` 只处理上次之后有变化的文件夹与影片；缺省为 `full`。 */
-  scope?: 'changed' | 'full';
-  /** 差分范围里是否重试文件没变的上次失败项。 */
-  retry_failed?: boolean;
   asset_ids?: number[];
   job_id?: string;
   retry?: number[];
   speed_mode?: ProcessingSpeed;
 }
 export type ProcessingControlCommand =
-  | { action: 'pause' | 'resume'; job_id: string }
-  | { action: 'set_speed'; speed_mode: ProcessingSpeed; job_id?: string };
+  | { action: 'pause' | 'resume' | 'cancel' | 'archive'; job_id: string }
+  | { action: 'set_speed'; speed_mode: ProcessingSpeed; job_id?: string }
+  | { action: 'skip_current'; job_id: string; asset_id: number };
+
+/** 单部影片问外部来源超过这么久，就把跳过与改走代理摆出来。 */
+export const SLOW_ITEM_SECONDS = 120;
+const SLOW_ACTIONS: Record<string, string> = { fetching_cover: t('封面'), querying_metadata: t('资料') };
+
+export interface SlowItem { what: string; source?: LibraryProcessingData['current_source'] }
+
+/** 跳过入口属于外部资料与封面采集，扫描和生成预览使用各自的任务控制。 */
+export function slowItem(state?: LibraryProcessingData): SlowItem | null {
+  if (state?.status !== 'running' || state.current_asset_id == null) return null;
+  const what = SLOW_ACTIONS[state.current_action || ''];
+  if (!what || (state.waited_seconds || 0) < SLOW_ITEM_SECONDS) return null;
+  return { what, source: state.current_source };
+}
+
+export function slowItemText({ what, source }: SlowItem): string {
+  const who = t('{value}迟迟没有返回{what}', { value: source?.label ? `${source.label} ` : t('外部来源'), what });
+  return t('{who}。可以先跳过这部，任务结束后再重试。', { who });
+}
 
 /** 暂停中的任务仍占用同一份处理范围，可继续并持续读取状态。 */
 export const processingActive = (state?: LibraryProcessingData) =>
-  !!state && ['running', 'pausing', 'paused'].includes(state.status);
+  !!state && ['running', 'pausing', 'paused', 'stopping'].includes(state.status);
+
+export const processingHasPartialResult = (state?: LibraryProcessingData) =>
+  state?.status === 'failed' && state.outcome === 'partial';
+
+export const PARTIAL_RESULT_TEXT = t('已入库的视频可在全部内容中浏览，未完成项可单独重试。');
+export const ALL_CONTENT_URL = '/?loc=&thumb=0';
 
 /** 时间向分钟取整；区间两端始终使用同一单位。 */
 export function remainingTime(state: LibraryProcessingData): string {
   if (!processingActive(state)) return '';
+  if (state.status === 'stopping') return t('正在停止，等待当前步骤退出；已取得的结果会保留');
   if (state.status === 'paused') return t('已暂停，继续后更新预估');
   if (state.status === 'pausing') return t('正在暂停，当前步骤结束后暂停');
   if (state.stalled) return t('等待当前文件响应，剩余时间待更新');
@@ -156,6 +214,7 @@ const ACTION_LABELS: Record<string, string> = {
   reading_local_cover: t('读取配套图片'),
   querying_metadata: t('查询外部资料'),
   fetching_cover: t('采集缺失封面'),
+  skipped: t('已跳过'),
   generating_preview: t('生成视频预览'),
   writing_candidates: t('保存待确认资料'),
 };
@@ -185,14 +244,11 @@ export function currentLine(state: LibraryProcessingData): string {
     : action + waited;
 }
 
-/** 已知总量显示实际完成数；扫描目录期间显示已检查的文件数和其中新登记的文件数。 */
+/** 已知总量显示实际完成数；扫描目录期间显示持续发现的文件数。 */
 export function processingLine(state: LibraryProcessingData): string {
   const count = state.total ? t('{value} 项', { value: progressText(state.checked, state.total) })
     : state.current_action === 'scanning_files' || (state.stage === '扫描文件' || state.stage === localizeServer('扫描文件'))
-      ? t('已检查 {scanned} 个文件，新增 {added} 个', {
-        scanned: (state.scanned || 0).toLocaleString(), added: (state.added || 0).toLocaleString() })
-        + (state.unchanged_directories ? t('，跳过 {value} 个未变化的文件夹', { value: state.unchanged_directories.toLocaleString() }) : '')
-      : '';
+      ? t('已发现 {scanned} 个文件', { scanned: (state.scanned || 0).toLocaleString() }) : '';
   return currentLine(state) + (count ? ` · ${count}` : '');
 }
 
@@ -247,6 +303,6 @@ export function announceCompletion(
     return;
   }
   toast(t('扫描与资料采集已完成：识别 {value} 个番号，', { value: state.identified || 0 })
-    + t('整理 {value} 组资料结果，自动保存 {value2} 条', { value: state.candidates || 0, value2: state.auto_applied || 0 })
+    + t('取得 {value} 组作品资料，自动保存 {value2} 条', { value: state.candidates || 0, value2: state.auto_applied || 0 })
     + (state.previews ? t('，生成 {previews} 部视频预览', { previews: state.previews }) : ''));
 }

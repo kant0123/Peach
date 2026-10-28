@@ -10,6 +10,7 @@ import { spinnerHtml } from '@peach/legacy/ui';
 import { Button, ButtonLink } from '@/components/base/buttons/button';
 import { CheckboxGlyph } from '@/components/base/checkbox/checkbox-glyph';
 import { LEGACY_AVATAR_IMG } from '../components/legacy-avatar';
+import { SelectionActions } from '../components/selection-actions';
 import { busyProps } from '../settings/use-action';
 import type { ReviewAsset, ReviewRow } from './review';
 import { t } from '../../i18n';
@@ -43,8 +44,9 @@ function RequestedSourceImage({ source }: { source: string }) {
             onError={() => setStatus('failed')} />
         : source ? <div className="flex flex-col items-center gap-2">
             {status === 'failed' ? <span className="text-body-2-regular text-text-secondary">{t('未取得来源图片')}</span> : null}
-            <Button variant="secondary" size="small" onClick={() => setStatus('loading')}>
-              {status === 'failed' ? t('重新加载图片') : t('查看来源图片')}
+            <Button variant="secondary" size="small" aria-label={status === 'failed' ? t('立即重试加载来源图片') : undefined}
+              onClick={() => setStatus('loading')}>
+              {status === 'failed' ? t('立即重试') : t('查看来源图片')}
             </Button>
           </div> : <span className="text-body-2-regular text-text-secondary">{t('未取得来源图片')}</span>}
     </div>
@@ -57,9 +59,9 @@ export function OriginAsset(
 ) {
   const name = asset.name || '';
   return (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-surface bg-background-secondary-default p-2">
+    <div className="flex min-w-0 items-center gap-3">
       <button type="button" onClick={() => openItem(asset.id)}
-        className="flex aspect-card-cover w-review-cover-narrow shrink-0 review-tight:w-review-cover cursor-pointer items-center justify-center overflow-hidden rounded-2lg bg-background-tertiary-default outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
+        className="flex aspect-card-cover w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2lg bg-background-tertiary-default outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
         {asset.preview_url
           ? <img src={asset.preview_url} alt="" loading="lazy" className="size-full object-cover" />
           : <span className="text-caption-1-regular text-text-secondary">{t('无封面')}</span>}
@@ -183,15 +185,12 @@ export function AssetPicker(
   };
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="tabular-nums text-body-2-regular text-text-secondary">
-          {t('已选 {size} / {count}', { size: chosen.size, count: assets.length })}
-        </span>
-        <Button variant="ghost" size="small" disabled={locked}
-          onClick={() => onPicked(assets.map((asset) => asset.id))}>{t('全选')}</Button>
-        <Button variant="ghost" size="small" disabled={locked}
-          onClick={() => onPicked([])}>{t('清空')}</Button>
-      </div>
+      <SelectionActions prefix={<span className="tabular-nums text-body-2-regular text-text-secondary">
+          {t('已选 {size} / {length}', { size: chosen.size, length: assets.length })}
+        </span>} actions={[
+          { label: t('全选'), disabled: locked, onPress: () => onPicked(assets.map(asset => asset.id)) },
+          { label: t('清空'), disabled: locked, onPress: () => onPicked([]) },
+        ]} />
       <div className="review-asset-grid gap-1.5">
         {assets.map((asset, index) => {
           const on = chosen.has(asset.id);

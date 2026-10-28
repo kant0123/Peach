@@ -24,6 +24,7 @@ export interface PanelSettings {
   groupCollapse: boolean;
   javImage: string;
   feedAutoScroll: boolean;
+  feedLimit: number;
   feedHideGroupCompilations: boolean;
   feedHideSoloCompilations: boolean;
   feedHideExcerpts: boolean;
@@ -46,7 +47,7 @@ export type SettingsEffect =
   /** 光晕的开关、颜色、恢复默认与松手：侧栏那一层、其余玻璃面和侧栏配色钮一起对齐。 */
   | 'glow'
   | 'batchSize' | 'defaultSort' | 'sortDirection' | 'hoverDelay' | 'seekSeconds'
-  | 'groupCollapse' | 'feedAutoScroll' | 'feedCompilations' | 'miniplayer' | 'javImage'
+  | 'groupCollapse' | 'feedAutoScroll' | 'feedLimit' | 'feedCompilations' | 'miniplayer' | 'javImage'
   | 'searchHistoryLimit';
 
 /** `[值, 显示名, 字形]`，与壳里各张选项表同形。 */

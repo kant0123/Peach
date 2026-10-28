@@ -120,7 +120,7 @@ export const purgeCount = (scan: ResourceScanState) =>
 
 /** 标为已消失那一档的那一句；没有这一档时是空串。 */
 const vanishText = (scan: ResourceScanState) => (scan.vanish
-  ? t('{value} 条带个人记录的标为已消失，记录留着，可在孤儿记录里接到新文件或彻底删除。', { value: count(scan.vanish) })
+  ? t('{count} 条作品记录的文件已丢失，个人记录保留，可在「文件已丢失的记录」中转移个人记录或删除记录。', { count: count(scan.vanish) })
   : '');
 
 /** 不可撤销那一句：有标为已消失那一档时，只说删除的这几样。 */
@@ -138,11 +138,10 @@ export const applyConfirmText = (scan: ResourceScanState) =>
 
 /** 一个来源那张读数卡的脚注。 */
 export const sourceMeta = (source: ResourceSource) => (source.online
-  ? [t('找不到文件 · 共 {value} 项', { value: count(source.total) }),
-    source.vanish ? t('{value} 项带个人记录', { value: count(source.vanish) }) : '',
-    source.empty ? t('空文件夹 {value} 个', { value: count(source.empty) }) : '',
-    source.unreadable ? t('{value} 个目录读取失败，已跳过', { value: count(source.unreadable) }) : ''].filter(Boolean).join(' · ')
-  : t('馆藏中有 {value} 项', { value: count(source.total) }));
+  ? [t('找不到文件 · 共 {count} 项', { count: count(source.total) }),
+    source.vanish ? t('{count} 项带个人记录', { count: count(source.vanish) }) : '',
+    source.empty ? t('空文件夹 {count} 个', { count: count(source.empty) }) : ''].filter(Boolean).join(' · ')
+  : t('馆藏中有 {count} 项', { count: count(source.total) }));
 
 /** 执行结束后留在原地的那几样：文件其实还在、目录这会儿读不了、缓存正被占用。 */
 export function applyLeftovers(out: ResourceApplyState) {
@@ -164,9 +163,9 @@ export function applyLeftovers(out: ResourceApplyState) {
 /** 执行结果那一句。有没处理的几样时接在后面，说重新检查后可再试。 */
 export const applyText = (out: ResourceApplyState, formatSize: (bytes: number) => string) => {
   const { rest } = applyLeftovers(out);
-  const summary = t('已永久删除 {value} 条失效记录和 {value2} 个空文件夹，', { value: count(out.purged), value2: count(out.dirs_removed) })
-    + t('清理 {value} 个缓存，释放 {value2}。', { value: count(out.cache_removed), value2: formatSize(out.bytes_reclaimed || 0) })
-    + (out.vanished ? t('{value} 条带个人记录的已标为已消失，可在孤儿记录里处理。', { value: count(out.vanished) }) : '')
-    + (out.reattached ? t('{value} 条的记录已接到库里的另一个版本。', { value: count(out.reattached) }) : '');
+  const summary = t('已永久删除 {count} 条失效记录和 {count2} 个空文件夹，', { count: count(out.purged), count2: count(out.dirs_removed) })
+    + t('清理 {count} 个缓存，释放 {formatSize}。', { count: count(out.cache_removed), formatSize: formatSize(out.bytes_reclaimed || 0) })
+    + (out.vanished ? t('{count} 条作品记录已标为文件丢失，可在「文件已丢失的记录」中处理。', { count: count(out.vanished) }) : '')
+    + (out.reattached ? t('{count} 条的记录已接到库里的另一个版本。', { count: count(out.reattached) }) : '');
   return rest ? t('{summary}{rest}，重新检查后可再试。', { summary, rest }) : summary;
 };

@@ -23,6 +23,8 @@ import { useBackgroundJob } from '../background-job';
 import type { ScrapingProps } from '../bundle';
 import { LoadingDots } from '../components/loading-dots';
 import { Note } from '../components/note';
+import { StatusLabel } from '../components/status-label';
+import { ConnectionStatus } from '../components/connection-status';
 import { Page } from '../components/page';
 import { SiteMark } from '../components/site-mark';
 import { SEGMENT, SEGMENTED_TRACK, SegmentedRadioGroup as RadioGroup } from '../components/segmented';
@@ -169,7 +171,7 @@ function SourceCard({ source, toast }: { source: Source } & ScrapingProps) {
         </SettingsRow>
       </Rows>
       {source.cooldown_until && source.cooldown_until > Date.now() / 1000 ? (
-        <Note tone="warning">{t('来源正在冷却，截止 {time}', { time: new Date(source.cooldown_until * 1000).toLocaleString() })}</Note>
+        <Note tone="warning"><span className="inline-flex flex-wrap items-center gap-2"><StatusLabel tone="warning">{t('冷却中')}</StatusLabel><span>{t('可在')} {new Date(source.cooldown_until * 1000).toLocaleString('zh-CN')} {t('后重试。')}</span></span></Note>
       ) : null}
       {detailed ? <Stack divided>
         {network === 'peach'
@@ -186,11 +188,8 @@ function SourceCard({ source, toast }: { source: Source } & ScrapingProps) {
             </p>
           : null}
         {source.accepts_cookie && !source.browser ? <>
-          <p className="text-body-2-regular text-text-secondary">
-            {source.cookie_saved
-              ? t('Cookie 已保存；登录是否有效要到抓取时才知道。')
-              : t('需要登录时，任选一种方式提供 Cookie。')}
-          </p>
+          <div className="flex flex-col gap-2"><span className="self-start"><StatusLabel tone={source.cookie_saved ? 'success' : 'neutral'}>{source.cookie_saved ? t('Cookie 已保存') : t('Cookie 未配置')}</StatusLabel></span>
+            <p className="text-body-2-regular text-text-secondary">{source.cookie_saved ? t('登录有效性待验证。') : t('需要登录时，任选一种方式提供 Cookie。')}</p></div>
           {/* 两种方式互斥，交上去的只能是其中一种：切换时把另一种的输入清掉，
               不让看不见的那一份跟着提交。 */}
           <RadioGroup aria-label={t('提供 Cookie 的方式（二选一）')} value={method}
@@ -220,7 +219,7 @@ function SourceCard({ source, toast }: { source: Source } & ScrapingProps) {
         {problem ? <ErrorText>{problem}</ErrorText> : null}
         {results.map((result) => (
           <Note key={result.label} tone={result.ok ? 'success' : 'error'}>
-            {checkText(result, source.label)}
+            <span className="flex flex-col items-start gap-1"><ConnectionStatus tone={result.ok ? 'success' : 'error'}>{result.ok ? t('可访问') : t('连接失败')}</ConnectionStatus><span>{checkText(result, source.label)}</span></span>
           </Note>
         ))}
       </Stack> : null}
@@ -303,7 +302,7 @@ function AmaneBridgeCard({ toast }: ScrapingProps) {
 
   if (!data) {
     return bridge.error
-      ? <Section title="amane"><Stack><Note tone="error">{errorMessage(bridge.error)}</Note></Stack></Section>
+      ? <Section id="amane" title="amane"><Stack><Note tone="error">{errorMessage(bridge.error)}</Note></Stack></Section>
       : null;
   }
   const busy = running || rebuild.isPending || check.isPending;
@@ -311,7 +310,7 @@ function AmaneBridgeCard({ toast }: ScrapingProps) {
     : check.error ? errorMessage(check.error)
     : outcome?.status === 'failed' ? (outcome.error || t('重建未完成')) : '';
   return (
-    <Section title="amane" aside={<ExternalLink href={data.repository} leadingIcon={GitHubMark}>{data.repository}</ExternalLink>}>
+    <Section id="amane" title="amane" aside={<ExternalLink href={data.repository} leadingIcon={GitHubMark}>{data.repository}</ExternalLink>}>
       <FactList>
         <Fact term={t('已安装版本')}>{data.installed_version || t('未安装')}</Fact>
         <Fact term={t('上游最新版本')}>{check.data?.latest ?? t('尚未检查')}</Fact>
@@ -324,10 +323,11 @@ function AmaneBridgeCard({ toast }: ScrapingProps) {
               <p className="text-body-2-regular text-text-secondary">{data.sites.map((site) => site.label).join('、')}</p>
             </Disclosure>
           : null}
-        <Help>
-          {t('已安装版本：{version}。amane（{license}）提供这些内置站点的解析能力。', { version: data.installed_version || t('未安装'), license: data.license })}
-          {t('重新安装会使用 Peach 内置的 {version} 版本，不随上游自动升级。', { version: data.version })}
-        </Help>
+        {data.problem
+          ? <Note tone="error">{data.problem}</Note>
+          : <Help>
+              amane（{data.license}{t('）提供这些内置站点的解析能力。首次需要时，Peach 会自动准备锁定的')} {data.version} {t('版本；安装包内已有可用环境时直接使用。 手动安装也使用此版本，不随上游自动升级。')}
+            </Help>}
         {running ? <LoadingDots label={t('正在重建运行环境')} /> : null}
         {problem ? <Note tone="error">{problem}</Note> : null}
         {outcome?.status === 'complete' ? <Note tone="success">{outcome.result || t('amane 桥已重建')}</Note> : null}
@@ -336,7 +336,8 @@ function AmaneBridgeCard({ toast }: ScrapingProps) {
         <Button variant="secondary" onClick={() => { if (!busy) check.mutate() }} {...busyProps(check.isPending)}>
           {t('检查上游版本')}
         </Button>
-        <Button onClick={() => { if (!busy) rebuild.mutate() }} {...busyProps(running || rebuild.isPending)}>
+        <Button disabled={Boolean(data.problem)} onClick={() => { if (!busy) rebuild.mutate() }}
+          {...busyProps(running || rebuild.isPending)}>
           {data.installed ? t('重新安装') : t('安装')}
         </Button>
       </Footer>

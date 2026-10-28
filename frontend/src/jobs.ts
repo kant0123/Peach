@@ -98,10 +98,10 @@ export function followJobProgress(options: {
         if (tracked) sessionStorage.setItem(storageKey, tracked);
         const current = state.current;
         const attempt = (current?.attempt || 1) > 1
-          ? t(' · 第 {attempt}/{max_attempts} 次尝试{value}', { attempt: current?.attempt, max_attempts: current?.max_attempts, value: current?.retry_in ? t('，{retry_in} 秒后重试', { retry_in: current.retry_in }) : '' }) : '';
+          ? t(' · 第 {value}/{value2} 次尝试{value3}', { value: current?.attempt, value2: current?.max_attempts, value3: current?.retry_in ? t('，{retry_in} 秒后重试', { retry_in: current.retry_in }) : '' }) : '';
         const text = (state.message || (options.title ? options.title + (state.total ? t('：已完成 {value}/{total}', { value: state.checked || 0, total: state.total }) : '') : '') || (state.total
           ? t('{value}：已完成 {value2}/{total} 个来源', { value: state.older ? t('抓取历史') : t('检查更新'), value2: state.checked || 0, total: state.total })
-          : t('正在准备检查任务…')))
+          : t('正在准备检查任务')))
           + (current ? ` · ${current.label || current.provider || ''}${attempt}` : '');
         const content = (state.total || 0) > 0
           ? progress(state.checked || 0, state.total!, text) : loading(text);

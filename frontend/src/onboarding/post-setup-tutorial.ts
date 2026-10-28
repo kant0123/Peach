@@ -5,6 +5,7 @@
    清单完成跟着数据库走（`/api/settings` 的 `postSetupTutorialDone`），
    换台设备打开不会又被教一遍；折叠和逐项跳过是当下这块屏幕的摆法，留在本地。
    三个键、签名和请求代际都收在这里，装配那一侧只管把它们接到 DOM 上。 */
+import { t } from '../i18n';
 export const POST_SETUP_TUTORIAL_KEY='peach.post-setup-tutorial.v1';
 export const POST_SETUP_TUTORIAL_COLLAPSED_KEY='peach.post-setup-tutorial-collapsed.v1';
 export const POST_SETUP_TUTORIAL_SKIPPED_KEY='peach.post-setup-tutorial-skipped.v1';
@@ -42,3 +43,10 @@ export function resetPostSetupTutorialState():void{
   setPostSetupTutorialCollapsed(false);
   setPostSetupTutorialMarker('pending');
 }
+
+/** 取不到清单时那张卡：只有固定文案，关闭在左、立即重试在右；事件仍由装配那一侧接。 */
+export const postSetupTutorialErrorHtml=(alertIcon:string):string=>
+  `<article class="post-setup-notification post-setup-error">${alertIcon}
+      <div><h2>${t('暂时无法检查安装进度')}</h2><p>${t('切换页面或重新打开后会再检查一次。')}</p>
+      <div class="post-setup-error-actions"><button class="geist-button" type="button" data-tutorial-dismiss>${t('关闭')}</button>
+      <button class="geist-button" type="button" data-tutorial-retry>${t('立即重试')}</button></div></div></article>`;

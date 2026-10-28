@@ -78,11 +78,11 @@ export function AccessSettings({ initial, receipt }: AccessSettingsProps) {
                 value={current} onChange={setCurrent} isRequired validationBehavior="aria"
                 isInvalid={Boolean(fields.current_password)} hint={fields.current_password} />
             : null}
-          {editable
+          {editable && !disable
             ? <PasswordPair label={state.mode === 'password' ? t('新访问密码') : t('设置访问密码')}
                 password={password} confirmation={confirmation} onPassword={setPassword} onConfirmation={setConfirmation}
-                disabled={disable} passwordError={fields.password} confirmationError={fields.confirmation}
-                passwordHint={disable ? t('关闭访问密码时无需填写。') : t('至少 8 个字符。保存后其他设备需要重新登录。')} />
+                passwordError={fields.password} confirmationError={fields.confirmation}
+                passwordHint={t('至少 8 个字符。保存后其他设备需要重新登录。')} />
             : null}
           {disable ? <Note tone="warning" title={t('访问范围')}>{t('保存后，能连接到 Peach 的设备将直接访问馆藏。')}</Note> : null}
           {action.error ? <ErrorText>{action.error}</ErrorText> : null}

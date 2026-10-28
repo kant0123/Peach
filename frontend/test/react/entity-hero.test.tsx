@@ -273,7 +273,7 @@ describe('画出什么', () => {
       { id: 1, k: '三上悠亜', has_image: true, image_version: '1727800000' }, { id: 2, k: '河北彩花' },
     ] }) }));
     expect(host.querySelector('[data-related-performer="三上悠亜"] img')?.getAttribute('src'))
-      .toBe('/entity-image?kind=performer&id=1&v=1727800000');
+      .toBe('/entity-image?kind=performer&id=1&thumb=1&v=1727800000');
     expect(host.querySelector('[data-related-performer="河北彩花"] img')).toBeNull();
   });
 });

@@ -7,11 +7,11 @@ import { useQuery } from '@tanstack/react-query';
 import { confirmModal, MEDIA_SOURCE_ICONS } from '@peach/legacy/ui';
 
 import { Button } from '@/components/base/buttons/button';
-import { Select, SelectItem } from '@/components/base/select/select';
+import { Select, SelectItem } from '../components/select';
 
 import { apiSend } from '../../api';
 import { REPAIR_CARD_TEXT } from '../../management';
-import { JOB_RUNNING_POLL_MS } from '../background-job';
+import { useBackgroundJob } from '../background-job';
 import { Fieldset, FieldsetTitle } from '../components/fieldset';
 import { Note } from '../components/note';
 import { Progress } from '../components/progress';
@@ -27,17 +27,22 @@ import { t } from '../../i18n';
 const libraryMark = (icon: string) => MEDIA_SOURCE_ICONS[icon] || icon;
 const replace = (next: MediaRepairState) => queryClient.setQueryData(MEDIA_REPAIR_KEY, next);
 
-export function MediaRepairCard() {
-  const repair = useQuery({
+export function MediaRepairCard({ toast = () => {} }: { toast?(message: string): void }) {
+  const repair = useBackgroundJob<MediaRepairState, string>({
     queryKey: MEDIA_REPAIR_KEY, queryFn: ({ signal }) => fetchMediaRepair(signal),
-    refetchInterval: (query) => (query.state.data?.status === 'running' ? JOB_RUNNING_POLL_MS : false),
+    start: (library) => apiSend<MediaRepairState>(MEDIA_REPAIR_URL, { library, restart: true }),
+    onFinish: (result) => {
+      if (result.status === 'complete' && !result.failed && !result.missing_tool) {
+        toast(result.repaired ? t('已修复 {value} 部视频', { value: result.repaired.toLocaleString() }) : t('已检查媒体库，没有需要修复的视频'));
+      }
+    },
   });
   const choices = useQuery({
     queryKey: REPAIR_LIBRARIES_KEY, queryFn: ({ signal }) => fetchRepairLibraries(signal),
   });
   const [chosen, setChosen] = useState('');
   const action = useAction();
-  const state = repair.data ?? IDLE_REPAIR;
+  const state = repair.job ?? IDLE_REPAIR;
   const libraries = choices.data ?? [];
   const running = state.status === 'running';
 
@@ -53,21 +58,20 @@ export function MediaRepairCard() {
         + t('坏原件改名成同目录的隐藏文件（.文件名.peach-original）留着。')
         + (selected.metered ? t('这个库在计费来源上，每修一部都要把片子完整拉一遍。') : ''),
       confirmLabel: t('修复媒体库'),
-      onConfirm: async () => replace(await apiSend<MediaRepairState>(MEDIA_REPAIR_URL,
-        { library: selected.id, restart: true })),
+      onConfirm: async () => { await repair.start.mutateAsync(selected.id) },
     });
   };
   const stop = () => void action.run('stop',
     (signal) => apiSend<MediaRepairState>(MEDIA_REPAIR_URL, { stop: true }, 'POST', signal), replace);
 
-  const line = statusLine(state);
-  const complete = state.status === 'complete';
-  const problem = action.error || state.error || (repair.error ? t('读不到媒体修复的状态') : '');
+  const outcome = repair.outcome;
+  const line = statusLine(running ? state : outcome ?? IDLE_REPAIR);
+  const problem = action.error || outcome?.error || (repair.query.error ? t('读不到媒体修复的状态') : '');
   return (
     <div className="flex flex-col gap-4">
       <Fieldset layout="split" label={t('媒体修复')} footer={
         <>
-          <Select aria-label={t('媒体库')} className="w-48" selectedKey={selected?.id ?? null}
+          <Select aria-label={t('媒体库')} prefix={t('媒体库')} className="w-48" selectedKey={selected?.id ?? null}
             isDisabled={running || !libraries.length}
             onSelectionChange={(key) => { if (key !== null) setChosen(String(key)); }}>
             {libraries.map((row) => (
@@ -91,11 +95,8 @@ export function MediaRepairCard() {
         </div>
       </Fieldset>
       <div aria-live="polite" className="flex flex-col gap-4 empty:hidden">
-        {complete && !state.repaired && !state.failed
-          ? <Note tone="info" title={t('没有要修的')}>{t('这个库里的片子都能直接播。')}</Note>
-          : null}
-        {complete && state.missing_tool
-          ? <Note tone="warning" title={t('缺少 untrunc')}>{missingToolText(state)}</Note>
+        {outcome?.status === 'complete' && outcome.missing_tool
+          ? <Note tone="warning" title={t('缺少 untrunc')} action={<Button variant="ghost" size="small" onClick={repair.dismiss}>{t('关闭提示')}</Button>}>{missingToolText(outcome)}</Note>
           : null}
         {problem ? <Note tone="error">{problem}</Note> : null}
       </div>

@@ -114,6 +114,7 @@ describe('馆藏卡片与列表', () => {
         assert.equal(requests.at(-1)!.get('browse'), 'folders');
         const first = page.locator('[data-catalog-row]').first();
         const firstId = await first.getAttribute('data-id');
+        await page.locator('#selectMode').click();
         await first.locator('label').click();
         assert.equal(await first.getAttribute('data-board-selected'), 'true');
         await page.getByRole('button', { name: '下一页', exact: true }).click();
@@ -145,7 +146,13 @@ describe('馆藏卡片与列表', () => {
         await pageSizeButton.scrollIntoViewIfNeeded();
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         await pageSizeButton.click();
-        await page.getByRole('option', { name: '每页 10 部', exact: true }).click();
+        try { await page.getByRole('option', { name: '每页 10 部', exact: true }).click({ timeout: 5000 }) }
+        catch (error) {
+          console.info('分页菜单', await pageSizeButton.getAttribute('aria-expanded'),
+            await page.locator('[role="option"]').allTextContents(), await pageSizeButton.boundingBox());
+          await page.screenshot({ path: `../build/agent-verification/pagination-menu-${viewport.name}.png` });
+          throw error;
+        }
         await page.waitForFunction(() => document.querySelectorAll('[data-catalog-row]').length === 10);
         assert.equal(requests.at(-1)!.get('limit'), '10');
         if (!viewport.mobile) {
@@ -153,11 +160,22 @@ describe('馆藏卡片与列表', () => {
             const url = new URL(response.url());
             return url.pathname === '/api/items' && url.searchParams.get('sort') === 'name';
           });
-          await page.getByRole('columnheader', { name: /名称/ }).click();
+          await page.getByRole('columnheader', { name: /^作品/ }).click();
           await namedResponse;
           await page.waitForFunction(() => document.querySelector('[data-catalog-row]')?.getAttribute('data-id') === '9000');
           assert.equal(requests.at(-1)!.get('dir'), 'asc');
         }
+        const durationSort = page.locator('[data-entity-sort="dur"]');
+        await durationSort.scrollIntoViewIfNeeded();
+        const durationResponse = page.waitForResponse(response => {
+          const url = new URL(response.url());
+          return url.pathname === '/api/items' && url.searchParams.get('sort') === 'dur' && url.searchParams.get('dir') === 'desc';
+        });
+        await durationSort.click();
+        await durationResponse;
+        await page.waitForFunction(() => document.querySelector('[data-catalog-row]')?.getAttribute('data-id') === '9000');
+        assert.equal(await durationSort.getAttribute('aria-pressed'), 'true');
+        assert.equal(requests.at(-1)!.get('offset'), '0');
         const measured = await layout(page);
         assert.ok(measured.scrollWidth <= measured.viewportWidth + 1, JSON.stringify(measured));
         assert.deepEqual(opened.problems.filter(line => !line.includes('VIDEOJS')), []);

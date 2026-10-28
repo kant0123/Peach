@@ -9,7 +9,7 @@ import { confirmModal } from '@peach/legacy/ui';
 import { LOC } from '@peach/legacy/core';
 
 import { Button } from '@/components/base/buttons/button';
-import { Select, SelectItem } from '@/components/base/select/select';
+import { Select, SelectItem } from '../components/select';
 
 import { errorMessage } from '../../api';
 import { DataTable, type DataColumn } from '../components/data-table';
@@ -32,32 +32,37 @@ function OrphanActions({ item, toast }: { item: OrphanRecord; toast(message: str
   const [target, setTarget] = useState<number | null>(item.candidates[0]?.id ?? null);
   const attach = useMutation({
     mutationFn: () => attachOrphan(item.id, Number(target)),
-    onSuccess: (data) => { toast(t('记录已接到新文件，批次 {batch}', { batch: data.batch })); void refresh(); },
+    onSuccess: () => {
+      const destination = item.candidates.find((candidate) => candidate.id === target);
+      toast(t('已将「{name}」的个人记录转移到「{value}」', { name: item.name, value: destination?.name ?? t('所选文件') }));
+      void refresh();
+    },
     onError: (error) => toast(errorMessage(error)),
   });
   const purge = useMutation({
     mutationFn: () => purgeOrphan(item.id),
     onSuccess: (data) => {
       toast(data.blocked.length
-        ? t('{name} 的文件又回到盘上，没有删除；下一次扫描会把它接回在库', { name: item.name })
-        : t('已彻底删除 {name}', { name: item.name }));
+        ? t('「{name}」的文件已恢复，记录未删除；下次扫描后恢复为在库状态', { name: item.name })
+        : t('已删除「{name}」的作品记录及个人记录', { name: item.name }));
       void refresh();
     },
   });
   const remove = () => {
     void confirmModal({
-      title: t('彻底删除'),
-      body: t('将删除「{name}」这一条和它带的记录（{value}）。此操作不可撤销。', { name: item.name, value: recordsText(item.records) }),
-      confirmLabel: t('彻底删除'),
+      title: t('删除记录'),
+      body: t('将删除「{name}」的作品记录{value}。此操作不可撤销。', { name: item.name, value: recordsText(item.records) ? t('及其个人记录（{records}）', { records: recordsText(item.records) }) : '' }),
+      confirmLabel: t('删除记录'),
       danger: true,
       onConfirm: () => purge.mutateAsync(),
     });
   };
   const busy = attach.isPending || purge.isPending;
   return (
-    <span className="flex min-w-48 flex-wrap items-center gap-2">
+    <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <Button variant="danger" size="small" {...busyProps(busy)} onClick={remove}>{t('删除记录')}</Button>
         {item.candidates.length
-          ? <Select aria-label={t('把 {name} 的记录接到哪个文件', { name: item.name })} className="w-52" selectedKey={target}
+          ? <Select aria-label={t('选择接收 {name} 个人记录的文件', { name: item.name })} prefix={t('接收')} className="w-52" selectedKey={target}
               onSelectionChange={(key) => { if (key !== null) setTarget(Number(key)) }}>
               {item.candidates.map((candidate) => (
                 <SelectItem key={candidate.id} id={candidate.id} textValue={candidateText(candidate)}>
@@ -65,12 +70,11 @@ function OrphanActions({ item, toast }: { item: OrphanRecord; toast(message: str
                 </SelectItem>
               ))}
             </Select>
-          : <span className="text-text-secondary">{t('没有番号或文件名对得上的文件')}</span>}
-        {item.candidates.length
-          ? <Button size="small" disabled={target === null} {...busyProps(busy)}
-              onClick={() => attach.mutate()}>{t('接到这个文件')}</Button>
           : null}
-        <Button variant="danger" size="small" {...busyProps(busy)} onClick={remove}>{t('彻底删除')}</Button>
+        {item.candidates.length
+          ? <Button variant="primary" size="small" disabled={target === null} {...busyProps(busy)}
+              onClick={() => attach.mutate()}>{t('转移记录')}</Button>
+          : null}
     </span>
   );
 }
@@ -88,9 +92,9 @@ function OrphanIdentity({ item }: { item: OrphanRecord }) {
                   className="absolute inset-0 size-full object-contain" />
               : null}
           </span>
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span title={item.name} className="max-w-56 truncate text-body-regular text-text-primary">{item.name}</span>
-            <small className="max-w-56 truncate text-caption-1-regular text-text-secondary">
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span title={item.name} className="truncate text-body-regular text-text-primary">{item.name}</span>
+            <small className="truncate text-caption-1-regular text-text-secondary">
               {[item.code, LOC[item.location] || item.location].filter(Boolean).join(' · ')}
             </small>
           </span>
@@ -105,22 +109,22 @@ export function OrphanRecordsCard({ toast }: { toast(message: string): void }) {
   const purge = useMutation({
     mutationFn: (ids: number[]) => purgeOrphan(ids),
     onSuccess: (data) => {
-      toast(t('已彻底删除 {purged} 条记录{value}', { purged: data.purged, value: data.blocked.length ? t('，{count} 条文件已恢复，未删除', { count: data.blocked.length }) : '' }));
+      toast(t('已删除 {purged} 条作品记录及其个人记录{value}', { purged: data.purged, value: data.blocked.length ? t('；{blocked} 条文件已恢复，记录未删除', { blocked: data.blocked.length }) : '' }));
       setSelected([]); void refresh();
     },
   });
   const removeSelected = (chosen: OrphanRecord[]) => void confirmModal({
-    title: t('彻底删除所选记录'),
-    body: t('将删除以下 {count} 条作品和它们带的全部记录。此操作不可撤销。', { count: chosen.length }),
+    title: t('删除所选记录'),
+    body: t('将删除以下 {length} 条作品记录及其全部个人记录。此操作不可撤销。', { length: chosen.length }),
     items: chosen.map((item) => item.name),
-    confirmLabel: t('彻底删除所选记录'), danger: true,
+    confirmLabel: t('删除所选记录'), danger: true,
     onConfirm: () => purge.mutateAsync(chosen.map((item) => item.id)),
   });
   const columns: DataColumn<OrphanRecord>[] = [
-    { id: 'item', label: t('作品'), value: (item) => item.name, render: (item) => <OrphanIdentity item={item} /> },
-    { id: 'records', label: t('带的记录'), value: (item) => recordsText(item.records),
-      render: (item) => <span className="block min-w-28">{recordsText(item.records) || t('无个人记录')}</span> },
-    { id: 'target', label: t('接到与操作'), value: (item) => item.candidates.length,
+    { id: 'item', label: t('作品'), width: 480, min: 320, value: (item) => item.name, render: (item) => <OrphanIdentity item={item} /> },
+    { id: 'records', label: t('个人记录'), width: 176, min: 144, value: (item) => recordsText(item.records),
+      render: (item) => <span className="block min-w-0 whitespace-normal wrap-anywhere">{recordsText(item.records) || t('无')}</span> },
+    { id: 'target', label: t('操作'), width: items.some(item => item.candidates.length) ? 360 : 128, min: 128, value: (item) => item.candidates.length,
       render: (item) => <OrphanActions item={item} toast={toast} /> },
   ];
   if (!query.isError && !items.length) return null;
@@ -128,17 +132,17 @@ export function OrphanRecordsCard({ toast }: { toast(message: string): void }) {
     <section id="orphan-records" aria-labelledby="orphan-records-title" className="flex scroll-mt-20 flex-col gap-4">
         {query.isError
           ? <Fieldset layout="stack" labelledBy="orphan-records-title">
-              <FieldsetTitle id="orphan-records-title">{t('孤儿记录')}</FieldsetTitle>
-              <Note tone="error" title={t('孤儿记录读取失败')}>{errorMessage(query.error)}</Note>
+              <FieldsetTitle id="orphan-records-title">{t('文件已丢失的记录')}</FieldsetTitle>
+              <Note tone="error" title={t('读取文件已丢失的记录失败')}>{errorMessage(query.error)}</Note>
             </Fieldset>
           : <DataTable label={t('文件已消失的作品')} items={items} columns={columns}
-              title={t('孤儿记录')} titleId="orphan-records-title" unit={t('条作品')}
-              description={t('这些作品的文件已不在盘上，喜欢、稍后看、播放列表与观看历史都还留着。接到新文件后记录跟过去，旧的这一条删掉。')}
+              title={t('文件已丢失的记录')} titleId="orphan-records-title" unit={t('条作品')}
+              description={t('这些作品的源文件已删除，喜欢、稍后看、播放列表与观看历史仍保留。选择替代文件后，这些记录会转移到该文件，旧作品记录随之删除。')}
               rowId={(item) => String(item.id)} rowLabel={(item) => item.name}
               selected={selected} onSelected={setSelected}
               actions={(chosen) => <Button variant="danger" size="small" disabled={!chosen.length}
                 {...busyProps(purge.isPending)} onClick={() => removeSelected(chosen)}>
-                {t('彻底删除所选（{count}）', { count: chosen.length })}
+                {t('删除所选记录（{length}）', { length: chosen.length })}
               </Button>} />}
     </section>
   );

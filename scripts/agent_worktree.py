@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterable
+from contextlib import nullcontext
 from pathlib import Path
 
 if not __package__:
@@ -151,15 +152,29 @@ def integrate(repo: Path, worker_branch: str, target_branch: str = "main", *,
     folder = test_evidence.evidence_dir(repo)
     folder.mkdir(parents=True, exist_ok=True)
     try:
-        with test_evidence.held(folder / "integration.lock",
-                                branch=worker_branch, root=str(repo)), \
-                test_evidence.held(folder / "full-suite.lock", wait_seconds=lock_timeout,
-                                   scope="integrate", branch=worker_branch, root=str(repo)):
-            return _integrate_locked(repo, worker_branch, target_branch)
+        documents = _documents_only(repo, worker_branch, target_branch)
+        guard = nullcontext() if documents else test_evidence.held(
+            folder / "full-suite.lock", wait_seconds=lock_timeout,
+            scope="integrate", branch=worker_branch, root=str(repo))
+        with guard:
+            with test_evidence.held(folder / "integration.lock",
+                                    branch=worker_branch, root=str(repo)):
+                if documents and not _documents_only(repo, worker_branch, target_branch):
+                    raise WorkspaceError("等待集成期间分支影响面改变；本次未修改分支，请重试")
+                return _integrate_locked(repo, worker_branch, target_branch)
     except test_evidence.Timeout as error:
         raise WorkspaceError(
             f"另一任务正在集成或全量验证（{test_evidence.describe_holder(Path(error.lock_file))}）；"
             "本次未修改分支，请等待后重试") from error
+
+
+def _documents_only(repo: Path, worker_branch: str, target_branch: str) -> bool:
+    """文档沿用选测的显式覆盖；需要运行时验收的 Markdown 仍取得全量锁。"""
+    from . import change_impact
+    base = _git(repo, "merge-base", target_branch, worker_branch).stdout.strip()
+    files = _lines(_git(repo, "diff", "--name-only", f"{base}..{worker_branch}"))
+    return bool(files) and all(change_impact.documentation(path) for path in files) \
+        and test_runner.scopes_for_changes(files)[0] == ("checks",)
 
 
 def _integrate_locked(repo: Path, worker_branch: str,
@@ -346,6 +361,27 @@ def processes(repo: Path) -> dict[str, object]:
     return report
 
 
+def _in_use(path: Path) -> str:
+    """还在用的工作树不回收：返回保留的理由，空串表示可以回收。
+
+    分支已合入、工作区干净，不等于没人在用。2026-10-24 一次 `prune --apply` 回收了一个
+    Claude 会话正开着的工作树：它的分支早已并入 master，被 Git 忽略的 `build/` 里却放着
+    那个会话的协调脚本、几十份测试与流水线日志和复盘报告，`git worktree remove` 连同它们
+    一起删了，没有备份。所以 `build/` 里有文件、或者还有进程在里面（会话、终端、预览服务），
+    一律留着报出来。判断不了有没有进程时也留着：删错了没法撤回。
+    """
+    build = path / "build"
+    if build.is_dir() and any(child.is_file() for child in build.rglob("*")):
+        return "build/ 里还有过程文件（日志、报告、派单），确认不要了再手动删"
+    holders = processes_under([path])
+    if isinstance(holders, str):
+        return f"无法判断是否有进程在用（{holders}）"
+    others = [row for row in holders if not row["caller"]]
+    if others:
+        return "还有进程在用（PID " + "、".join(str(row["pid"]) for row in others[:5]) + "），多半是会话、终端或服务"
+    return ""
+
+
 def _reclaim(main: Path, path: Path, branch: str) -> tuple[str, dict[str, str]]:
     """回收单个工作树，把结果归到 reclaimed / residue / failed 之一。
 
@@ -457,6 +493,10 @@ def prune(repo: Path, target_branch: str = "main", *,
         if _git(main, "-C", str(path), "status", "--porcelain",
                 check=False).stdout.strip():
             dirty.append({"path": str(path), "branch": branch, "why": "工作区有未提交改动"})
+            continue
+        busy = _in_use(path)
+        if busy:
+            kept.append({"path": str(path), "branch": branch, "why": busy})
             continue
         if not apply:
             reclaimed.append(str(path))

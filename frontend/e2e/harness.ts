@@ -67,24 +67,27 @@ export async function launch(): Promise<Browser> {
  * 两个标记由页面自己写：island、遗留模板和 React 子树都得发出，这里才等得到。
  *
  * 它只证明「没有东西在等」，证明不了页面画出来了：主体完全没渲染时同样立刻成立。
- * 所以调用方先等到目标页面自己的主体出现，再调它。 */
-export async function settle(page: Page, scope = 'body'): Promise<void> {
+ * 所以调用方先等到目标页面自己的主体出现，再调它。
+ *
+ * `except` 是用例自己压住、永远不会结束的那一处等待（例如故意不回的下一页），按选择器排除。 */
+export async function settle(page: Page, scope = 'body', { except = '' }: { except?: string } = {}): Promise<void> {
   /* 活动页和馆藏页会持续轮询任务状态，本来就不保证进入 `networkidle`。页面导航由
      `visit()` 等到 load，主体由调用方的 `expectBody()` 验证；这里只等 Peach 自己公开的
      等待态结束。 */
   try {
     await page.waitForFunction(
-      (selector) => {
+      ({ selector, except }) => {
         const root = document.querySelector(selector);
-        return !!root && !root.matches('[aria-busy="true"],[data-skeleton]')
-          && !root.querySelector('[aria-busy="true"],[data-skeleton]');
+        const waiting = (node: Element) => node.matches('[aria-busy="true"],[data-skeleton]') && !(except && node.matches(except));
+        return !!root && !waiting(root) && ![...root.querySelectorAll('[aria-busy="true"],[data-skeleton]')].some(waiting);
       },
-      scope, { timeout: 15_000 });
+      { selector: scope, except }, { timeout: 15_000 });
   } catch (error) {
-    const pending = await page.evaluate((selector) => {
+    const pending = await page.evaluate(({ selector, except }) => {
       const root = document.querySelector(selector);
       if (!root) return { missing_scope: selector };
-      const nodes = [...root.querySelectorAll('[aria-busy="true"],[data-skeleton]')];
+      const nodes = [...root.querySelectorAll('[aria-busy="true"],[data-skeleton]')]
+        .filter(node => !(except && node.matches(except)));
       if (root.matches('[aria-busy="true"],[data-skeleton]')) nodes.unshift(root);
       return nodes.slice(0, 12).map(node => {
         const box = node.getBoundingClientRect();
@@ -92,7 +95,7 @@ export async function settle(page: Page, scope = 'body'): Promise<void> {
           label: node.getAttribute('aria-label'), scope: node.closest('dialog')?.id || 'page',
           width: box.width, height: box.height };
       });
-    }, scope).catch(() => '未取得');
+    }, { selector: scope, except }).catch(() => '未取得');
     throw new Error(`页面等待态未结束：${JSON.stringify(pending)}\n${(error as Error).message}`);
   }
 }
@@ -165,6 +168,21 @@ export async function visit(browser: Browser, path: string, viewport: Viewport,
 /* 越界名单只报根因：页面一旦被撑宽，移动视口跟着变宽，`fixed` 的顶栏、Toast 会一起
  * 伸出去，按文档顺序截前几个就只剩这些症状。所以跳过 `fixed` 及其后代，并且只留
  * 父元素自己没越界的那一层。 */
+/** 检查实际可滚动的区域是否由统一滑块或横向手势接管。 */
+export async function unmanagedScrollers(page: Page): Promise<string[]> {
+  return page.evaluate(() => [...document.querySelectorAll<HTMLElement>('body *')].flatMap(node => {
+    if (!(node instanceof HTMLElement) || node.closest('.ovtrack,.ui-ov-edges,[data-skeleton],[inert]')) return [];
+    const style = getComputedStyle(node), box = node.getBoundingClientRect();
+    if (!box.width || !box.height || style.visibility === 'hidden' || style.display === 'none') return [];
+    const vertical = /^(auto|scroll)$/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1;
+    const horizontal = /^(auto|scroll)$/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1;
+    if (!vertical && !horizontal) return [];
+    if (node.hasAttribute('data-overlay-scrollbar')) return [];
+    if (!vertical && (node.hasAttribute('data-horizontal-scroll') || node.hasAttribute('data-scroll-gesture'))) return [];
+    return [`${node.tagName.toLowerCase()}${node.id ? '#' + node.id : ''}.${String(node.className).slice(0, 120)}`];
+  }));
+}
+
 export async function layout(page: Page): Promise<Layout> {
   return page.evaluate(() => {
     const width = document.documentElement.clientWidth;

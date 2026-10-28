@@ -66,7 +66,7 @@ describe('设计决定：关注详情、作品详情、播放器与侧栏', () =
     }
   });
 
-  it('关注详情：没有预览的那一格占 16:9；标签按来源记下的类型取 r34 色板，未知类型取中性灰', { timeout: 60_000 }, async () => {
+  it('关注详情：无预览媒体占 16:9；标签保留来源分类并复用详情标签外观', { timeout: 60_000 }, async () => {
     const opened = await openFollowFeed(browser, `/posts/${DETAIL.bare}`, DESKTOP,
       { ready: '#stage [data-follow-detail-tags]' });
     try {
@@ -77,6 +77,14 @@ describe('设计决定：关注详情、作品详情、播放器与侧栏', () =
           [tag.dataset.followTag, getComputedStyle(tag).getPropertyValue('--tag-color').trim()])),
       }));
       assert.equal(shown.placeholder, '16 / 9');
+      const chip = await page.locator('#stage [data-detail-tag]').first().evaluate(node => {
+        const style = getComputedStyle(node), probe = document.createElement('span');
+        probe.style.backgroundColor = 'color-mix(in srgb,var(--tag-color) 10%,var(--surface))'; node.append(probe);
+        const expected = getComputedStyle(probe).backgroundColor; probe.remove();
+        return { fill: style.backgroundColor, expected, height: node.getBoundingClientRect().height };
+      });
+      assert.equal(chip.fill, chip.expected);
+      assert.ok(chip.height >= 20 && chip.height <= 32);
       const muted = await tokenColor(page, '#stage [data-follow-detail]', '--muted');
       const unknown = await page.evaluate(() => {
         const tag = document.querySelector<HTMLElement>('#stage [data-follow-detail-tags] [data-follow-tag="odd"]')!;
@@ -426,6 +434,9 @@ describe('设计决定：关注详情、作品详情、播放器与侧栏', () =
       const cycle = async () => {
         await page.locator('#tagPlus').click();
         await page.locator('#tagPickSearch').waitFor();
+        if (await page.evaluate(() => !matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+          await page.waitForFunction(() => (window as unknown as { pickerMotion: string[] }).pickerMotion.includes('board-menu-in'));
+        }
         await page.locator('#stage [data-rating-value]').click();
         await picker.waitFor({ state: 'hidden' });
         return played();

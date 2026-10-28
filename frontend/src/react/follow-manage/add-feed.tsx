@@ -20,6 +20,7 @@ import { followFeedByName, lookupFeedActor, type FeedCandidate, type FeedLookup 
 import { t } from '../../i18n';
 
 const PLACEHOLDER = t('输入女优名，到 JavDB 找她的演员页');
+const TITLE = t('添加 JAV 订阅');
 
 export interface AddFeedProps {
   readOnly: boolean;
@@ -94,8 +95,8 @@ export function AddFeed({ readOnly, toast, onAdded }: AddFeedProps) {
 
   return (
     /* 和「添加关注」那一块同一个形：一张填充卡，标题在卡里。 */
-    <div className={cardClass({ padding: 'none', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })}>
-      <h3 className="text-title-2-medium text-text-primary">{t('添加 JAV 订阅')}</h3>
+    <section aria-label={TITLE} className={cardClass({ padding: 'none', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })}>
+      <h3 className="text-title-2-medium text-text-primary">{TITLE}</h3>
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-64 grow">
           <Input aria-label={t('女优名')} placeholder={PLACEHOLDER} value={name} leadingIcon={RiSearchLine}
@@ -122,14 +123,14 @@ export function AddFeed({ readOnly, toast, onAdded }: AddFeedProps) {
             <Help role="status">{picked.size ? where!.text : t('勾选她的演员卡；有碼与無碼两条记录都是她的话，两张都勾。')}</Help>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="small" onClick={close}>{t('关闭')}</Button>
             {result.candidates.length ? (
               <Button variant="primary" size="small" disabled={readOnly || !picked.size || where!.blocked}
                 {...busyProps(action.busy === 'follow')} onClick={add}>{t('添加订阅（{size}）', { size: picked.size })}</Button>
             ) : null}
-            <Button variant="secondary" size="small" onClick={close}>{t('关闭')}</Button>
           </div>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }

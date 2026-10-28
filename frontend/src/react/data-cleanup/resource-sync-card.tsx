@@ -15,6 +15,8 @@ import { errorMessage } from '../../api';
 import { useBackgroundJob } from '../background-job';
 import { Fieldset, FieldsetTitle } from '../components/fieldset';
 import { Note } from '../components/note';
+import { ConnectionStatus } from '../components/connection-status';
+import { StatusLabel } from '../components/status-label';
 import { TaskProgress } from '../components/task-progress';
 import { spriteGlyph } from '../components/sprite-glyph';
 import { PlainStat, plainStatClass } from '../components/stat-card';
@@ -50,11 +52,11 @@ function ScanResult({ scan, partial = false }: { scan: ResourceScanState; partia
           <article key={source.location} className={plainStatClass()}>
             <PlainStat label={SOURCE_LABELS[source.location] || t('媒体来源')}
               mark={<SourceMark mark={MEDIA_SOURCE_ICONS[source.location] ?? 'database'} />}
-              aside={<span className={source.online ? 'text-notification-success-foreground' : 'text-text-error-primary'}>
-                {source.online ? t('可访问') : t('离线，已跳过')}
-              </span>}
-              figure={source.online ? t('{value} 项', { value: count(source.missing) }) : '—'}
-              meta={sourceMeta(source)} wrapMeta />
+              aside={<ConnectionStatus online={source.online}>{source.online ? t('可访问') : t('离线')}</ConnectionStatus>}
+              figure={source.online ? t('{count} 项', { count: count(source.missing) }) : '—'}
+              meta={source.online ? sourceMeta(source) : t('{sourceMeta} · 本次已跳过', { sourceMeta: sourceMeta(source) })} wrapMeta />
+            {source.online && source.unreadable > 0
+              ? <span className="self-start"><StatusLabel tone="warning">{count(source.unreadable)} {t('个目录未读取')}</StatusLabel></span> : null}
           </article>
         ))}
       </div>
@@ -134,7 +136,7 @@ export function ResourceSyncCard(
   } else if (done) {
     result = receipt(done);
   } else if (apply.running) {
-    progress = <TaskProgress embedded label={apply.job?.message || t('正在复核并清理失效条目…')} />;
+    progress = <TaskProgress embedded label={apply.job?.message || t('正在复核并清理失效条目')} />;
   } else if (scan.start.isError) {
     result = <Note tone="error" title={t('扫描失败')}>{errorMessage(scan.start.error)}</Note>;
   } else if (scan.query.isError && state) {
@@ -159,16 +161,15 @@ export function ResourceSyncCard(
     result = (
       <>
         <ScanResult scan={state} />
-        {changes ? <Note tone="neutral" title={t('清理内容')}>{applyPlanText(state)}</Note> : null}
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {changes
-            ? <Button variant="danger" {...busyProps(cleaning)} onClick={() => runApply(state)}>
+        {changes
+          ? <Note tone="neutral" title={t('清理内容')} action={
+              <Button variant="danger" {...busyProps(cleaning)} onClick={() => runApply(state)}>
                 {cleaning ? t('正在复核并清理…') : APPLY_LABEL}
               </Button>
-            : <p className="mr-auto text-body-regular text-notification-success-foreground">
-                {t('已检查可访问的来源，没有待清理的记录、空文件夹或缓存。')}
-              </p>}
-        </div>
+            }>{applyPlanText(state)}</Note>
+          : <p className="mr-auto text-body-regular text-notification-success-foreground">
+              {t('已检查可访问的来源，没有待清理的记录、空文件夹或缓存。')}
+            </p>}
       </>
     );
   }

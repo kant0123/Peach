@@ -8,6 +8,39 @@ describe('馆藏 JAV 官方预览', () => {
   let browser: Browser;
   before(async () => { browser = await launch() });
   after(async () => { await browser.close() });
+  for (const viewport of VIEWPORTS) it(`${viewport.name}：样图切换在图片就绪前保留当前画面`, { timeout: 60000 }, async () => {
+    const opened = await openItemPage(browser, '/', viewport, { ready: '[data-media-grid]' });
+    const { page } = opened;
+    let release = () => {};
+    try {
+      const waiting = new Promise<void>(resolve => { release = resolve });
+      await page.route('**/api/jav/detail?*', route => route.fulfill({ json: { code: COVER_ONLY_ITEM.code, state: 'ready', preview_count: 3 } }));
+      await page.route('**/jav-image?*', async route => {
+        const image = new URL(route.request().url()).searchParams.get('image');
+        if (image === '1') await waiting;
+        return route.fulfill({ contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="${image === '0' ? '#555' : '#aaa'}"/></svg>` });
+      });
+      await page.goto(new URL(`/assets/${COVER_ONLY_ITEM.id}`, page.url()).href);
+      const frame = page.locator('[data-item-gallery]');
+      await frame.getByRole('button', { name: '预览 1', exact: true }).waitFor();
+      await frame.getByRole('button', { name: '预览 1', exact: true }).click();
+      const picture = frame.locator('img[data-jav-picture]:not([hidden])');
+      await picture.waitFor();
+      const first = await picture.getAttribute('src');
+      await frame.getByRole('button', { name: '预览 2', exact: true }).click();
+      assert.equal(await picture.getAttribute('src'), first);
+      assert.equal(await frame.locator('[data-skeleton="image"]').count(), 0);
+      await frame.getByRole('button', { name: '预览 3', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('img[data-jav-picture]:not([hidden])')?.getAttribute('src')?.includes('image=2'));
+      release();
+      await frame.getByRole('button', { name: '预览 2', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('img[data-jav-picture]:not([hidden])')?.getAttribute('src')?.includes('image=1'));
+      await frame.getByRole('button', { name: '预览 1', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('img[data-jav-picture]:not([hidden])')?.getAttribute('src')?.includes('image=0'));
+      assert.equal(await frame.locator('[data-skeleton="image"]').count(), 0);
+      assert.deepEqual(opened.problems, []);
+    } finally { release(); await opened.close() }
+  });
   for (const viewport of VIEWPORTS) it(`${viewport.name}：只有封面时视频方向键控制进度，图片方向键切换媒体`, { timeout: 60000 }, async () => {
     const opened = await openItemPage(browser, '/', viewport, { ready: '[data-media-grid]', settings: { seekSeconds: 1 } });
     const { page } = opened;
@@ -113,7 +146,7 @@ describe('馆藏 JAV 官方预览', () => {
     const { page } = opened;
     let release!: () => void;
     const pending = new Promise<void>(resolve => { release = resolve });
-    let details = 0, images = 0;
+    let details = 0;
     try {
       await page.route('**/stream?*', route => route.continue({ url: new URL(`/stream?id=${process.env.PEACH_E2E_ITEM}`, page.url()).href }));
       await page.route('**/api/jav/detail?*', async route => {
@@ -121,14 +154,16 @@ describe('馆藏 JAV 官方预览', () => {
         await pending;
         await route.fulfill({ json: { code: COVER_ONLY_ITEM.code, state: 'ready', preview_count: 11 } });
       });
-      await page.route('**/api/jav/image?*', route => {
-        images++;
+      await page.route('**/jav-image?*', route => {
         const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="#777"/></svg>';
-        return route.fulfill({ json: { ok: true, image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` } });
+        return route.fulfill({ contentType: 'image/svg+xml', body: svg });
       });
       await page.goto(new URL(`/assets/${COVER_ONLY_ITEM.id}`, page.url()).href);
       const frame = page.locator('[data-item-gallery]'), player = frame.locator('.video-js');
+      assert.equal(await frame.getByRole('status', { name: '正在读取样图' }).count(), 0);
+      await frame.getByRole('button', { name: '查看图片', exact: true }).click();
       await frame.getByRole('status', { name: '正在读取样图' }).waitFor();
+      await frame.getByRole('button', { name: '播放正片', exact: true }).click();
       await page.waitForFunction(() => (document.querySelector<HTMLVideoElement>('[data-item-gallery] video')?.readyState || 0) >= 3);
       await player.evaluate(node => { (node as HTMLElement).dataset.galleryProbe = 'kept' });
       await frame.locator('video.vjs-tech').evaluate(node => { const video = node as HTMLVideoElement; video.pause(); video.currentTime = 0.5 });
@@ -147,10 +182,8 @@ describe('馆藏 JAV 官方预览', () => {
       await frame.getByRole('button', { name: '播放正片', exact: true }).click();
       assert.equal(await player.getAttribute('data-gallery-probe'), 'kept');
       assert.ok(await frame.locator('video.vjs-tech').evaluate(node => Math.abs((node as HTMLVideoElement).currentTime - 0.5) < 0.1));
-      const imageReads = images;
       await frame.getByRole('button', { name: '预览 1', exact: true }).click();
       await frame.locator('[data-jav-picture]').waitFor();
-      assert.equal(images, imageReads, '重复查看样图复用查询缓存');
       assert.equal(details, 1);
       assert.deepEqual(opened.problems, []);
       await page.screenshot({ path: `../build/item-source-gallery-${viewport.name}.png` });
@@ -168,14 +201,24 @@ describe('馆藏 JAV 官方预览', () => {
           ? { code: COVER_ONLY_ITEM.code, state: 'partial', preview_count: 0, message: '来源暂不可用' }
           : { code: COVER_ONLY_ITEM.code, state: 'ready', preview_count: 1 } });
       });
-      await page.route('**/api/jav/image?*', route => route.fulfill({ json: { ok: false, image: '', message: '图片未取得' } }));
+      await page.route('**/jav-image?*', route => route.fulfill({ status: 404, headers: { 'cache-control': 'no-store' } }));
       await page.goto(new URL(`/assets/${COVER_ONLY_ITEM.id}`, page.url()).href);
       const frame = page.locator('[data-item-gallery]');
-      const retry = frame.getByRole('button', { name: '重试样图', exact: true });
+      const retry = frame.getByRole('button', { name: '立即重试样图', exact: true });
+      assert.equal(await retry.count(), 0);
+      await frame.getByRole('button', { name: '查看图片', exact: true }).click();
       await retry.waitFor();
       assert.equal(await retry.getAttribute('title'), '来源暂不可用');
       assert.ok(await page.locator('[data-stage-side-content]').isVisible());
-      assert.ok(await frame.locator('.video-js').isVisible());
+      assert.ok(await frame.locator('.video-js').isHidden());
+      await frame.getByRole('button', { name: '播放正片', exact: true }).click();
+      assert.equal(await retry.count(), 0);
+      await frame.locator('#playerNet').evaluate(node => {
+        const badge = node as HTMLElement;
+        badge.hidden = false;
+        badge.textContent = '加载中…';
+      });
+      await frame.getByRole('button', { name: '查看图片', exact: true }).click();
       await retry.click();
       await frame.getByRole('button', { name: '预览 1', exact: true }).waitFor();
       assert.equal(attempts, 2);

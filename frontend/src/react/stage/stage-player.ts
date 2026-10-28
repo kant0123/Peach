@@ -170,7 +170,7 @@ export async function mountWallPlayer(summary: PlayerItem, frame: HTMLElement, s
   if (item.cost === 'metered') throw new Error(t('请打开详情确认计费来源'));
   const sources = await stageHost().player.loadSourceStatus();
   signal.throwIfAborted();
-  if (sources[String(item.location || '')] === false) throw new Error(stageHost().player.offlineReason(String(item.location || '')));
+  if (sources[String(item.root_id || item.location || '')] === false) throw new Error(stageHost().player.offlineReason(String(item.root_id || item.location || '')));
   const metadata: StageMeta = { kind: 'item', item, title: String(item.title || item.name || ''),
     sub: String((item.performers as string[] | undefined)?.[0] || item.creator || t('未归属')) };
   setStageMeta(metadata);
@@ -408,7 +408,7 @@ export function miniplayerTakesCard(item: PlayerItem | null | undefined): boolea
   if (item.medium && item.medium !== 'video') return false;
   if (item.cost === 'metered' && item.location !== 'online') return false;
   if (item.location === 'online' && !item.follow_item_id) return false;
-  if (stageHost().sourceOffline(String(item.location ?? ''))) return false;
+  if (stageHost().sourceOffline(String(item.root_id || item.location || ''))) return false;
   return true;
 }
 
