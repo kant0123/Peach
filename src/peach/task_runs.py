@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
-from .jobs import TaskRunConflict, process_alive
+from .jobs import JobCancelled, TaskRunConflict, process_alive
 from .repository import LedgerDatabase
 
 __all__ = [
@@ -255,6 +255,9 @@ class TaskRunStore:
         self._last_write: dict[int, float] = {}
         #: 进度正写不进去的那几轮。一段连续失败只记一条 warning，写进去一次就清掉。
         self._progress_failing: set[int] = set()
+        #: 用户要求中止的那几轮。只在本进程内有效：能被中止的都是本进程里跑的，
+        #: 它们的检查点（`TaskRunHandle.check_cancel`）读这一份；结算时摘掉。
+        self._cancel_requested: set[int] = set()
         self.finish_retry_delays = FINISH_RETRY_DELAYS
 
     def available(self) -> bool:
@@ -269,6 +272,15 @@ class TaskRunStore:
             return True
         except sqlite3.DatabaseError:
             return False
+
+    def request_cancel(self, run_id: int) -> None:
+        """登记「这一轮该停了」。线程不会被打断，检查点读到它才抛 `JobCancelled`。"""
+        with self._lock:
+            self._cancel_requested.add(run_id)
+
+    def cancel_requested(self, run_id: int | None) -> bool:
+        with self._lock:
+            return run_id in self._cancel_requested
 
     # -- 写入 --------------------------------------------------------------
 
@@ -440,6 +452,7 @@ class TaskRunStore:
         with self._lock:
             self._last_write.pop(run_id, None)
             self._progress_failing.discard(run_id)
+            self._cancel_requested.discard(run_id)
         return done
 
     # -- 后继（ADR-0040）--------------------------------------------------
@@ -882,8 +895,14 @@ class TaskRunHandle:
         run = self.store.get(self.run_id) if self.run_id is not None else None
         return dict(run.result_summary.get('checkpoint') or {}) if run else {}
 
+    def check_cancel(self) -> None:
+        """用户要求中止这一轮时抛 `JobCancelled`。进度、心跳与检查点都会经过它。"""
+        if self.store.cancel_requested(self.run_id):
+            raise JobCancelled('用户中止任务')
+
     def checkpoint(self, **fields) -> None:
         """领域结果提交后保存完成集合；后继重新领取时沿用。"""
+        self.check_cancel()
         if self.run_id is None or not self.store.enabled:
             return
         with self.store.database.write_transaction(notify=False) as connection:
@@ -898,10 +917,12 @@ class TaskRunHandle:
     def progress(self, current: int | None = None, total: int | None = None,
                  label: str | None = None, *,
                  throttle: float = PROGRESS_INTERVAL) -> None:
+        self.check_cancel()
         self.store.progress(self.run_id, current=current, total=total,
                             label=label, throttle=throttle)
 
     def heartbeat(self) -> None:
+        self.check_cancel()
         self.store.heartbeat(self.run_id)
 
     def finish(self, status: str, *, summary: dict | None = None,

@@ -108,7 +108,7 @@ from .web_scraping import (
     w_scraping_check, w_scraping_cover, w_scraping_settings,
 )
 from .web_state import WebContract, path_version
-from .web_tasks import q_tasks
+from .web_tasks import q_tasks, w_task_cancel
 from .web_timeline_thumbnails import (
     q_media_processing, q_thumbnail_jobs, q_timeline, w_media_processing, w_thumbnail_jobs,
 )
@@ -419,6 +419,7 @@ POST_HANDLERS = {
     "/api/folders/rule": w_folder_rule,
     "/api/downloads": w_download_submit,
     "/api/downloads/cancel": w_download_cancel,
+    "/api/tasks/cancel": w_task_cancel,
     "/api/downloads/postprocess": w_download_postprocess,
     "/api/library-processing": w_library_processing,
     "/api/thumbnail-jobs": w_thumbnail_jobs,

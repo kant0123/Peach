@@ -237,7 +237,7 @@ class FollowupRunner:
                     self._active.pop(thread, None)
 
     def _execute(self, run) -> None:
-        from .jobs import JobPaused
+        from .jobs import JobCancelled, JobPaused
         followup_type = REGISTRY.get(run.task_key)
         handle = TaskRunHandle(self.store, run.id)
         if followup_type is None:
@@ -250,6 +250,10 @@ class FollowupRunner:
         except JobPaused as error:
             self.store.suspend(run.id, label=str(error) or '等待安装完成后继续')
             self._paused_for_update = True
+            return
+        except JobCancelled:
+            # 已落账的部分保留；后继幂等，下次派发会接着补。
+            handle.finish("cancelled", error="已被用户中止")
             return
         except Exception as error:  # 后继失败只是它自己失败，父任务的结论不动。
             LOGGER.warning("followup failed: %s: %s", run.followup_key, error,

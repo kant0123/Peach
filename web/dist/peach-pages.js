@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "e92f5121-06ae-408f-8bfe-e6916f28b010", e._sentryDebugIdIdentifier = "sentry-dbid-e92f5121-06ae-408f-8bfe-e6916f28b010");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "8b3f4096-093e-4465-9232-40abf8d23d96", e._sentryDebugIdIdentifier = "sentry-dbid-8b3f4096-093e-4465-9232-40abf8d23d96");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -1539,6 +1539,8 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	已删除来源: "ソースを削除しました",
 	"已加入想要：{value}": "「観たい」に追加しました：{value}",
 	已取消: "キャンセルしました",
+	中止任务: "タスクを中止",
+	"正在中止…": "中止しています…",
 	已启用来源: "有効なソース",
 	已填入磁力: "マグネットを入力しました",
 	已处理: "処理済み",
@@ -3685,6 +3687,14 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	"已暂停，等待继续": "一時停止中（再開待ち）",
 	"服务关停，这一轮没有跑完": "サービスが停止したため、この回は完了しませんでした",
 	这一轮已被新的任务顶替: "この回は新しいタスクに置き換えられました",
+	"正在中止，等当前一步结束": "中止しています（現在の処理が終わるまでお待ちください）",
+	已被用户取消: "ユーザーがキャンセルしました",
+	已被用户中止: "ユーザーが中止しました",
+	"这一轮已经结束，没有可以中止的内容": "この回はすでに終了しており、中止できるものがありません",
+	"这一轮在等安装完成后继续，暂时不能中止": "この回はインストール完了後の再開待ちのため、今は中止できません",
+	"这一轮不在当前服务里运行，请在启动它的终端中止": "この回は現在のサービスでは実行されていません。起動したターミナルで中止してください",
+	"这一轮不能中止，可能已经结束，请刷新后再看": "この回は中止できません。すでに終了している可能性があるため、更新して確認してください",
+	"没有第 {value} 轮任务": "第 {value} 回のタスクはありません",
 	"处理被中断。核对媒体目录后重试。": "処理が中断されました。メディアフォルダーを確認してから再試行してください。",
 	"处理被中断，可重试未完成的部分。": "処理が中断されました。未完了の部分は再試行できます。",
 	处理阶段无效: "処理ステージが正しくありません",
@@ -26909,4 +26919,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=e92f5121-06ae-408f-8bfe-e6916f28b010
+//# debugId=8b3f4096-093e-4465-9232-40abf8d23d96

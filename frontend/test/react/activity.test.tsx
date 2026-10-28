@@ -663,3 +663,45 @@ it('人脸模型取不到的那一轮只记失败与原因，重试在页顶「�
   expect(card.querySelectorAll('a')).toHaveLength(0);
   expect([...card.querySelectorAll('button')].some((button) => /重试|下载/.test(button.textContent || ''))).toBe(false);
 });
+
+it('进行中的任务有「中止任务」，点下去只向服务端登记这一轮', async () => {
+  const posts: { url: string; body: unknown }[] = [];
+  stubFetch(async (input, init) => {
+    if (init?.method === 'POST') {
+      posts.push({ url: input, body: JSON.parse(String(init.body)) });
+      return { ok: true, status: 200, json: async () => ({ ok: true, cancelled: [4] }) };
+    }
+    return { ok: true, status: 200, json: async () => payload({ running: [run({ id: 4 })] }) };
+  });
+  const host = await mount(page());
+  await click(buttonNamed('中止任务', host));
+  await settle();
+  expect(posts).toEqual([{ url: '/api/tasks/cancel', body: { id: 4 } }]);
+  // 线程还没停：按钮换成「正在中止」并且不再接受点击。
+  expect(buttonNamed('正在中止…', host)?.getAttribute('aria-disabled')).toBe('true');
+});
+
+it('服务端已登记中止的那一轮直接显示「正在中止」，不再发请求', async () => {
+  const fetcher = serve(payload({ running: [run({ id: 4, cancelling: true })] }));
+  const host = await mount(page());
+  await click(buttonNamed('正在中止…', host));
+  await settle();
+  expect(fetcher.mock.calls.every(([, init]) => init?.method !== 'POST')).toBe(true);
+});
+
+it('中止被服务端拒收时把原因留在卡片里', async () => {
+  stubFetch(async (_input, init) => init?.method === 'POST'
+    ? { ok: false, status: 400, json: async () => ({ error: '这一轮不在当前服务里运行，请在启动它的终端中止' }) }
+    : { ok: true, status: 200, json: async () => payload({ running: [run({ id: 4, trigger: 'cli' })] }) });
+  const host = await mount(page());
+  await click(buttonNamed('中止任务', host));
+  await settle();
+  expect(host.querySelector('[data-run-id="4"]')?.textContent).toContain('不在当前服务里运行');
+  expect(buttonNamed('中止任务', host)).not.toBeNull();
+});
+
+it('已结束的任务卡没有中止按钮', async () => {
+  serve(payload({ finished: [run({ status: 'succeeded', finished_at: '2026-09-11T10:04:00Z' })] }));
+  const host = await mount(page());
+  expect(buttonNamed('中止任务', host)).toBeNull();
+});

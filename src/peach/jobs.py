@@ -322,6 +322,9 @@ class BackgroundJob:
         self._activity_files: dict[str, Path] = {}
         self._recoverable: set[str] = set()
         self._paused_stops: set[str] = set()
+        #: 用户要求中止的那几轮。检查点（`editing`）在工作线程里读到它就抛 `JobCancelled`，
+        #: 所以停在下一次报进度的地方，不会把一步做到一半的写入拦腰斩断。
+        self._cancelled: set[str] = set()
         #: 摘 run id 与把那一行写成结束是同一件事：只摘不写完就放手的话，另一个线程
         #: 看见 id 没了以为已经收过尾，紧接着开的下一轮会撞上那一行还没释放的互斥键。
         self._close_lock = threading.Lock()
@@ -368,6 +371,8 @@ class BackgroundJob:
         退出时把进度同步进 `task_run`，写库在锁外：那一步要拿数据库的写锁，套在本类
         的锁里面就多了一组取锁顺序，而进度本来不需要和状态原子。节流由 store 做。
         """
+        if job_id in self._cancelled and threading.current_thread() is self.thread:
+            raise JobCancelled('用户中止任务')
         if job_id in self._recoverable:
             from .update_tasks import check_pause
             check_pause(self._database_path())
@@ -404,6 +409,8 @@ class BackgroundJob:
     @staticmethod
     def _progress_label(state: dict) -> str:
         """一行「此刻在做什么」。域各有各的字段名，这里按可读性从具体到笼统取第一个。"""
+        if state.get('cancel_requested'):
+            return '正在中止，等当前一步结束'
         if state.get('status') in ('paused', 'pausing'):
             return ('已暂停' if state['status'] == 'paused' else '正在暂停') + ' · ' + str(state.get('stage') or '')
         current = state.get("current")
@@ -563,6 +570,28 @@ class BackgroundJob:
             self.runs.finish(run_id, status, summary=summary, error=error)
         self.runs.prune(self.task_key)
 
+    def request_cancel(self, run_id: int) -> bool:
+        """用户要求中止任务中心里的第 `run_id` 轮；这一轮不是本任务正在跑的那一轮就返回 False。
+
+        只登记，不打断线程：工作线程下一次 `update`／`editing`（域里报进度的地方）抛
+        `JobCancelled`，由 `_run` 落成 `cancelled` 并按取消结算，已保存的结果保留。
+        一直不报进度的一步没有检查点，只能等它自己返回。
+        """
+        with self.lock:
+            state = self.state
+            job_id = next((job for job, run in self._run_ids.items() if run == run_id), None)
+            if (job_id is None or state is None or state.get(self.id_key) != job_id
+                    or state.get('status') != 'running'):
+                return False
+            self._cancelled.add(job_id)
+            state['cancel_requested'] = True
+            observed = copy.copy(state)
+        if self.runs is not None:
+            self.runs.request_cancel(run_id)
+            # 节流只为压住进度的写入频率；这一句是对按钮的回应，要立刻看得到。
+            self.runs.progress(run_id, label=self._progress_label(observed), throttle=0)
+        return True
+
     def stop(self, timeout: float | None = 2.0, *, resume: bool = True) -> None:
         """丢掉状态并等线程收工，用于服务关停。
 
@@ -638,6 +667,7 @@ class BackgroundJob:
         except JobCancelled:
             with self.lock:
                 if self.state is not None and self.state.get(self.id_key) == job_id:
+                    self.state.pop('cancel_requested', None)
                     self.state.update(status='cancelled', outcome='cancelled', error='',
                                       followups=[], completed_at=time.time())
         except Exception as error:   # 后台失败必须变成可轮询的状态，不能只留在日志里
@@ -679,6 +709,7 @@ class BackgroundJob:
                     activity.unlink(missing_ok=True)
                 self._recoverable.discard(job_id)
                 self._paused_stops.discard(job_id)
+                self._cancelled.discard(job_id)
 
     def _settle(self, job_id: str) -> None:
         """按域自己落下的终态结算 `task_run`。

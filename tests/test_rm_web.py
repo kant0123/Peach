@@ -1539,6 +1539,7 @@ class WebDataTests(unittest.TestCase):
         self.assertEqual(set(rm_web.POST_HANDLERS), {
             "/api/tag-management", "/api/tag-management/preview", "/api/follow/tag",
             "/api/downloads", "/api/downloads/cancel", "/api/downloads/postprocess",
+            "/api/tasks/cancel",
             "/api/library-processing", "/api/thumbnail-jobs", "/api/media-repair",
             "/api/media-processing",
             "/api/scraping/settings", "/api/scraping/check", "/api/scraping/cover",

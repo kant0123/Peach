@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 from datetime import datetime
 
@@ -84,6 +85,59 @@ def _tasks(contract, args):
     }
 
 
+def w_task_cancel(contract, body) -> dict:
+    """中止任务中心里的一轮：`{"id": 第几轮}`。
+
+    - 排队中的后继直接结算成 `cancelled`。
+    - 在跑的后台任务与后继只登记中止，线程在下一个检查点（报进度处）自己停下，
+      已落账的部分保留；一直不报进度的一步要等它自己返回。
+    - 馆藏处理自带暂停与停止的控制文件，走它原来的 `cancel` 动作。
+    - 那一轮自己已经结束、派出的后继还在排或在跑时（活动页的「进行中」合并卡），
+      中止的是这些还没做完的后继。
+    - 别的进程里跑的（命令行批处理）管不到，原样说明，不假装成功。
+    """
+    raw = (body or {}).get("id") if isinstance(body, dict) else None
+    if not str(raw or "").isdigit():
+        raise ValueError("缺少任务编号")
+    store = contract.task_runs
+    run = store.get(int(raw))
+    if run is None:
+        raise KeyError(f"没有第 {raw} 轮任务")
+    if run.active:
+        targets = [run]
+    else:
+        targets = [child for child in store.children(run.id) if child.active]
+        if not targets:
+            raise ValueError("这一轮已经结束，没有可以中止的内容")
+    for target in targets:
+        _cancel_run(contract, target)
+    return {"ok": True, "cancelled": [target.id for target in targets]}
+
+
+def _cancel_run(contract, run) -> None:
+    store = contract.task_runs
+    if run.status == "pending":
+        if not run.followup_key:
+            raise ValueError("这一轮在等安装完成后继续，暂时不能中止")
+        # 先登记再结算：它可能刚好被领走，那样处理器下一个检查点会停下。
+        store.request_cancel(run.id)
+        store.finish(run.id, "cancelled", error="已被用户取消")
+        return
+    if run.pid != os.getpid() or run.host != store.host:
+        raise ValueError("这一轮不在当前服务里运行，请在启动它的终端中止")
+    if run.followup_key:
+        store.request_cancel(run.id)
+        return
+    if run.task_key == "library-processing":
+        from .web_library_processing import w_library_processing
+        snapshot = contract.library_processing_job.snapshot() or {}
+        w_library_processing(contract, {"action": "cancel", "job_id": snapshot.get("job_id")})
+        return
+    job = next((job for job in contract.background_jobs if job.task_key == run.task_key), None)
+    if job is None or not job.request_cancel(run.id):
+        raise ValueError("这一轮不能中止，可能已经结束，请刷新后再看")
+
+
 def _active(contract, limit: int) -> list:
     """正在跑的一条不落，排队的取最近几条：一轮派出上千条后继时，按 id 取最近的只剩排队那些，
     真正在跑的那条反而被挤掉。"""
@@ -123,6 +177,8 @@ def _payload_reader(contract):
 
     def payload(row):
         result = row.payload()
+        # 已登记中止、线程还没停下的那一轮：页面据此把按钮换成「正在中止」。
+        result["cancelling"] = row.active and contract.task_runs.cancel_requested(row.id)
         if row.task_key not in RESULT_FIELDS or row.status not in ('succeeded', 'failed'):
             return result
         if all(field in row.result_summary for field in RESULT_FIELDS[row.task_key]):
