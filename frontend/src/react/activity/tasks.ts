@@ -2,7 +2,7 @@
  *
  * 分三次取会出现「在跑那段是新的、完成那段是旧的」这种自相矛盾的一屏，所以只有一个
  * queryKey。首屏由 `prefetchTasks` 写进 Query 缓存，组件挂上去读的就是它。 */
-import { apiGet } from '../../api';
+import { apiGet, apiSend } from '../../api';
 import { fmtSize } from '@peach/legacy/core';
 import { requestErrorMessage } from '../../core/request-error';
 import { queryClient } from '../query';
@@ -33,6 +33,8 @@ export interface TaskRunPayload {
   /** 这条后继要做的那件事的全名。不是后继时是空串，界面据此判断它挂不挂到父卡片下。 */
   followup_key: string;
   followup_depth: number;
+  /** 已登记中止、线程还没停下。只有进行中的那些会是 true。 */
+  cancelling?: boolean;
 }
 
 export interface ActivityData {
@@ -110,6 +112,13 @@ export const pollInterval = (data: ActivityData | undefined): number =>
   data?.running?.length ? RUNNING_POLL_MS : SETTLED_POLL_MS;
 
 export const fetchTasks = (signal?: AbortSignal) => apiGet<ActivityData>(TASKS_URL, signal);
+
+const CANCEL_URL = '/api/tasks/cancel';
+
+/** 中止一轮。那一轮自己已经结束时，中止的是它派出、还没做完的后继。线程在下一个检查点才真的停下，
+ *  所以返回只说「已登记」，页面靠轮询看到它变成已取消。 */
+export const cancelTask = (id: number, signal?: AbortSignal) =>
+  apiSend<{ ok: boolean; cancelled: number[] }>(CANCEL_URL, { id }, 'POST', signal);
 
 /** 首屏：取完数才画。中止时 `fetchQuery` 把 `AbortError` 抛回给挂载方，它据此放弃这一次。 */
 export async function prefetchTasks(signal: AbortSignal): Promise<void> {

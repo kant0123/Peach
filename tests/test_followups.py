@@ -255,6 +255,24 @@ class RunnerTests(LedgerTestCase):
         self.assertEqual(self.store.get(parent.id).status, "succeeded")
         self.assertEqual(self.store.get(parent.id).error, "")
 
+    def test_a_followup_cancelled_at_its_checkpoint_settles_as_cancelled_not_failed(self):
+        parent = self.parent()
+
+        def run(contract, key, handle):
+            handle.progress(1, 3, label="第一步")
+            self.store.request_cancel(handle.run_id)
+            handle.progress(2, 3, label="第二步")
+            return {"unreachable": True}
+
+        with registered(echo_type("ledger-a", run=run)):
+            queued = self.store.enqueue_followups(
+                parent.id, [("ledger-a:1", "ledger-a", "甲")])["queued"]
+            FollowupRunner(self.contract()).drain()
+        settled = self.store.get(queued[0])
+        self.assertEqual(settled.status, "cancelled")
+        self.assertNotIn("unreachable", settled.result_summary)
+        self.assertFalse(self.store.cancel_requested(queued[0]))
+
     def test_an_unregistered_followup_fails_instead_of_holding_its_key(self):
         """账本里可能排着一种登记表里没有的后继。它得有个结局，否则互斥键一直占着。"""
         parent = self.parent()

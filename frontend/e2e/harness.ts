@@ -187,6 +187,8 @@ export async function layout(page: Page): Promise<Layout> {
   return page.evaluate(() => {
     const width = document.documentElement.clientWidth;
     const excused = (element: Element): boolean => {
+      // 正在退出的弹层已经透明且不可操作，退出动画结束前换视口不该算作越界。
+      if (element.closest('[data-exiting]')) return true;
       if (getComputedStyle(element).position === 'fixed') return true;
       for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
         const style = getComputedStyle(parent);

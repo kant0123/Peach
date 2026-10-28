@@ -22,6 +22,7 @@ import { Button } from '@/components/base/buttons/button';
 import { LinkButton } from '@/components/base/buttons/link-button';
 
 import { errorMessage } from '../../api';
+import { queryClient } from '../query';
 import { cardClass } from '../components/card';
 import { CodeBlock } from '../components/code-block';
 import { EmptyState } from '../components/empty-state';
@@ -35,7 +36,7 @@ import { BackgroundIssues } from './background-issues';
 import { DownloadsPanel } from './downloads-panel';
 import { ErrorDetails, ErrorExcerpt } from './error-excerpt';
 import {
-  elapsedText, fetchEarlier, fetchTasks, foldByKind, foldRoutine, followupDetail, followupTally, groupFollowups, isActive,
+  cancelTask, elapsedText, fetchEarlier, fetchTasks, foldByKind, foldRoutine, followupDetail, followupTally, groupFollowups, isActive,
   hasResultProblems, isRoutine, latestOfKind, mergeFinished, momentText, pollInterval, problemDestination, progressText,
   statusLabel, summaryItems, taskIssues, TASKS_KEY, TRIGGER_LABELS, type FollowupCounts, type TaskRunPayload,
 } from './tasks';
@@ -96,12 +97,31 @@ function FollowupList({ rows }: { rows: TaskRunPayload[] }) {
   );
 }
 
+/** 中止按钮。点下去只是登记：线程在下一个检查点才停，所以按钮先换成「正在中止」，等轮询看到终态。
+ *  `ids` 是要中止的几轮；合并卡里每个父任务各自中止它还没做完的后继。 */
+function CancelButton({ ids, cancelling }: { ids: number[]; cancelling: boolean }) {
+  const cancel = useMutation({
+    mutationFn: () => Promise.all(ids.map((id) => cancelTask(id))),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: TASKS_KEY }),
+  });
+  const busy = cancelling || cancel.isPending || cancel.isSuccess;
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <Button variant="secondary" size="small" {...busyProps(busy)}
+        onClick={() => { if (!busy) cancel.mutate(); }}>
+        {busy ? t('正在中止…') : t('中止任务')}
+      </Button>
+      {cancel.error ? <Note tone="error">{errorMessage(cancel.error)}</Note> : null}
+    </div>
+  );
+}
+
 /** 一轮任务一张卡。失败时整张卡的框线换成 danger 色，不给结束原因那行字上色——
  *  一屏十几行里逐行读红字，比看一眼哪张卡的框是红的慢得多。 */
 function RunCard(
-  { run, meta, children, footer, followups, followupTotal = 0, badge }:
+  { run, meta, children, footer, followups, followupTotal = 0, badge, actions }:
   { run: TaskRunPayload; meta: string; children?: ReactNode; footer?: string;
-    followups?: TaskRunPayload[]; followupTotal?: number; badge?: ReactNode },
+    followups?: TaskRunPayload[]; followupTotal?: number; badge?: ReactNode; actions?: ReactNode },
 ) {
   /* 一轮派出上千条后继时只下发最近几十条，合并的几批又可能各带几十条：标题写全数，
      列表先列在跑与排队的、再列最近结束的，最多 `FOLLOWUP_ROWS` 条，并说清只列了其中几条。 */
@@ -127,6 +147,7 @@ function RunCard(
         </div>
         <p className="text-caption-1-regular text-text-secondary">{meta}</p>
         {children}
+        {actions}
       </div>
       {shown ? <div className="border-t border-separator-border px-5 py-2.5">
         <Disclosure summary={t('任务明细 · {value} 项', { value: total.toLocaleString() })}
@@ -161,7 +182,8 @@ function RunningRun({ run, followups }: { run: TaskRunPayload; followups?: TaskR
   const meta = [TRIGGER_LABELS[run.trigger] || run.trigger, elapsed && t('已跑 {elapsed}', { elapsed })]
     .filter(Boolean).join(' · ');
   return (
-    <RunCard run={run} meta={meta} followups={followups}>
+    <RunCard run={run} meta={meta} followups={followups}
+      actions={<CancelButton ids={[run.id]} cancelling={Boolean(run.cancelling)} />}>
       {total > 0
         ? <div className="flex flex-col gap-1.5">
             <Progress label={label} value={Math.min(current, total)} max={total} />
@@ -241,12 +263,16 @@ function WorkingRun(
   const settled = tally.total ? tally.settled : followups.filter((row) => !isActive(row)).length;
   const failed = tally.total ? tally.failed
     : followups.filter((row) => row.status === 'failed' || row.status === 'interrupted').length;
+  // 每个父任务各自中止它还没做完的后继；没有可中止后继的不发请求（服务端会当成已结束拒收）。
+  const cancelIds = runs.filter((row) => followupTally(counts, [row]).active > 0).map((row) => row.id);
+  const cancelling = followups.filter(isActive).every((row) => row.cancelling);
   const meta = [TRIGGER_LABELS[run.trigger] || run.trigger,
     runs.length > 1 ? t('{length} 批', { length: runs.length }) : '',
     t('{momentText} 开始', { momentText: momentText(oldest.started_at || oldest.finished_at) })].filter(Boolean).join(' · ');
   return (
     <RunCard run={run} meta={meta} followups={followups} followupTotal={total}
-      badge={<Chip color="blue">{t('进行中')}</Chip>}>
+      badge={<Chip color="blue">{t('进行中')}</Chip>}
+      actions={<CancelButton ids={cancelIds} cancelling={cancelIds.length > 0 && cancelling} />}>
       <div className="flex flex-col gap-1.5">
         <Progress label={t('{task_label}进度', { task_label: run.task_label })} value={settled} max={total} />
         <p className="text-caption-1-regular text-text-secondary">

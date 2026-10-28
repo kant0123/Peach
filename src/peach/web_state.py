@@ -199,6 +199,8 @@ class WebContract:
         from . import studio_followup  # noqa: F401  登记补厂牌官网与标识后继
         from .followups import FollowupRunner
         self.followups = FollowupRunner(self)
+        #: `_job` 建出来的后台任务，任务中心按 task_key 找到它们来中止。
+        self.background_jobs: list[BackgroundJob] = []
         self.follow_job = self._job("PeachFollowCheckJob", "follow-check")
         self.feed_job = self._job("PeachFeedCheckJob", "feed-check")
         self.want_job = self._job("PeachWantScrapeJob", "want-scrape")
@@ -240,8 +242,10 @@ class WebContract:
 
     def _job(self, name: str, task_key: str, *, id_key: str = "job_id") -> BackgroundJob:
         """建一个后台任务并接进任务中心。task_key 就是它在活动页上的身份。"""
-        return BackgroundJob(name, id_key=id_key, task_key=task_key,
-                             runs=self.task_runs, followup_runner=self.followups)
+        job = BackgroundJob(name, id_key=id_key, task_key=task_key,
+                            runs=self.task_runs, followup_runner=self.followups)
+        self.background_jobs.append(job)
+        return job
 
     def cached(self, key, fn, *, ttl: float = CACHE_TTL, version=None):
         """带 TTL 的读缓存。`fn` 刻意在锁外算——它会读 CSV、查库，拿着锁算会把

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import tempfile
 import threading
@@ -246,6 +247,61 @@ class BackgroundJobTaskRunTests(unittest.TestCase):
         run = self.store.get(run_id)
         self.assertEqual(run.status, "cancelled")
         self.assertIn("关停", run.error)
+
+    def test_a_cancel_request_stops_the_worker_at_its_next_progress_update(self):
+        job = self.job()
+        started, release = threading.Event(), threading.Event()
+        reached = []
+
+        def work(job_id):
+            job.update(job_id, checked=1, total=10, stage="第一步")
+            started.set()
+            release.wait(5)
+            job.update(job_id, checked=2)
+            reached.append("after-cancel")
+
+        job.start(work)
+        self.assertTrue(started.wait(5))
+        run_id = job.snapshot()["run_id"]
+        self.assertTrue(job.request_cancel(run_id))
+        # 登记之后线程还没停：活动页立刻说「正在中止」，而不是让按钮像没按下去。
+        self.assertIn("正在中止", self.store.get(run_id).progress_label)
+        release.set()
+        job.thread.join(5)
+        run = self.store.get(run_id)
+        self.assertEqual(run.status, "cancelled")
+        self.assertEqual(reached, [])
+        state = job.snapshot()
+        self.assertEqual(state["status"], "cancelled")
+        self.assertNotIn("cancel_requested", state)
+        # 已经报上来的进度保留，中止不是回滚。
+        self.assertEqual(run.result_summary["checked"], 1)
+
+    def test_a_cancel_request_for_another_round_changes_nothing(self):
+        job = self.job()
+        release = threading.Event()
+        job.start(lambda job_id: release.wait(5))
+        self.addCleanup(job.thread.join, 5)
+        self.addCleanup(release.set)
+        self.assertFalse(job.request_cancel(job.snapshot()["run_id"] + 100))
+        self.assertEqual(job.snapshot()["status"], "running")
+
+    def test_a_cancelled_round_does_not_dispatch_its_followups(self):
+        job = self.job()
+        started, release = threading.Event(), threading.Event()
+
+        def work(job_id):
+            job.update(job_id, followups=[("entity-avatar:performer:1", "entity-avatar", "甲")])
+            started.set()
+            release.wait(5)
+            job.update(job_id, checked=1)
+
+        job.start(work)
+        self.assertTrue(started.wait(5))
+        job.request_cancel(job.snapshot()["run_id"])
+        release.set()
+        job.thread.join(5)
+        self.assertEqual(self.store.query(status="pending"), [])
 
     def test_a_job_without_a_store_still_runs(self):
         """裸 `BackgroundJob`（测试与老调用点）不带 store，一切照旧。"""
@@ -516,6 +572,90 @@ class TasksEndpointTests(unittest.TestCase):
 
     def test_the_list_endpoint_is_registered_on_the_read_contract(self):
         self.assertIs(web_contract.GET_HANDLERS["/api/tasks"], web_tasks.q_tasks)
+
+
+class TaskCancelEndpointTests(unittest.TestCase):
+    """`/api/tasks/cancel`：按这一轮的类别路由到各自的中止办法，管不到的如实拒绝。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.db = fresh_ledger(self.tmp.name)
+        self.contract = web_contract.WebContract(self.db)
+        self.store = self.contract.task_runs
+
+    def test_the_route_is_registered_on_the_write_contract(self):
+        self.assertIs(web_contract.POST_HANDLERS["/api/tasks/cancel"], web_tasks.w_task_cancel)
+
+    def test_a_running_background_job_is_asked_to_stop_and_settles_as_cancelled(self):
+        job = self.contract.link_prune_job
+        started, release = threading.Event(), threading.Event()
+
+        def work(job_id):
+            job.update(job_id, checked=1, total=3)
+            started.set()
+            release.wait(5)
+            job.update(job_id, checked=2)
+
+        job.start(work)
+        self.addCleanup(job.thread.join, 5)
+        self.addCleanup(release.set)
+        self.assertTrue(started.wait(5))
+        run_id = job.snapshot()["run_id"]
+        self.assertEqual(web_tasks.w_task_cancel(self.contract, {"id": run_id}),
+                         {"ok": True, "cancelled": [run_id]})
+        release.set()
+        job.thread.join(5)
+        self.assertEqual(self.store.get(run_id).status, "cancelled")
+
+    def test_a_queued_followup_is_settled_at_once(self):
+        parent = self.store.start("library-processing", trigger="manual")
+        queued = self.store.enqueue_followups(
+            parent.id, [("entity-avatar:performer:1", "entity-avatar", "甲")])["queued"]
+        web_tasks.w_task_cancel(self.contract, {"id": queued[0]})
+        run = self.store.get(queued[0])
+        self.assertEqual(run.status, "cancelled")
+        self.assertIn("取消", run.error)
+
+    def test_a_running_followup_is_flagged_for_its_next_checkpoint(self):
+        parent = self.store.start("library-processing", trigger="manual")
+        queued = self.store.enqueue_followups(
+            parent.id, [("entity-avatar:performer:1", "entity-avatar", "甲")])["queued"]
+        claimed = self.store.claim_followup(("entity-avatar",))
+        self.assertEqual(claimed.id, queued[0])
+        web_tasks.w_task_cancel(self.contract, {"id": claimed.id})
+        self.assertEqual(self.store.get(claimed.id).status, "running")
+        self.assertTrue(self.store.cancel_requested(claimed.id))
+
+    def test_a_finished_parent_cancels_the_followups_it_left_behind(self):
+        parent = self.store.start("library-processing", trigger="manual")
+        queued = self.store.enqueue_followups(parent.id, [
+            ("entity-avatar:performer:1", "entity-avatar", "甲"),
+            ("entity-avatar:performer:2", "entity-avatar", "乙")])["queued"]
+        self.store.finish(parent.id, "succeeded")
+        payload = web_tasks.w_task_cancel(self.contract, {"id": parent.id})
+        self.assertEqual(sorted(payload["cancelled"]), sorted(queued))
+        self.assertEqual({self.store.get(run_id).status for run_id in queued}, {"cancelled"})
+
+    def test_a_finished_round_with_nothing_left_is_a_bad_request(self):
+        run = self.store.start("batch", trigger="manual")
+        self.store.finish(run.id, "succeeded")
+        with self.assertRaisesRegex(ValueError, "已经结束"):
+            web_tasks.w_task_cancel(self.contract, {"id": run.id})
+
+    def test_a_round_running_in_another_process_is_refused_not_faked(self):
+        run = self.store.start("follow-check", trigger="cli", mutex_key="follow-check",
+                               pid=os.getpid() + 1)
+        with self.assertRaisesRegex(ValueError, "不在当前服务"):
+            web_tasks.w_task_cancel(self.contract, {"id": run.id})
+        self.assertEqual(self.store.get(run.id).status, "running")
+
+    def test_bad_ids_are_rejected_and_unknown_ids_are_not_found(self):
+        for body in ({}, {"id": "abc"}, None):
+            with self.assertRaisesRegex(ValueError, "缺少任务编号"):
+                web_tasks.w_task_cancel(self.contract, body)
+        with self.assertRaises(KeyError):
+            web_tasks.w_task_cancel(self.contract, {"id": 9999})
 
 
 def _request(contract):
