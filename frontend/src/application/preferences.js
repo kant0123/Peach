@@ -57,6 +57,9 @@ export function sidebarDot(loc){
   return {kind:'cost',cost:'free'};
 }
 
+/** 画幅筛选键是库里的 `ctx_orient` 原值，界面上只换显示名。 */
+const ORIENT_LABEL={'横屏':t('横屏'),'竖屏':t('竖屏')};
+
 export function sidebarFacets(facetData,context){
   const rows=(items,named=row=>row.label||tagLabel(row.k))=>(items||[]).map(row=>({value:String(row.k),label:named(row),n:row.n??null}));
   const creators=context.type==='entity'&&context.kind==='creator'
@@ -64,7 +67,7 @@ export function sidebarFacets(facetData,context){
   return {
     locations:(facetData.locations||[]).map(row=>({value:row.k,label:LOC[row.k]||row.k,n:row.n??null,dot:sidebarDot(row.k),
       ...(preferencesState.sourceOffline(row.k)?{offline:preferencesState.OFFLINE_HINT}:{})})),
-    regions:rows(facetData.regions),orientations:rows(facetData.orientations),
+    regions:rows(facetData.regions),orientations:rows(facetData.orientations,row=>ORIENT_LABEL[row.k]||tagLabel(row.k)),
     creators:rows(creators),tags:rows(facetData.tags),tech:rows(facetData.tech),
     followTags:rows(facetData.follow_tags,row=>tagLabel(row.k)),
     duration:!!facetData.stats?.duration,

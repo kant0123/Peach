@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 're
 import { createPortal } from 'react-dom';
 import { entityFaceImg, facePos } from '@peach/card-art';
 import { entityPath, esc, firstGrapheme, icon } from '@peach/legacy/core';
+import { tagLabel } from '@peach/legacy/tags';
 
 import { Button } from '@/components/base/buttons/button';
 
@@ -302,11 +303,11 @@ function FactTags({ tags }: { tags: string[] }) {
   const { shown, rest } = shownTags(tags);
   return (
     <>
-      {shown.map((tag) => <span key={tag} data-fact-tag="" title={tag}>{tag}</span>)}
+      {shown.map((tag) => <span key={tag} data-fact-tag="" title={tagLabel(tag)}>{tagLabel(tag)}</span>)}
       {rest ? (
         <MorePop id="entityTagPop" hook="fact" rest={rest} label={t('另外 {value} 个标签', { value: rest.toLocaleString() })}
           heading={t('{value} 个标签', { value: tags.length.toLocaleString() })}>
-          <div data-fact-tags="">{tags.map((tag) => <span key={tag} data-fact-tag="" title={tag}>{tag}</span>)}</div>
+          <div data-fact-tags="">{tags.map((tag) => <span key={tag} data-fact-tag="" title={tagLabel(tag)}>{tagLabel(tag)}</span>)}</div>
         </MorePop>
       ) : null}
     </>

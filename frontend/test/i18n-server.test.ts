@@ -46,6 +46,15 @@ describe('localizeServer', () => {
     expect(localizeServer('配置保存失败：磁盘已满')).toBe('設定を保存できませんでした: 磁盘已满');
   });
 
+  it('任务失败原因与流程状态按整句或模板换成译文', async () => {
+    const { localizeServer } = await load('ja');
+    expect(localizeServer('1258 项需要处理，其中 569 项是来源限流，等一会儿再跑；其余可重试未完成的部分。'))
+      .toBe('1258 件の処理が必要です。うち 569 件は取得元のレート制限なので、しばらく待ってから再実行してください。残りは未完了の部分を再試行できます。');
+    expect(localizeServer('任务未能启动')).toBe('タスクを開始できませんでした');
+    expect(localizeServer('设置写入失败：磁盘已满')).toBe('設定を書き込めませんでした: 磁盘已满');
+    expect(localizeServer('正在下载 ffmpeg 工具包')).toBe('ffmpeg ツールパッケージをダウンロード中');
+  });
+
   it('没有译文的句子原样返回', async () => {
     const { localizeServer } = await load('ja');
     expect(localizeServer('没有收录的句子')).toBe('没有收录的句子');

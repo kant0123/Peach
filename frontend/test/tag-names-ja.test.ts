@@ -14,6 +14,7 @@ describe('tagLabel', () => {
     const { tagLabel } = await load('ja');
     expect(tagLabel('中出内射')).toBe('中出し');
     expect(tagLabel('演员:新井リマ')).toBe('出演者:新井リマ');
+    expect(tagLabel('美体')).toBe('美ボディ');
     expect(tagLabel('没有登记的标签')).toBe('没有登记的标签');
   });
 
