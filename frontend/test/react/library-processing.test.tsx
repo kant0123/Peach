@@ -95,23 +95,51 @@ it('来源说没有只报一个数，不算问题也不提供失败重试', asyn
   expect(host.querySelector('details')).toBeNull();
 });
 
-it('扫描与补全方式共用一颗主键加一个下拉，各自交自己的阶段', async () => {
+it('主键只同步有变化的部分，下拉给出完整同步和选择同步内容', async () => {
   const served = await open({ status: 'idle' }, () => ({ status: 'complete' }));
   const host = await mount(card({ toast: vi.fn() }));
 
   await click(buttonNamed('同步媒体库', host));
   await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
-  expect(menuItem('同步媒体库')).not.toBeNull();
-  await click(menuItem('仅扫描文件'));
-  await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
-  await click(menuItem('仅同步已入库影片'));
-  await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
-  await click(menuItem('仅生成视频预览'));
-  await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
-  await click(menuItem('仅补全资料'));
+  expect([...document.querySelectorAll('[role="dialog"] button')].map((item) => item.textContent?.trim()))
+    .toEqual(['完整同步', '选择同步内容…']);
+  await click(menuItem('完整同步'));
 
-  expect(served.posts()).toEqual([{}, { stage: 'scan' }, { stage: 'collect' }, { stage: 'previews' }, { stage: 'metadata' }]);
+  expect(served.posts()).toEqual([{ scope: 'changed', retry_failed: false }, { scope: 'full' }]);
   expect(host.querySelector('a[href="/sources"]')?.textContent).toContain('来源和凭证');
+});
+
+it('选择同步内容按勾选交步骤与范围，勾了采集就一并检查配套文件，下次沿用', async () => {
+  const served = await open({ status: 'idle', speed_mode: 'standard' }, () => ({ status: 'complete' }));
+  const host = await mount(card({ toast: vi.fn() }));
+  const choose = async () => {
+    await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
+    await click(menuItem('选择同步内容…'));
+    return document.querySelector('dialog')!;
+  };
+  const step = (dialog: Element, value: string) =>
+    dialog.querySelector<HTMLInputElement>(`input[name="sync-step"][value="${value}"]`)!;
+
+  let dialog = await choose();
+  expect([...dialog.querySelectorAll<HTMLInputElement>('input[name="sync-step"]')].every((input) => input.checked)).toBe(true);
+  expect(step(dialog, 'local').disabled).toBe(true);
+  await click(step(dialog, 'sources'));
+  await click(step(dialog, 'media'));
+  await click(dialog.querySelector('input[name="retry-failed"]'));
+  await submit(dialog.querySelector('form'));
+  expect(served.posts()).toEqual([
+    { steps: ['local', 'collect'], scope: 'changed', retry_failed: true, speed_mode: 'standard' }]);
+
+  dialog = await choose();
+  expect(step(dialog, 'sources').checked).toBe(false);
+  expect(dialog.querySelector<HTMLInputElement>('input[name="retry-failed"]')!.checked).toBe(true);
+  await click(dialog.querySelector('input[name="sync-scope"][value="full"]'));
+  expect(dialog.querySelector<HTMLInputElement>('input[name="retry-failed"]')!.disabled).toBe(true);
+  await click(step(dialog, 'collect'));
+  await click(step(dialog, 'local'));
+  await submit(dialog.querySelector('form'));
+  expect(document.querySelector('dialog')?.textContent).toContain('请至少勾选一个步骤');
+  expect(served.posts()).toHaveLength(1);
 });
 
 it('启动只提交一次，进度用 GET 读回来，完成后给出回执与复核入口', async () => {
@@ -120,7 +148,7 @@ it('启动只提交一次，进度用 GET 读回来，完成后给出回执与�
     { status: 'idle' },
     (method) => method === 'POST'
       ? { status: 'running', job_id: 'one' }
-      : { status: 'complete', job_id: 'one', scanned: 9, identified: 4, candidates: 2 },
+      : { status: 'complete', job_id: 'one', scanned: 9, added: 3, identified: 4, candidates: 2 },
   );
   const host = await mount(card({ toast }));
   await click(buttonNamed('同步媒体库', host));
@@ -131,7 +159,7 @@ it('启动只提交一次，进度用 GET 读回来，完成后给出回执与�
   const receipt = host.querySelector('[role="status"]');
   expect(receipt?.textContent).toContain('处理完成');
   expect(receipt?.textContent).toContain(
-    '已扫描 9 个文件，识别 4 个番号，整理 2 组资料结果，自动保存 0 条。');
+    '已扫描 9 个文件，新增 3 个，识别 4 个番号，整理 2 组资料结果，自动保存 0 条。');
   // 这一趟没补任何女优资料，回执里就不出现那句话。
   expect(receipt?.textContent).not.toContain('补齐女优资料');
 });
@@ -150,7 +178,7 @@ it('补齐女优资料的读数进回执，冲突和未取得各自点名', asyn
   const host = await mount(card({ toast: vi.fn() }));
   await click(buttonNamed('同步媒体库', host));
 
-  expect(served.posts()).toEqual([{}]);
+  expect(served.posts()).toEqual([{ scope: 'changed', retry_failed: false }]);
   expect(host.querySelector('[role="status"]')?.textContent).toContain(
     '补齐女优资料：别名 5 个，头像 3 张，1 个同名冲突交回人工，2 张头像未取得。');
 });
@@ -235,7 +263,7 @@ it('有可重试项时页脚那颗发的仍是整批，不夹带上一趟的失�
   const host = await mount(card({ toast: vi.fn() }));
 
   await click(buttonNamed('同步媒体库', host));
-  expect(served.posts()).toEqual([{}]);
+  expect(served.posts()).toEqual([{ scope: 'changed', retry_failed: false }]);
 });
 
 it('失败项都不可重试时仍能重新发起整批任务', async () => {
@@ -400,7 +428,7 @@ it('首次整库任务先说明资源影响，确认模式后才启动，取消�
   await click(buttonNamed('同步媒体库', host));
   await click(document.querySelector('dialog input[value="low"]'));
   await submit(document.querySelector('dialog form'));
-  expect(served.posts()).toEqual([{ speed_mode: 'low' }]);
+  expect(served.posts()).toEqual([{ scope: 'changed', retry_failed: false, speed_mode: 'low' }]);
   expect(localStorage.getItem(RESOURCE_NOTICE_KEY)).toBe('seen');
   expect(document.querySelector('dialog')).toBeNull();
 });
@@ -486,9 +514,13 @@ it('处理较慢时各任务面显示等待进展，不沿用旧估时', async (
   }
 });
 
-it('扫描总量未知时显示已发现文件数，已知阶段显示完成数', () => {
-  expect(processingLine({ status: 'running', stage: '扫描文件', scanned: 12345 }))
-    .toBe('扫描文件 · 已发现 12,345 个文件');
+it('扫描总量未知时显示已检查与新增文件数，已知阶段显示完成数', () => {
+  expect(processingLine({ status: 'running', stage: '扫描文件', scanned: 12345, added: 1200 }))
+    .toBe('扫描文件 · 已检查 12,345 个文件，新增 1,200 个');
+  expect(processingLine({ status: 'running', stage: '扫描文件', scanned: 25520 }))
+    .toBe('扫描文件 · 已检查 25,520 个文件，新增 0 个');
+  expect(processingLine({ status: 'running', stage: '扫描文件', scanned: 12, added: 2, unchanged_directories: 7480 }))
+    .toBe('扫描文件 · 已检查 12 个文件，新增 2 个，跳过 7,480 个未变化的文件夹');
   expect(processingLine({ status: 'paused', checked: 38, total: 100 })).toBe('已暂停 · 38 / 100 项');
 });
 

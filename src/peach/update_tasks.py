@@ -108,6 +108,7 @@ def reserve(db: Path, *, owner: int | None = None) -> str:
         token = uuid.uuid4().hex
         atomic_write_text(root / "install.json", json.dumps({
             "pid": owner if owner is not None else os.getpid(), "token": token}))
+        _pause_clear_at.clear()
         from .job_recovery import request_pause
         request_pause(db)
         return token
@@ -119,10 +120,27 @@ def is_pausing(db: Path) -> bool:
         return bool(_maintenance(root))
 
 
+#: 「没有安装预约」这个答复沿用多久（秒）。
+PAUSE_CHECK_SECONDS = 0.5
+_pause_clear_at: dict[str, float] = {}
+
+
 def check_pause(db: Path | None) -> None:
-    if db is not None and is_pausing(db):
+    """有安装预约就让当前任务停下。
+
+    查一次要持互斥文件锁读盘，约几毫秒；扫描和逐项处理每一项都过这里，几万项就是几分钟。
+    「没有预约」的答复沿用 `PAUSE_CHECK_SECONDS`，本进程接受预约时清掉，别的进程的预约
+    最多晚这么久生效。
+    """
+    if db is None:
+        return
+    key, now = str(db), time.monotonic()
+    if now - _pause_clear_at.get(key, now - PAUSE_CHECK_SECONDS) < PAUSE_CHECK_SECONDS:
+        return
+    if is_pausing(db):
         from .jobs import JobPaused
         raise JobPaused('任务已暂停，安装完成后自动继续。')
+    _pause_clear_at[key] = now
 
 
 def _running(db: Path) -> list[str]:

@@ -14,6 +14,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path, PureWindowsPath
@@ -116,7 +117,7 @@ class PosixShapeTests(_ScanCase):
                 raise InterruptedError('模拟服务退出')
         options = dict(declared_roots={'local': ('R:\\media',)},
                        mounts={'local': (self.media,)}, windows=False)
-        with self.assertRaises(InterruptedError):
+        with patch.object(scan, 'CHECKPOINT_SECONDS', 0), self.assertRaises(InterruptedError):
             self._scan('R:\\media', save_checkpoint=save, **options)
         visited = []
         scandir = os.scandir
@@ -129,6 +130,40 @@ class PosixShapeTests(_ScanCase):
         self.assertEqual((result.files, result.total_bytes, result.subtitles), (4, 22, 1))
         self.assertEqual(len(result.new_ids), 4)
         self.assertEqual(len(self._paths()), 4)
+
+    def test_changed_scope_lists_only_directories_whose_mtime_moved(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        cache = scan.DirectoryCache(self.root / 'state' / 'scan-directories.sqlite')
+        self.addCleanup(cache.close)
+        first, _ = self._scan('R:\\media', directory_cache=cache, reuse_unchanged=True, **options)
+        self.assertEqual((first.files, first.added, first.unchanged_directories), (3, 3, 0))
+        with patch.object(scan.os, 'scandir', side_effect=AssertionError('没有变化的目录不应再列出')):
+            quiet, _ = self._scan('R:\\media', directory_cache=cache, reuse_unchanged=True, **options)
+        self.assertEqual((quiet.files, quiet.added, quiet.gone, quiet.unchanged_directories), (0, 0, 0, 3))
+        sub = self.media / '创作者' / 'sub'
+        (sub / 'b.mp4').write_bytes(b'1' * 4)
+        (sub / 'a.mp4').unlink()
+        os.utime(sub, ns=(time.time_ns(), time.time_ns() + 10**9))
+        # 三趟可能落在同一秒；把上一趟的时刻推远，消失数才不受秒级时间戳影响。
+        with sqlite3.connect(self.db) as connection:
+            connection.execute("UPDATE asset SET last_seen='2000-01-01 00:00:00'")
+        connection.close()
+        visited = []
+        scandir = os.scandir
+        with patch.object(scan.os, 'scandir', side_effect=lambda path: visited.append(Path(path)) or scandir(path)):
+            moved, _ = self._scan('R:\\media', directory_cache=cache, reuse_unchanged=True, **options)
+        self.assertEqual(visited, [sub])
+        self.assertEqual((moved.files, moved.added, moved.gone, moved.unchanged_directories), (1, 1, 1, 2))
+
+    def test_full_scope_relists_everything_and_refreshes_the_cache(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        cache = scan.DirectoryCache(self.root / 'state' / 'scan-directories.sqlite')
+        self.addCleanup(cache.close)
+        self._scan('R:\\media', directory_cache=cache, **options)
+        full, _ = self._scan('R:\\media', directory_cache=cache, **options)
+        self.assertEqual((full.files, full.unchanged_directories), (3, 0))
+        reused, _ = self._scan('R:\\media', directory_cache=cache, reuse_unchanged=True, **options)
+        self.assertEqual(reused.unchanged_directories, 3)
 
     def test_finished_root_checkpoint_does_not_enumerate_the_tree(self):
         saved = []
@@ -151,19 +186,25 @@ class PosixShapeTests(_ScanCase):
         (self.media / saved['cursor']).write_bytes(b'changed after checkpoint')
         progress = []
         result, _ = self._scan('R:\\media', resume_state=saved,
-                               progress=lambda count, size: progress.append((count, size)), **options)
+                               progress=lambda count, size, added: progress.append((count, size)), **options)
         self.assertEqual((result.files, result.total_bytes), (3, 14))
         self.assertTrue(all(count >= 1 for count, _ in progress))
         self.assertEqual(len(self._paths()), 3)
 
-    def test_structured_progress_reports_discovered_files_and_bytes(self):
+    def test_structured_progress_reports_checked_and_added_files(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (str(self.media),)},
+                       windows=False)
         progress = []
-        result, _ = self._scan('R:\\media', declared_roots={'local': ('R:\\media',)},
-                               mounts={'local': (str(self.media),)}, windows=False,
-                               progress=lambda files, size: progress.append((files, size)))
+        result, _ = self._scan('R:\\media', **options,
+                               progress=lambda files, size, added: progress.append((files, size, added)))
         self.assertEqual(progress[0][0], 1)
-        self.assertEqual(progress[-1], (3, 14))
-        self.assertEqual(progress[-1], (result.files, result.total_bytes))
+        self.assertEqual(progress[-1], (3, 14, 3))
+        self.assertEqual(progress[-1][:2], (result.files, result.total_bytes))
+        progress.clear()
+        result, _ = self._scan('R:\\media', **options,
+                               progress=lambda files, size, added: progress.append((files, size, added)))
+        self.assertEqual(progress[-1], (3, 14, 0))
+        self.assertEqual(result.added, 0)
 
     DECLARED = {"local": (r"R:\media",)}
 
@@ -308,7 +349,7 @@ class NasDirectoryTests(unittest.TestCase):
             for name in ("@video.mp4", "#recycle.mp4"):
                 (root / name).write_bytes(b"x")
             files = [Path(entry.path).relative_to(root).as_posix()
-                     for _, entries in scan._walk(root) for entry in entries]
+                     for _, entries, _, _ in scan._walk(root) for entry in entries]
         self.assertEqual(set(files), {"normal/sample.mp4", "@video.mp4", "#recycle.mp4"})
 
 

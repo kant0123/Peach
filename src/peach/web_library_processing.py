@@ -2,9 +2,9 @@
 import json
 
 from . import settings_file
-from .library_processing import (ALL_STAGES, COLLECT_STAGE, SCAN_STAGE, STAGES,
+from .library_processing import (ALL_STAGES, COLLECT_STAGE, SCAN_STAGE, SCOPES,
                                 METADATA_STAGE, PREVIEWS_STAGE, _asset_selection,
-                                decorate, issues_path, process_library, snapshot)
+                                decorate, issues_path, process_library, resolve_steps, snapshot)
 from .processing_control import control_for, initial_estimate, valid_mode, mode_ratio
 
 ACTIVE = ('running', 'pausing', 'paused')
@@ -74,10 +74,7 @@ def _control_action(contract, config, body):
         identity = current_job_id.set(str(job_id))
         run = current_run.set(recovery.get('run_id'))
         try:
-            return w_library_processing(contract, {
-                'stage': previous.get('requested_stage') or ALL_STAGES,
-                **({'asset_ids': previous['asset_ids']} if previous.get('asset_ids') else {}),
-                'speed_mode': control.mode}, resume=True)
+            return w_library_processing(contract, _resume_request(previous, control.mode), resume=True)
         finally:
             current_job_id.reset(identity)
             current_run.reset(run)
@@ -85,6 +82,17 @@ def _control_action(contract, config, body):
     if not live and result.get('status') in ACTIVE:
         result['status'] = status
     return result
+
+
+def _resume_request(previous, mode):
+    """按暂停前那一趟的状态还原启动参数：步骤、范围、是否重试失败项与所选影片。"""
+    request = {'stage': previous.get('requested_stage') or ALL_STAGES, 'speed_mode': mode,
+               **{key: previous[key] for key in ('scope', 'retry_failed') if key in previous}}
+    if previous.get('requested_steps'):
+        request['steps'] = previous['requested_steps']
+    if previous.get('asset_ids'):
+        request['asset_ids'] = previous['asset_ids']
+    return request
 
 
 def _announce_control(job, job_id, status):
@@ -159,14 +167,23 @@ def _processing_request(contract, config, previous, body):
     asset_ids = _asset_selection(contract.db_path, (body or {}).get('asset_ids'))
     if asset_ids is not None and retry_ids is not None:
         raise ValueError('选择项目与失败重试不能同时使用')
-    stage = str((body or {}).get('stage') or
+    body = body or {}
+    stage = str(body.get('stage') or
                 (previous.get('requested_stage') if retry_ids is not None else None) or ALL_STAGES)
-    if stage not in STAGES:
-        raise ValueError('处理阶段无效')
+    requested = body.get('steps')
+    if requested is None and retry_ids is not None:
+        requested = previous.get('requested_steps')
+    steps, stage = resolve_steps(stage, requested)
+    scope = str(body.get('scope') or 'full')
+    if scope not in SCOPES:
+        raise ValueError('同步范围无效')
+    retry_failed = body.get('retry_failed', True)
+    if not isinstance(retry_failed, bool):
+        raise ValueError('是否重试失败项格式无效')
     from .media_processing_policy import metadata_only
-    if stage == PREVIEWS_STAGE and metadata_only(config.directory('state')):
+    if steps == {'media'} and metadata_only(config.directory('state')):
         raise ValueError('视频预览生成已关闭，请先在媒体库设置中开启')
-    return retry_ids, asset_ids, stage
+    return retry_ids, asset_ids, dict(stage=stage, steps=sorted(steps), scope=scope, retry_failed=retry_failed)
 
 
 def w_library_processing(contract, body, *, resume=False):
@@ -176,7 +193,8 @@ def w_library_processing(contract, body, *, resume=False):
     previous = _current(contract)
     if previous.get('status') in ACTIVE and not resume:
         return previous
-    retry_ids, asset_ids, stage = _processing_request(contract, config, previous, body)
+    retry_ids, asset_ids, plan = _processing_request(contract, config, previous, body)
+    stage = plan['stage']
     if retry_ids is not None and not retry_ids:
         return previous
     mode = valid_mode(control_for(config).mode if resume else
@@ -186,6 +204,7 @@ def w_library_processing(contract, body, *, resume=False):
         try:
             result = process_library(config, contract.db_path, contract.candidate_root, contract.cover_root,
                 job_id=job_id, retry_ids=retry_ids, stage=stage, asset_ids=asset_ids,
+                steps=plan['steps'], scope=plan['scope'], retry_failed=plan['retry_failed'],
                 # 自动落库与页面写的是同一个 `LedgerDatabase`：进程内写锁在实例上，
                 # 另建一个就是在同一个进程里开第二条写入路径。
                 database=contract.database,
@@ -203,6 +222,8 @@ def w_library_processing(contract, body, *, resume=False):
               METADATA_STAGE: '准备采集资料', PREVIEWS_STAGE: '准备生成预览图'}
     return contract.library_processing_job.start(
         work, restart=True, initial={'stage': labels[stage], 'requested_stage': stage,
+                                    'requested_steps': plan['steps'], 'scope': plan['scope'],
+                                    'retry_failed': plan['retry_failed'],
                                     **initial_estimate(config, contract.db_path, stage, asset_ids or retry_ids, mode)},
-        recovery={'stage': stage, 'speed_mode': mode, **({'asset_ids': asset_ids or retry_ids}
+        recovery={**plan, 'speed_mode': mode, **({'asset_ids': asset_ids or retry_ids}
                                     if asset_ids is not None or retry_ids is not None else {})})

@@ -275,6 +275,12 @@ OneJAV、Free JAV Torrent 只给种子链接。这类条目经索引器同源的
 
 缺预览提示复用 `cardArtwork` 的可用性判据，目录、实体作品区与详情共用 `LibraryCompletionPrompt` 和 `ProcessingActions`。`/api/library-processing` 的 `collect` 阶段补资料与本地预览，`previews` 仅生成本地九宫格，`metadata` 仅采集资料；可选 `asset_ids` 限定已存在影片，空数组拒绝，全库扫描不用于定向处理。九宫格复用 `frame_capture`、FFmpegResolver 和 `/poster`，本地阶段先于外部查询执行，沿用任务日志和失败重试；不增加依赖。浏览器回归使用临时演示库和拦截响应验证默认动作、下拉、焦点归还及完成后的卡面更新。
 
+「同步媒体库」主键提交 `scope: "changed"`，只处理上次之后有变化的部分；下拉提供完整同步（`scope: "full"`）与「选择同步内容」。后者用 `steps` 取代阶段名，取值为 `sources`、`local`、`media`、`collect` 的任意组合，选 `collect` 时连带 `local`；`retry_failed` 决定差分范围里是否重试文件没变的上次失败项。差分依据有两份可重建的状态库，不进账本：
+- `state/scan-directories.sqlite` 记每个目录的修改时间与子目录，修改时间没变的目录不再列出。
+- `state/library-processing-marks.sqlite` 记每部影片的配套文件、外部采集与抽帧的输入指纹和结果。
+
+目录修改时间只反映条目增删与改名；原地改写内容、来源后来补录的资料要用完整同步。指定影片与失败重试总按完整范围处理。
+
 ## 独立测试包在线更新
 
 - 任务起跑与安装预约复用已固定的 filelock 4.2.0（MIT，Windows/macOS/Linux，无额外依赖）和原子 JSON。`update_tasks` 在同一数据目录内串行登记任务和预约安装，覆盖各服务进程、任务中心、后继领取和 `job_main` 批处理。安装请求触发采集任务在检查点保存并暂停，任务中心保留 `pending` 行；新采集请求进入等待。安装入口等在途步骤保存进度，随后停止自己的服务，不要求用户等待整轮任务结束。源码批处理保留 PID 锁，写完在途批次后等待安装，结束后由原进程继续。

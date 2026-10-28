@@ -2791,6 +2791,42 @@ class LibraryPreviewCompletionTests(unittest.TestCase):
         self.assertEqual(second['status'], 'complete')
         capture.assert_not_called()
 
+    def test_changed_scope_skips_videos_whose_files_did_not_change(self):
+        with patch('peach.library_processing.root_online', return_value=True):
+            first = self.run_processing(steps=['local', 'collect'], scope='changed')
+            second = self.run_processing(steps=['local', 'collect'], scope='changed')
+            (self.media / 'clip-1.mp4').write_bytes(b'replaced video')
+            third = self.run_processing(steps=['local', 'collect'], scope='changed')
+            full = self.run_processing(steps=['local', 'collect'], scope='full')
+        # 两部在线视频：第二趟都没变，第三趟只有换掉文件的 clip-1 重读，完整范围不跳过。
+        self.assertEqual([run['unchanged_videos'] for run in (first, second, third, full)], [0, 2, 1, 0])
+        self.assertEqual(second['status'], 'complete')
+        self.assertEqual(second['requested_steps'], ['collect', 'local'])
+        self.assertEqual([step['id'] for step in second['steps']], ['sources', 'local', 'collect'])
+
+    def test_changed_scope_leaves_known_preview_failures_until_asked_to_retry(self):
+        with patch('peach.library_processing.FFmpegResolver', return_value=self.resolver), \
+                patch('peach.library_processing.root_online', return_value=True), \
+                patch('peach.frame_capture.capture_with_retry', return_value=False) as capture:
+            failed = self.run_processing(steps=['media'], scope='changed')
+            self.assertEqual(failed['issue_count'], 1)
+            capture.reset_mock()
+            skipped = self.run_processing(steps=['media'], scope='changed', retry_failed=False)
+            capture.assert_not_called()
+            retried = self.run_processing(steps=['media'], scope='changed', retry_failed=True)
+            self.assertTrue(capture.called)
+        self.assertEqual((skipped['status'], skipped['issue_count']), ('complete', 0))
+        self.assertEqual(retried['issue_count'], 1)
+
+    def test_steps_resolve_to_a_preset_and_collect_brings_the_local_check(self):
+        from peach.library_processing import resolve_steps
+        self.assertEqual(resolve_steps('all', ['collect']), (frozenset({'local', 'collect'}), 'metadata'))
+        self.assertEqual(resolve_steps('all', ['sources', 'media']), (frozenset({'sources', 'media'}), 'all'))
+        self.assertEqual(resolve_steps('scan'), (frozenset({'sources'}), 'scan'))
+        for invalid in ([], ['everything'], 'local'):
+            with self.subTest(steps=invalid), self.assertRaises(ValueError):
+                resolve_steps('all', invalid)
+
     def test_preview_only_leaves_candidates_and_sources_untouched(self):
         factory = Mock(side_effect=AssertionError('外部资料不属于预览任务'))
         with patch('peach.library_processing.FFmpegResolver', return_value=self.resolver), \
