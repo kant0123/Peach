@@ -27,6 +27,7 @@ import { finiteWallFilters, wallHasCover } from '../video-wall/wall-layout';
 import { LibraryCompletionPrompt, missingPreviewIds } from '../library-processing/library-completion';
 import { useCatalogView } from './catalog-view';
 import { CatalogListPage } from './catalog-list-page';
+import { t } from '../../i18n';
 
 export function CatalogGridPage(props: CatalogGridProps) {
   const view = useCatalogView();
@@ -144,7 +145,7 @@ function GridBody(props: CatalogGridProps) {
       error={!result.data && !result.isPending ? requestErrorMessage(result.error) : ''}
       retry={() => void result.refetch()}
       emptyHtml={result.data && !wallPool.length ? tiles.length
-        ? emptyStateHtml('image', '这批作品没有封面', result.hasNextPage ? '载入更多作品后继续浏览。' : '换个筛选范围再试。')
+        ? emptyStateHtml('image', t('这批作品没有封面'), result.hasNextPage ? t('载入更多作品后继续浏览。') : t('换个筛选范围再试。'))
         : props.emptyHtml?.({ trash, libraryEmpty:!!result.data.pages[0]?.libraryEmpty }) : ''}
       loadMore={loadNext} actions={actions} helpers={helpers} javImage={layout.javImage} />;
     if (result.isPending) return null;
@@ -224,10 +225,10 @@ export function LoadMore({ entity, load, enabled, children }: {
   return (
     <>
       {entity
-        ? <button ref={attach} type="button" data-entity-more="" {...aria} onClick={() => void run(true)}>{children ?? '载入更多'}</button>
+        ? <button ref={attach} type="button" data-entity-more="" {...aria} onClick={() => void run(true)}>{children ?? t('载入更多')}</button>
         /* 失败时只留下面那条重试：哨兵收起但不卸下，重试接上之后照旧由它续页。 */
         : <div ref={attach} data-load-more="" {...aria} hidden={Boolean(state.error)} onClick={() => void run(true)}
-          dangerouslySetInnerHTML={{ __html: loadingDotsHtml('继续载入中…') }} />}
+          dangerouslySetInnerHTML={{ __html: loadingDotsHtml(t('继续载入中…')) }} />}
       {state.error ? <RetryNote message={state.error} onRetry={() => void run(true)} /> : null}
     </>
   );
@@ -287,9 +288,9 @@ function ShortsStrip({ cut, props, onOpen }: {
   return (
     <section data-shorts-strip="">
       <h2>
-        竖屏 <span data-shorts-count="">{`${cut.total.toLocaleString()} 个`}</span>
+        {t('竖屏')} <span data-shorts-count="">{t('{count} 个', { count: cut.total.toLocaleString() })}</span>
         <button type="button" data-shorts-enter="" onClick={() => props.actions.openShorts()}>
-          <Icon name="gallery-vertical-end" /><span>进入沉浸模式</span>
+          <Icon name="gallery-vertical-end" /><span>{t('进入沉浸模式')}</span>
         </button>
       </h2>
       <div ref={row} data-shorts-row="">
@@ -328,13 +329,13 @@ function HomeMix({ seed, layout, helpers, actions }: {
   const artwork = mixFace(seed, layout, false);
   return (
     <MixCard data-mix-seed={String(seed.id)} name={`Mix · ${label}`}
-      caption={`${helpers.displayName(seed, seed.name || '')}及相似作品`} count={0} badge="Mix" glyph wholeCard
+      caption={t('{name}及相似作品', { name: helpers.displayName(seed, seed.name || '') })} count={0} badge="Mix" glyph wholeCard
       poster={null} artwork={artwork}
       artworkIdentity={size === 'small' ? artwork.html : mixFace(seed, { ...layout, size: 'small' }, false).html}
       relayoutArt={(root) => relayoutCovers(root, size)}
       ratio={cardRatio(seed, 'grid', layout)}
       flipImages={flipImages} faceHtml={(id) => faces.current.get(id) || ''} canFlip={actions.canFlip}
       faces={[]} onOpenEntity={actions.openEntity}
-      onOpen={(anchor) => actions.openMix(seed.id, anchor)} openLabel={`打开 Mix · ${label}`} />
+      onOpen={(anchor) => actions.openMix(seed.id, anchor)} openLabel={t('打开 Mix · {label}', { label })} />
   );
 }

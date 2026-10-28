@@ -217,7 +217,7 @@
   border-radius: var(--pill-radius);
   background: rgba(0, 0, 0, .6);
   color: rgba(255, 255, 255, .82);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -323,7 +323,7 @@
   border-radius: var(--control-radius);
 }
 .peach-react [data-photo-zoom] :is([data-photo-scale="original"], [data-photo-zoom-readout]) {
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }

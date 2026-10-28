@@ -32,6 +32,7 @@ import {
   REVIEW_CATEGORIES, REVIEW_KEY, REVIEW_LABELS, reviewGroupingOptions,
   reviewWindow, selectReviewRange, submitDecision,
 } from './review';
+import { t } from '../../i18n';
 
 // 与配置页共用 BoardUI gray PillTab 样式；保留 tabpanel 与复核队列计数。
 const TAB_CLASS = 'flex cursor-pointer items-center justify-between gap-2';
@@ -42,22 +43,22 @@ function Pagination(
 ) {
   if (pages <= 1) return null;
   return (
-    <nav aria-label="复核分页" className="flex w-full flex-wrap items-center justify-between gap-2">
+    <nav aria-label={t('复核分页')} className="flex w-full flex-wrap items-center justify-between gap-2">
       <Button variant="secondary" size="small" disabled={page <= 1}
-        onClick={() => onPage(page - 1)}>上一页</Button>
+        onClick={() => onPage(page - 1)}>{t('上一页')}</Button>
       <ul className="flex flex-wrap items-center gap-1">
         {paginationRange(page, pages).map((item, at) => (
           <li key={item === DOTS ? `dots-${at}` : item}>
             {item === DOTS
               ? <span aria-hidden className="px-1 text-body-2-regular text-text-tertiary">{DOTS}</span>
               : <Button variant={item === page ? 'secondary' : 'ghost'} size="small"
-                  aria-label={`第 ${item} 页`} aria-current={item === page ? 'page' : undefined}
+                  aria-label={t('第 {item} 页', { item })} aria-current={item === page ? 'page' : undefined}
                   onClick={() => onPage(Number(item))}>{item}</Button>}
           </li>
         ))}
       </ul>
       <Button variant="secondary" size="small" disabled={page >= pages}
-        onClick={() => onPage(page + 1)}>下一页</Button>
+        onClick={() => onPage(page + 1)}>{t('下一页')}</Button>
     </nav>
   );
 }
@@ -144,7 +145,7 @@ export function ReviewPage(props: ReviewProps) {
     mutationFn: ({ row, status }: { row: ReviewRow; status: DecisionStatus }) =>
       submitDecision(decisionPayload(category, currentReviewRow(category, row), status, choiceOf(row))),
     onSuccess: (result, { row, status }) => {
-      if (!result.ok) { fail(row.item_key, result.error || '服务端拒绝了这次判定'); return }
+      if (!result.ok) { fail(row.item_key, result.error || t('服务端拒绝了这次判定')); return }
       // 判过的直接移出本批并同步计数，下一条立刻顶上来；留在队列里就像没生效。
       dropReviewRows(category, [row.item_key]);
       forget([row.item_key]);
@@ -162,10 +163,10 @@ export function ReviewPage(props: ReviewProps) {
       const failures: [string, string][] = [];
       for (const [at, row] of rows.entries()) {
         if (!alive.current) break;
-        setFeedback(`正在处理 ${at} / ${rows.length}`);
+        setFeedback(t('正在处理 {at} / {count}', { at, count: rows.length }));
         try {
           const result = await submitDecision(decisionPayload(category, currentReviewRow(category, row), status, choiceOf(row)));
-          if (!result.ok) throw new Error(result.error || '服务端未采用该项');
+          if (!result.ok) throw new Error(result.error || t('服务端未采用该项'));
           done.push(row.item_key);
         } catch (cause) {
           failures.push([row.item_key, errorMessage(cause)]);
@@ -178,8 +179,8 @@ export function ReviewPage(props: ReviewProps) {
       forget(done);
       failures.forEach(([key, message]) => fail(key, message));
       setFeedback('');
-      toast(`已${status === 'approved' ? '通过' : '拒绝'} ${done.length} 项`
-        + (failures.length ? `，${failures.length} 项未完成` : ''));
+      toast(t('已{value} {count} 项', { value: status === 'approved' ? t('通过') : t('拒绝'), count: done.length })
+        + (failures.length ? t('，{count} 项未完成', { count: failures.length }) : ''));
     },
     onError: (cause) => { setFeedback(errorMessage(cause)) },
   });
@@ -188,7 +189,7 @@ export function ReviewPage(props: ReviewProps) {
     if (bulk.isPending || !selectedRows.length) return;
     if (status === 'approved' && metadata
       && selectedRows.some((row) => !choiceOf(row).candidateKey)) {
-      setFeedback('请先为所选资料选择要采用的来源。');
+      setFeedback(t('请先为所选资料选择要采用的来源。'));
       return;
     }
     setFeedback('');
@@ -205,7 +206,7 @@ export function ReviewPage(props: ReviewProps) {
       }
       return next;
     });
-    setFeedback(`已选择 ${source}，点击通过所选采用。`);
+    setFeedback(t('已选择 {source}，点击通过所选采用。', { source }));
   };
 
   const reveal = async (id: number) => {
@@ -228,11 +229,11 @@ export function ReviewPage(props: ReviewProps) {
     <Page>
       <div className="flex flex-col gap-5 pb-10">
       {locked ? (
-        <Note tone="warning" title="本机只能浏览"
+        <Note tone="warning" title={t('本机只能浏览')}
           extra={writerUrl
             ? <p className="text-body-2-regular">
                 <a href={writerUrl} className="text-text-primary underline underline-offset-2">
-                  前往写入端复核
+                  {t('前往写入端复核')}
                 </a>
               </p>
             : undefined}>
@@ -247,7 +248,7 @@ export function ReviewPage(props: ReviewProps) {
         if (isReviewCategory(next)) goCategory(next);
       }} className="flex flex-col gap-5 review-split:flex-row review-split:items-start review-split:gap-6">
         <div data-section-nav className="w-full min-w-0 review-split:sticky review-split:top-topbar review-split:w-review-tabs review-split:shrink-0">
-          <h2 id="reviewcategories">复核分类</h2>
+          <h2 id="reviewcategories">{t('复核分类')}</h2>
           <TabList ref={categoryScroll} aria-labelledby="reviewcategories" data-section-items
             className="flex review-split:flex-col review-split:items-stretch">
             {REVIEW_CATEGORIES.map((key) => {
@@ -295,7 +296,7 @@ export function ReviewPage(props: ReviewProps) {
                       for (const key of keys) { if (all) next.delete(key); else next.add(key) }
                       setSelected(next);
                     }}>
-                      {group.rows.every((row) => selected.has(row.item_key)) ? '清空本组' : '全选本组'}
+                      {group.rows.every((row) => selected.has(row.item_key)) ? t('清空本组') : t('全选本组')}
                     </Button>
                   )}
                 </div>
@@ -327,14 +328,14 @@ export function ReviewPage(props: ReviewProps) {
             </section>
           )) : review.isError && !review.data ? (
             /* 读不到队列和队列是空的不是一回事：说清楚是读取失败，给一颗重试键。 */
-            <Note tone="error" title="复核队列读取失败" action={
-              <Button variant="secondary" size="small" disabled={review.isFetching} onClick={() => void review.refetch()}>重试</Button>
+            <Note tone="error" title={t('复核队列读取失败')} action={
+              <Button variant="secondary" size="small" disabled={review.isFetching} onClick={() => void review.refetch()}>{t('重试')}</Button>
             }>
               {errorMessage(review.error)}
             </Note>
           ) : (
-            <EmptyState icon={RiCheckboxCircleLine} title="此分类没有待复核项目">
-              可切换分类查看其他待确认资料。
+            <EmptyState icon={RiCheckboxCircleLine} title={t('此分类没有待复核项目')}>
+              {t('可切换分类查看其他待确认资料。')}
             </EmptyState>
           )}
 

@@ -22,6 +22,7 @@ import {
   fetchMediaRepair, fetchRepairLibraries, IDLE_REPAIR, MEDIA_REPAIR_KEY, MEDIA_REPAIR_URL,
   missingToolText, REPAIR_LIBRARIES_KEY, statusLine, type MediaRepairState,
 } from './media-repair';
+import { t } from '../../i18n';
 
 const libraryMark = (icon: string) => MEDIA_SOURCE_ICONS[icon] || icon;
 const replace = (next: MediaRepairState) => queryClient.setQueryData(MEDIA_REPAIR_KEY, next);
@@ -47,11 +48,11 @@ export function MediaRepairCard() {
   const start = () => {
     if (!selected) return;
     void confirmModal({
-      title: `修复媒体库「${selected.name}」`,
-      body: '缺时间戳表的片子另存一份修好的头，原文件不动；缺索引的片子重建后替换原文件，'
-        + '坏原件改名成同目录的隐藏文件（.文件名.peach-original）留着。'
-        + (selected.metered ? '这个库在计费来源上，每修一部都要把片子完整拉一遍。' : ''),
-      confirmLabel: '修复媒体库',
+      title: t('修复媒体库「{name}」', { name: selected.name }),
+      body: t('缺时间戳表的片子另存一份修好的头，原文件不动；缺索引的片子重建后替换原文件，')
+        + t('坏原件改名成同目录的隐藏文件（.文件名.peach-original）留着。')
+        + (selected.metered ? t('这个库在计费来源上，每修一部都要把片子完整拉一遍。') : ''),
+      confirmLabel: t('修复媒体库'),
       onConfirm: async () => replace(await apiSend<MediaRepairState>(MEDIA_REPAIR_URL,
         { library: selected.id, restart: true })),
     });
@@ -61,12 +62,12 @@ export function MediaRepairCard() {
 
   const line = statusLine(state);
   const complete = state.status === 'complete';
-  const problem = action.error || state.error || (repair.error ? '读不到媒体修复的状态' : '');
+  const problem = action.error || state.error || (repair.error ? t('读不到媒体修复的状态') : '');
   return (
     <div className="flex flex-col gap-4">
-      <Fieldset layout="split" label="媒体修复" footer={
+      <Fieldset layout="split" label={t('媒体修复')} footer={
         <>
-          <Select aria-label="媒体库" className="w-48" selectedKey={selected?.id ?? null}
+          <Select aria-label={t('媒体库')} className="w-48" selectedKey={selected?.id ?? null}
             isDisabled={running || !libraries.length}
             onSelectionChange={(key) => { if (key !== null) setChosen(String(key)); }}>
             {libraries.map((row) => (
@@ -76,25 +77,25 @@ export function MediaRepairCard() {
             ))}
           </Select>
           {running
-            ? <Button onClick={stop} {...busyProps(action.busy === 'stop')}>停止</Button>
-            : <Button onClick={start} disabled={!selected}>开始修复</Button>}
+            ? <Button onClick={stop} {...busyProps(action.busy === 'stop')}>{t('停止')}</Button>
+            : <Button onClick={start} disabled={!selected}>{t('开始修复')}</Button>}
         </>
       }>
         <div className="flex flex-col gap-2">
-          <FieldsetTitle>媒体修复</FieldsetTitle>
+          <FieldsetTitle>{t('媒体修复')}</FieldsetTitle>
           <p className="text-body-2-regular text-text-secondary">{REPAIR_CARD_TEXT}</p>
           {running && state.total
-            ? <Progress label="修复进度" value={state.checked} max={state.total} />
+            ? <Progress label={t('修复进度')} value={state.checked} max={state.total} />
             : null}
           {line ? <p role="status" className="text-caption-1-regular text-text-secondary">{line}</p> : null}
         </div>
       </Fieldset>
       <div aria-live="polite" className="flex flex-col gap-4 empty:hidden">
         {complete && !state.repaired && !state.failed
-          ? <Note tone="info" title="没有要修的">这个库里的片子都能直接播。</Note>
+          ? <Note tone="info" title={t('没有要修的')}>{t('这个库里的片子都能直接播。')}</Note>
           : null}
         {complete && state.missing_tool
-          ? <Note tone="warning" title="缺少 untrunc">{missingToolText(state)}</Note>
+          ? <Note tone="warning" title={t('缺少 untrunc')}>{missingToolText(state)}</Note>
           : null}
         {problem ? <Note tone="error">{problem}</Note> : null}
       </div>

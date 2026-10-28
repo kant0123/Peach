@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /* 顶栏搜索（`search` 岛，ADR-0031 第 11b 步）：数据形状与菜单模型。
  *
  * 输入框 `#q` 是壳的静态节点，岛不画它，只在上面接事件：它在 React 包到之前就得能敲字，壳里的
@@ -175,18 +176,18 @@ export function menuModel({ query, history, picks, suggestFor, groups, tabs, kin
       const sections = recommendations.map(group => ({ ...group,
         options: group.items.map(item => add({ type: 'suggest', value: item.value, kind: group.kind, item })),
       }));
-      const recent = matching.length ? { label: '搜索记录', options: matching.map(value => add({ type: 'history', value })) } : null;
+      const recent = matching.length ? { label: t('搜索记录'), options: matching.map(value => add({ type: 'history', value })) } : null;
       return { tabs: null, recent,
         left: sections.filter(group => !SUGGEST_RIGHT_KINDS.has(group.kind)),
         right: sections.filter(group => SUGGEST_RIGHT_KINDS.has(group.kind)), empty: false, options };
     }
-    const recent = matching.length ? { label: '搜索记录', options: matching.map((value) => add({ type: 'history', value })) } : null;
-    const suggested = picks.length ? { label: '推荐', options: picks.map((value) => add({ type: 'pick', value })) } : null;
+    const recent = matching.length ? { label: t('搜索记录'), options: matching.map((value) => add({ type: 'history', value })) } : null;
+    const suggested = picks.length ? { label: t('推荐'), options: picks.map((value) => add({ type: 'pick', value })) } : null;
     return { tabs: null, recent: null, left: recent ? [recent] : [], right: suggested ? [suggested] : [], empty: false, options };
   }
   const fresh = suggestFor === query;
   const recent = !kind && matching.length
-    ? { label: '搜索记录', options: matching.map((value) => add({ type: 'history', value })) } : null;
+    ? { label: t('搜索记录'), options: matching.map((value) => add({ type: 'history', value })) } : null;
   // 选了一类就只画这一类；拉满那一类的请求还在路上时，先用「全部」里的那几条顶着。
   const shown = (fresh ? groups : []).filter((group) => !kind || group.kind === kind);
   const section = (group: SuggestGroup): MenuSection => {

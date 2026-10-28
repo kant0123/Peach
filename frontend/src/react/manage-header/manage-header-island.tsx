@@ -18,6 +18,7 @@ import { swapText } from '@peach/legacy/ui';
 import { manageHeaderView, TRASH_LEDE_SKELETON_HTML, type ManageHeaderProps, type ManageHeaderView } from '../../manage-header';
 import { Icon } from '../settings-panel/icon';
 import type { ManageHeaderApi, ManageHeaderHost } from './manage-header-api';
+import { t } from '../../i18n';
 import './manage-header.css';
 
 let host: ManageHeaderHost | null = null;
@@ -79,7 +80,7 @@ function ManageBar({ host: at, pressed: key, menu }: Pick<ManageHeaderProps, 'me
   }, [key, menu]);
 
   return (
-    <nav data-manage-bar="" aria-label="管理">
+    <nav data-manage-bar="" aria-label={t('管理')}>
       <div ref={row} data-manage-menu="">
         {menu.map(([entry, label, glyph]) => {
           const on = entry === key;
@@ -107,7 +108,7 @@ function Crumb({ host: at, label }: { host: ManageHeaderHost; label: string }) {
   return (
     <nav data-manage-crumb="" aria-label="Breadcrumb">
       <ol>
-        <li><a href="/data-cleanup" onClick={follow}>数据管理</a><Icon name="chevron-right" /></li>
+        <li><a href="/data-cleanup" onClick={follow}>{t('数据管理')}</a><Icon name="chevron-right" /></li>
         <li aria-current="true"><span>{label}</span></li>
       </ol>
     </nav>
@@ -129,8 +130,8 @@ function TrashLede({ host: at, lede }: { host: ManageHeaderHost; lede: Lede }) {
           <>
             <LedeText text={lede.text} />
             {lede.total ? (
-              <button type="button" data-empty-trash="" data-danger="" title="永久删除回收站内容"
-                onClick={() => at.emptyTrash()}>清空回收站</button>
+              <button type="button" data-empty-trash="" data-danger="" title={t('永久删除回收站内容')}
+                onClick={() => at.emptyTrash()}>{t('清空回收站')}</button>
             ) : null}
           </>
         )}

@@ -19,14 +19,15 @@ import { RetryNote } from '../components/grid-reveal';
 import { LibraryCompletionPrompt, missingPreviewIds } from '../library-processing/library-completion';
 import { catalogParams } from './catalog-grid';
 import type { CatalogGridProps, MediaItem, MediaPage } from './types';
+import { t } from '../../i18n';
 import './catalog-list.css';
 
 const features = tableFeatures({ rowSortingFeature, rowSelectionFeature, rowPaginationFeature });
 const sortOptions = [
-  { id: 'name', label: '名称' }, { id: 'dur', label: '时长' }, { id: 'size', label: '体积' },
-  { id: 'new', label: '入库时间' }, { id: 'release', label: '发行时间' },
-  { id: 'rating', label: '评分' }, { id: 'o', label: '高潮计数' },
-  { id: 'plays', label: '观看次数' }, { id: 'played', label: '观看时间' },
+  { id: 'name', label: t('名称') }, { id: 'dur', label: t('时长') }, { id: 'size', label: t('体积') },
+  { id: 'new', label: t('入库时间') }, { id: 'release', label: t('发行时间') },
+  { id: 'rating', label: t('评分') }, { id: 'o', label: t('高潮计数') },
+  { id: 'plays', label: t('观看次数') }, { id: 'played', label: t('观看时间') },
 ];
 interface ListState { sorting: SortingState; pagination: { pageIndex: number; pageSize: number } }
 // 详情返回保留同一筛选范围内的页码与列排序。
@@ -83,20 +84,20 @@ export function CatalogListPage(props: CatalogGridProps) {
   const columns = useMemo(() => {
     const helper = createColumnHelper<typeof features, MediaItem>();
     return helper.columns([
-      helper.display({ id: 'select', header: ({ table }) => <Checkbox slot={null} aria-label="全选本页作品"
+      helper.display({ id: 'select', header: ({ table }) => <Checkbox slot={null} aria-label={t('全选本页作品')}
         isDisabled={result.isPlaceholderData}
         isSelected={table.getIsAllRowsSelected()} isIndeterminate={table.getIsSomeRowsSelected()}
         onChange={on => table.toggleAllRowsSelected(on)} />,
-      cell: ({ row }) => <Checkbox slot={null} aria-label={`选择 ${props.helpers.displayName(row.original, row.original.name || '')}`}
+      cell: ({ row }) => <Checkbox slot={null} aria-label={t('选择 {name}', { name: props.helpers.displayName(row.original, row.original.name || '') })}
         isDisabled={result.isPlaceholderData}
         isSelected={row.getIsSelected()} onChange={on => row.toggleSelected(on)} /> }),
-      helper.accessor(item => item.name || '', { id: 'name', header: '名称', enableSorting: true,
+      helper.accessor(item => item.name || '', { id: 'name', header: t('名称'), enableSorting: true,
         cell: ({ row }) => <ListIdentity item={row.original} props={props} disabled={result.isPlaceholderData} /> }),
-      helper.accessor(item => item.duration, { id: 'dur', header: '时长', enableSorting: true,
+      helper.accessor(item => item.duration, { id: 'dur', header: t('时长'), enableSorting: true,
         cell: ({ row }) => fmtDur(row.original.duration) || '—' }),
-      helper.accessor(item => item.size, { id: 'size', header: '体积', enableSorting: true,
+      helper.accessor(item => item.size, { id: 'size', header: t('体积'), enableSorting: true,
         cell: ({ row }) => row.original.size == null ? '—' : fmtSize(row.original.size) }),
-      helper.accessor(item => item.play_count, { id: 'plays', header: '观看次数', enableSorting: true,
+      helper.accessor(item => item.play_count, { id: 'plays', header: t('观看次数'), enableSorting: true,
         cell: ({ row }) => Number(row.original.play_count || 0).toLocaleString() }),
     ]);
   }, [props.helpers, props.actions, props.layout, props.selectMode, result.isPlaceholderData]);
@@ -119,14 +120,14 @@ export function CatalogListPage(props: CatalogGridProps) {
     },
   });
   return <div data-catalog-view-mode="list" data-catalog-table="" aria-busy={result.isFetching || undefined} className="flex min-w-0 flex-col gap-4">
-    <div className="flex flex-wrap justify-end gap-2" role="toolbar" aria-label="作品列表工具栏">
-      <DataTableSort label="作品列表" options={sortOptions} sorting={sorting}
+    <div className="flex flex-wrap justify-end gap-2" role="toolbar" aria-label={t('作品列表工具栏')}>
+      <DataTableSort label={t('作品列表')} options={sortOptions} sorting={sorting}
         onChange={next => table.setSorting(next)} />
     </div>
     <LibraryCompletionPrompt assetIds={props.filters?.state === 'trash' ? [] : missingPreviewIds(items, props.layout.javImage)} />
     {result.isError ? <RetryNote message={requestErrorMessage(result.error)} onRetry={() => void result.refetch()} /> : null}
     <DataTableFrame follow onRowClick={id => { if (!result.isPlaceholderData) props.actions.toggleSelection(Number(id), false) }}>
-      <Table aria-label="作品列表" size="sm"
+      <Table aria-label={t('作品列表')} size="sm"
         sortDescriptor={sort ? { column: sort.id, direction: sort.desc ? 'descending' : 'ascending' } : undefined}
         onSortChange={next => table.setSorting([{ id: String(next.column), desc: next.direction === 'descending' }])}>
         <TableHeader>{table.getHeaderGroups()[0]!.headers.map((header, index) =>
@@ -137,9 +138,9 @@ export function CatalogListPage(props: CatalogGridProps) {
             </span>}
           </TableColumn>)}</TableHeader>
         <TableBody renderEmptyState={() => result.isPending
-          ? <div data-skeleton="" data-table-skeleton="" aria-busy="true" role="status" aria-label="正在读取作品列表">
+          ? <div data-skeleton="" data-table-skeleton="" aria-busy="true" role="status" aria-label={t('正在读取作品列表')}>
             {Array.from({ length: 6 }, (_, index) => <div key={index}><i className="skeleton-sheen" /><span className="skeleton-sheen" /></div>)}
-          </div> : result.isError ? '作品列表未取得' : '没有符合的作品'}>
+          </div> : result.isError ? t('作品列表未取得') : t('没有符合的作品')}>
           {table.getRowModel().rows.map(row => <TableRow key={row.id} id={row.id} data-catalog-row="" data-id={row.original.id}
             data-board-selected={row.getIsSelected() || undefined}>
             {row.getAllCells().map(cell => <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}
@@ -147,17 +148,17 @@ export function CatalogListPage(props: CatalogGridProps) {
         </TableBody>
       </Table>
     </DataTableFrame>
-    {result.data ? <DataTableFooter label="作品列表" total={total} pagination={pagination}
-      onChange={next => table.setPagination(next)} unit="部作品" pageUnit="部" /> : null}
+    {result.data ? <DataTableFooter label={t('作品列表')} total={total} pagination={pagination}
+      onChange={next => table.setPagination(next)} unit={t('部作品')} pageUnit={t('部')} /> : null}
   </div>;
 }
 
 function ListIdentity({ item, props, disabled }: { item: MediaItem; props: CatalogGridProps; disabled: boolean }) {
   const artwork = cardArtwork(item, 'small', false, props.layout.javImage);
-  const name = props.helpers.displayName(item, item.name || '').trim() || '未命名作品';
+  const name = props.helpers.displayName(item, item.name || '').trim() || t('未命名作品');
   const who = item.creator || item.performers?.join('、') || item.studio;
   return <div data-list-identity="">
-    <button type="button" data-list-open="" disabled={disabled} aria-label={`打开 ${name}`} onClick={event => {
+    <button type="button" data-list-open="" disabled={disabled} aria-label={t('打开 {name}', { name })} onClick={event => {
       if (props.selectMode || event.shiftKey || event.ctrlKey || event.metaKey) {
         props.actions.toggleSelection(item.id, event.shiftKey); return;
       }
@@ -165,9 +166,9 @@ function ListIdentity({ item, props, disabled }: { item: MediaItem; props: Catal
       open(item, event.currentTarget);
     }}>
       <span data-list-picture="">{artwork.html
-        ? <ArtSlot artwork={artwork} relayout={root => relayoutCovers(root, 'small')} /> : <span>无预览</span>}</span>
+        ? <ArtSlot artwork={artwork} relayout={root => relayoutCovers(root, 'small')} /> : <span>{t('无预览')}</span>}</span>
       <span data-list-text=""><span data-list-name="" title={name}>{name}</span>
-        <span data-list-byline="">{who || '未归属'}<span data-list-mobile-metrics="">{fmtDur(item.duration)} · {fmtSize(item.size)}</span></span>
+        <span data-list-byline="">{who || t('未归属')}<span data-list-mobile-metrics="">{fmtDur(item.duration)} · {fmtSize(item.size)}</span></span>
       </span>
     </button>
   </div>;

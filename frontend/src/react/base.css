@@ -7,8 +7,15 @@
 
 /* 上游 `--font-sans` 引用 Next.js 字体加载器注入的 `--font-inter`；Peach 的 Inter 由
  * board.css 引入的 `/vendor/inter/` 提供。 */
+/* 汉字的字形随语言变：简体中文用雅黑与苹方，日语界面用 Noto Sans JP（装了才生效）、游ゴシック、
+ * メイリオ、ヒラギノ，日语不再落到中文字形上。所有字体栈里的 CJK 部分都引用这个变量，
+ * 由 `<html lang>` 选择，写死的中文字体由 `scripts/cjk_font_stack.py` 统一替换。 */
 :root {
-  --font-inter: "Inter Variable", "Inter";
+  --cjk-ui: "Microsoft YaHei UI", "PingFang SC";
+  --font-inter: "Inter Variable", "Inter", var(--cjk-ui);
+}
+:root:lang(ja) {
+  --cjk-ui: "Noto Sans JP", "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic";
 }
 
 /* 阴影 token 改由 `--elevation-*` 给值。Tailwind v4 为了让 `shadow-<颜色>` 能换色，把

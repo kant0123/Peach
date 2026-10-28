@@ -5,6 +5,7 @@ import type { QueryKey } from '@tanstack/react-query';
 import { apiGet } from '../../api';
 import { queryClient } from '../query';
 import { fetchItem, itemKey, type DetailEntityRef, type DetailItem } from '../item-detail/item-detail';
+import { t } from '../../i18n';
 
 /** 片单里的一条（`/api/items` 的卡片那一份）。 */
 export interface ImmerseItem {
@@ -81,10 +82,10 @@ export interface Owner {
 export function ownerOf(item: Pick<DetailItem, 'performers' | 'creator' | 'entity_refs'>): Owner {
   const cast = item.performers || [];
   const who = cast.length
-    ? cast.slice(0, 3).join('、') + (cast.length > 3 ? ` 等 ${cast.length} 人` : '')
-    : (item.creator || '未归属');
+    ? cast.slice(0, 3).join('、') + (cast.length > 3 ? t(' 等 {count} 人', { count: cast.length }) : '')
+    : (item.creator || t('未归属'));
   const kind = cast.length ? 'performer' : (item.creator ? 'creator' : '');
-  const name = cast.length ? cast[0]! : (item.creator || '未归属');
+  const name = cast.length ? cast[0]! : (item.creator || t('未归属'));
   const ref = kind ? (item.entity_refs?.[kind]?.[0] || null) : null;
   return { who, kind, name, ref };
 }

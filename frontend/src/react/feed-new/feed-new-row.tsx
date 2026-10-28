@@ -8,6 +8,7 @@ import { ShellActionsContext } from '../router/router';
 import { SourceAvatar } from '../components/source-avatar';
 
 import type { FeedNew } from './feed-new';
+import { t } from '../../i18n';
 
 export function FeedNewRow({ feedNew, host, wire, act, settled }: {
   feedNew: FeedNew | null;
@@ -47,7 +48,7 @@ export function FeedNewRow({ feedNew, host, wire, act, settled }: {
       const wanted = action === 'want';
       button.dataset.feedAction = wanted ? 'unwant' : 'want';
       button.setAttribute('aria-pressed', String(wanted));
-      button.title = wanted ? '取消想要' : '想要';
+      button.title = wanted ? t('取消想要') : t('想要');
       return;
     }
     if (action === 'ignore') card.remove();

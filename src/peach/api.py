@@ -31,6 +31,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
@@ -100,6 +101,42 @@ BUILD = frozen_build()
 COMPRESSION_EXCLUDED_TYPES = (
     *DEFAULT_EXCLUDED_CONTENT_TYPES, "application/octet-stream", "text/plain",
 )
+
+
+class ResponseHeadersMiddleware:
+    """给每个响应补缓存与安全响应头。
+
+    必须是纯 ASGI 中间件，不能用 `@app.middleware("http")`：`BaseHTTPMiddleware` 把处理函数的
+    `receive` 换成一层包装，包装里的任务组遇上 `request.is_disconnected()` 的取消作用域，
+    断开消息被吞掉，永远返回 False。浏览器关掉标签页之后，`/stream` 的整片转码和分片生成的
+    FFmpeg 因此看不到客户端已经走了，一直跑到自然结束（2026-10-26 实测，整片转码在关闭后
+    至少又跑了 170 秒）。
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        vendored = scope["path"].startswith("/vendor/")
+
+        async def send_with_headers(message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                if vendored:
+                    headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                elif "cache-control" not in headers:
+                    headers["Cache-Control"] = "no-store"
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["Referrer-Policy"] = "same-origin"
+                # 公网入口开着的时候整个站都在互联网上。这一条覆盖每一个响应——页面、静态
+                # 资源和 API 都算，页面里的 `<meta name="robots">` 只管得到 HTML 那几页。
+                headers["X-Robots-Tag"] = routes_pages.ROBOTS_TAG
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 #: Starlette 自己抛的那几种 HTTPException 带的是英文 detail，给人看之前换成中文。
@@ -518,24 +555,12 @@ def create_app(
         name="vendor",
     )
 
-    @app.middleware("http")
-    async def no_store(request: Request, call_next):
-        response = await call_next(request)
-        if request.url.path.startswith("/vendor/"):
-            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-        elif "cache-control" not in response.headers:
-            response.headers["Cache-Control"] = "no-store"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "same-origin"
-        # 公网入口开着的时候整个站都在互联网上。这一条覆盖每一个响应——页面、静态
-        # 资源和 API 都算，页面里的 `<meta name="robots">` 只管得到 HTML 那几页。
-        response.headers["X-Robots-Tag"] = routes_pages.ROBOTS_TAG
-        return response
+    app.add_middleware(ResponseHeadersMiddleware)
 
     # JSON 契约、页面脚本与样式是仅有的几类大文本响应，压下去省的字节最多：
     # `/api/items`、主界面 bundle 与样式都通过内容类型选择压缩。
     # `add_middleware` 是 `insert(0)`，最后加的在最外层，所以压缩看到的是上面
-    # `no_store` 补完 Cache-Control 之后的最终响应头。
+    # `ResponseHeadersMiddleware` 补完 Cache-Control 之后的最终响应头。
     # 自己写内容类型闸门的 ASGI 中间件是重复劳动：Starlette 这个已经按 Content-Type
     # 排除、跳过 206 与已编码响应、逐块流式压缩，还会把大块丢到工作线程去压，
     # 不占事件循环。只需要把它的排除名单补齐（见 COMPRESSION_EXCLUDED_TYPES）。

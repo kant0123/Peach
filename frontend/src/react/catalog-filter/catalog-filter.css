@@ -242,7 +242,7 @@
 .peach-react [data-catalog-tag] [data-count-badge] {
   margin-left: 6px;
   color: color-mix(in srgb, var(--glass-text) 55%, transparent);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -255,7 +255,7 @@
  * 读数照 `10,471 个符合` 写：12px 等宽、常规字重，颜色比标签低一档。其余控件同资料页那一排。 */
 .peach-react [data-catalog-frame] > [data-filter-row="bottom"] {
   color: var(--ink-2);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: 12px;
   line-height: 20px;
 }

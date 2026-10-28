@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 /** 应用生命周期内的监听、观察者与调度。销毁后排队的回调不再执行。 */
 export class ApplicationEffects {
   private cleanups = new Set<() => void>();
@@ -81,7 +82,7 @@ export class ApplicationEffects {
     for (const cleanup of [...this.cleanups].reverse()) {
       try { cleanup(); } catch (error) { errors.push(error); }
     }
-    if (errors.length) throw new AggregateError(errors, '应用资源清理未全部完成');
+    if (errors.length) throw new AggregateError(errors, t('应用资源清理未全部完成'));
   }
 }
 

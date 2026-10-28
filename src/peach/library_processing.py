@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -10,6 +11,7 @@ import tempfile
 import time
 import uuid
 import xml.etree.ElementTree as ET
+from collections import deque
 from contextlib import closing
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
@@ -40,11 +42,12 @@ from .jobs import DiskGuard
 from .media_probe import probe_unmeasured
 from .media_sources import cost_for
 from .media_processing_policy import metadata_only
+from .storage_profile import available_memory_bytes, solid_state
 from .strm import skip_background_read
 from .record_rehome import reattach_in
 from .processing_control import (task_control, bind_control, checkpoint_values,
                                  initial_estimate, ProcessingEstimate, interrupted_state,
-                                 deadline_after, resume_fields)
+                                 deadline_after, resume_fields, CURRENT)
 
 FIELDS = ('item_key', 'code', 'query', 'asset_id', 'asset_path', 'field', 'field_label', 'current_value',
           'candidates_json', 'source_count', 'source_profile', 'policy_version', 'status',
@@ -704,10 +707,9 @@ def misses_path(config):
 
 
 def _save(path, payload):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
-    temporary.replace(path)
+    # 状态文件每次轮询都有人读：Windows 上目标被打开的一瞬间 os.replace 会抛 PermissionError，
+    # 所以走共用的原子落盘，它带独立临时名并等读者放手。
+    atomic_write_text(path, json.dumps(payload, ensure_ascii=False))
 
 
 def decorate(state, *, now=None):
@@ -1890,8 +1892,46 @@ class _PreviewCaptureError(ValueError):
         super().__init__(message)
 
 
-def _generate_preview(config, row, database, resolver, *, progress):
-    """复用九宫格抽帧原语，产物可用后在共享写锁内登记。"""
+def _capture_preview_frames(config, choice, video, duration, frames, progress, batch_threads):
+    """九个采样点的帧写进 `frames`；任务改为只采资料时回 `False`。"""
+    from . import frame_capture
+    timestamps = [duration * (0.03 + 0.94 * (index + 0.5) / 9) for index in range(9)]
+    paths = [frames / f's{index:02d}.jpg' for index in range(9)]
+    if batch_threads:
+        if metadata_only(config.directory('state')):
+            return False
+        progress()
+        batch = {}
+        if frame_capture.capture_frames(str(choice.path), str(video), timestamps, paths,
+                                        threads=batch_threads, diagnostics=batch):
+            return True
+        if batch.get('reason') == 'timeout':
+            batch.update(frame_index=None, duration_seconds=duration, tool_name=Path(choice.path).name,
+                         tool_source=choice.source if hasattr(choice, 'source') else 'unknown',
+                         stderr=batch.get('stderr', '').replace(str(video), '<media>')[-4096:])
+            raise _PreviewCaptureError(batch)
+    for index, timestamp in enumerate(timestamps):
+        if metadata_only(config.directory('state')):
+            return False
+        progress()
+        diagnostic = {}
+        if not frame_capture.capture_with_retry(
+                str(choice.path), str(video), timestamp, paths[index], diagnostics=diagnostic):
+            for attempt in diagnostic.get('attempts', []):
+                attempt['stderr'] = attempt.get('stderr', '').replace(str(video), '<media>')[-4096:]
+            diagnostic['stderr'] = diagnostic.get('stderr', '').replace(str(video), '<media>')[-4096:]
+            diagnostic.update(frame_index=index, duration_seconds=duration,
+                              tool_source=choice.source if hasattr(choice, 'source') else 'unknown',
+                              tool_name=Path(choice.path).name)
+            raise _PreviewCaptureError(diagnostic)
+    return True
+
+
+def _generate_preview(config, row, database, resolver, *, progress, batch_threads=0):
+    """复用九宫格抽帧原语，产物可用后在共享写锁内登记。
+
+    `batch_threads` 大于 0 时先用一个 FFmpeg 进程抽完九帧；未成功（超时除外）回到逐帧路径。
+    """
     from . import frame_capture, media_probe
     from .fsutil import atomic_path
     from .previews import PreviewUnavailable
@@ -1925,25 +1965,12 @@ def _generate_preview(config, row, database, resolver, *, progress):
     if not measure_image_file(destination):
         with tempfile.TemporaryDirectory(prefix='peach-preview-') as temporary:
             frames = Path(temporary)
-            for index in range(9):
-                if metadata_only(config.directory('state')):
-                    return False
-                progress()
-                timestamp = duration * (0.03 + 0.94 * (index + 0.5) / 9)
-                diagnostic = {}
-                if not frame_capture.capture_with_retry(
-                        str(choice.path), str(video), timestamp, frames / f's{index:02d}.jpg',
-                        diagnostics=diagnostic):
-                    for attempt in diagnostic.get('attempts', []):
-                        attempt['stderr'] = attempt.get('stderr', '').replace(str(video), '<media>')[-4096:]
-                    diagnostic['stderr'] = diagnostic.get('stderr', '').replace(str(video), '<media>')[-4096:]
-                    diagnostic.update(frame_index=index, duration_seconds=duration,
-                                      tool_source=choice.source if hasattr(choice, 'source') else 'unknown',
-                                      tool_name=Path(choice.path).name)
-                    raise _PreviewCaptureError(diagnostic)
+            if not _capture_preview_frames(config, choice, video, duration, frames, progress, batch_threads):
+                return False
             progress()
             with atomic_path(destination) as output:
-                if not frame_capture.tile_frames(str(choice.path), str(frames / 's%02d.jpg'), 3, 3, output):
+                if not frame_capture.tile_frames(str(choice.path), str(frames / 's%02d.jpg'), 3, 3, output,
+                                                 **({'threads': batch_threads} if batch_threads else {})):
                     raise ValueError('预览图未生成，请检查媒体文件后重试')
                 if not measure_image_file(output):
                     raise ValueError('预览图无法读取，请重试')
@@ -1955,9 +1982,37 @@ def _generate_preview(config, row, database, resolver, *, progress):
     return bool(result.rowcount)
 
 
+#: 高强度并行抽帧的并发上限与每路预留的内存（一路 FFmpeg 解码一个 GOP，常驻几十 MB，留足余量）。
+PREVIEW_WORKER_CAP = 4
+PREVIEW_WORKER_MEMORY = 768 * 1024**2
+
+
+def _preview_workers():
+    """高强度下同时抽帧的路数：不超过核数的一半、内存余量和上限；其余档位恒为 1。"""
+    control = CURRENT.get()
+    if control is None or control.mode != 'high':
+        return 1
+    memory = available_memory_bytes()
+    if memory is None:
+        return 1
+    return max(1, min(PREVIEW_WORKER_CAP, (os.cpu_count() or 1) // 2, memory // PREVIEW_WORKER_MEMORY))
+
+
+def _fast_preview_source(row):
+    """高强度且视频在本机固态盘上才合并抽帧、并行；机械盘、网络盘与判不出来的盘照旧逐帧。"""
+    control = CURRENT.get()
+    return (control is not None and control.mode == 'high'
+            and solid_state(translate_ledger_path(row['path'])))
+
+
 def _generate_previews(config, rows, database, *, update, issue, guard,
                        completed=(), checkpoint=lambda row: None, initial_made=0):
-    """只读本机视频；来源失败与抽帧失败各自保留可重试项目。"""
+    """只读本机视频；来源失败与抽帧失败各自保留可重试项目。
+
+    高强度且视频在固态盘上时，每个视频合并成一次 FFmpeg 抽帧，并按核数与内存同时处理
+    若干个；工作线程只做抽帧和登记，进度、检查点和问题记录仍在主线程，暂停与停止
+    都在两个视频之间生效。
+    """
     from .previews import PreviewUnavailable
     if database is None:
         return 0
@@ -1966,18 +2021,20 @@ def _generate_previews(config, rows, database, *, update, issue, guard,
     rows = [row for row in rows if _checkpoint_key(row) not in completed]
     resolver = FFmpegResolver(config.directory('tools') / 'ffmpeg')
     made = initial_made
-    for index, row in enumerate(rows):
-        if metadata_only(config.directory('state')):
-            break
-        def progress(row=row, index=index, made=made):
-            guard.check()
-            update(stage='生成预览图', checked=base_done + index, total=base_done + len(rows), previews=made,
-                   current_asset_id=row['id'], current_asset_name=Path(str(row['name'] or '')).name,
-                   current_action='generating_preview', current_started_at=time.time(),
-                   current_deadline_at=time.time() + 90)
-        progress()
+    done = 0
+    pending = deque(rows)
+    flights = {}
+
+    def announce(row):
+        update(stage='生成预览图', checked=base_done + done, total=base_done + len(rows), previews=made,
+               current_asset_id=row['id'], current_asset_name=Path(str(row['name'] or '')).name,
+               current_action='generating_preview', current_started_at=time.time(),
+               current_deadline_at=time.time() + 90)
+
+    def finish(row, produce):
+        nonlocal made, done
         try:
-            made += int(_generate_preview(config, row, database, resolver, progress=progress))
+            made += int(produce())
             update(previews=made)
             checkpoint(row)
         except InterruptedError:
@@ -1990,8 +2047,42 @@ def _generate_previews(config, rows, database, *, update, issue, guard,
                        '生成预览图失败，请检查 FFmpeg 与目录权限后重试')
             details = {'diagnostics': error.diagnostics} if isinstance(error, _PreviewCaptureError) else {}
             issue(row, message, action='generating_preview', retryable=True, **details)
-        update(checked=base_done + index + 1, previews=made, current_asset_id=None, current_asset_name='',
+        done += 1
+        update(checked=base_done + done, previews=made, current_asset_id=None, current_asset_name='',
                current_action='', current_started_at=None, current_deadline_at=None)
+
+    def inline(row):
+        def progress():
+            guard.check()
+            announce(row)
+        progress()
+        finish(row, lambda: _generate_preview(config, row, database, resolver, progress=progress))
+
+    def harvest():
+        finished, _ = wait(flights, return_when=FIRST_COMPLETED)
+        for future in finished:
+            finish(flights.pop(future), future.result)
+        if flights:
+            announce(next(iter(flights.values())))
+
+    with ThreadPoolExecutor(max_workers=PREVIEW_WORKER_CAP, thread_name_prefix='PeachPreview') as executor:
+        while pending or flights:
+            if metadata_only(config.directory('state')):
+                pending.clear()
+            if not pending:
+                harvest()
+            elif not _fast_preview_source(pending[0]):
+                harvest() if flights else inline(pending.popleft())
+            else:
+                workers = _preview_workers()
+                while pending and len(flights) < workers and _fast_preview_source(pending[0]):
+                    row = pending.popleft()
+                    guard.check()
+                    announce(row)
+                    flights[executor.submit(
+                        _generate_preview, config, row, database, resolver, progress=lambda: None,
+                        batch_threads=1 if workers > 1 else 2)] = row
+                harvest()
     return made
 
 

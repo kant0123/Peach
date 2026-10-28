@@ -12,9 +12,10 @@ import { spinnerHtml } from '@peach/legacy/ui';
 
 import { useStuck } from './use-stuck';
 import { useHorizontalScroller } from './use-horizontal-scroller';
+import { t } from '../../i18n';
 
 const BusyIcon = ({ className }: { className?: string }) => <span aria-hidden className={className}
-  dangerouslySetInnerHTML={{ __html: spinnerHtml('正在处理') }} />;
+  dangerouslySetInnerHTML={{ __html: spinnerHtml(t('正在处理')) }} />;
 
 /** 筛选栏动作使用 30px 尺寸和蓝色动作表面。 */
 export function FilterIconButton({ label, icon, busy = false, onPress, ...props }:

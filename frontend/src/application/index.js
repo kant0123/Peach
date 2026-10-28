@@ -14,6 +14,7 @@ import { buildBars, catalogState, clearCatalogGrid, homePath } from './catalog.j
 import { state, writeShell } from './../shell/index';
 import { setSelectMode } from './selection.js';
 import { showHomeSurfaces } from './layout.js';
+import { t } from '../i18n';
 export const indexState = { peopleIndexLayout: undefined, personAvatar: undefined };
 
 export function followWorkMark([key,label,,icon,focus]){
@@ -54,7 +55,7 @@ export function openFollowTagFromIndex(tag){indexState.controller.openFollowTag(
 export function installIndex16() {
 followState.FOLLOW_MANAGE_TABS = ['list','add','feeds'];
 applicationEffects.listen(document, 'click', event=>{
-  if(event.target.closest?.('[data-empty-settings]')){openConfigurationSection('媒体库与入库');return}
+  if(event.target.closest?.('[data-empty-settings]')){openConfigurationSection(t('媒体库与入库'));return}
   const link=event.target.closest?.('a[href="/subscriptions?tab=add"]');
   if(!link||event.defaultPrevented||event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
   event.preventDefault();

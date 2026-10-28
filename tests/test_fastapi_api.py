@@ -2836,6 +2836,54 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.headers["content-type"], "video/mp4")
         self.assertEqual(response.headers["x-peach-transcoded"], "1")
 
+    async def test_stream_plan_hands_the_declared_capabilities_to_the_decision_and_the_urls(self):
+        """设备申报的能力原样进判定，也跟着直读与 HLS 地址走，后续请求和起播计划用同一份。"""
+        service = self.app.state.transcode_service
+        seen = []
+
+        def requires_conversion(source, **kwargs):
+            seen.append(kwargs.get("caps"))
+            return False
+
+        with patch.object(service, "requires_conversion", side_effect=requires_conversion):
+            plain = (await self.client.get("/api/stream-plan?id=1&session=s&t=secret")).json()
+            declared = (await self.client.get(
+                "/api/stream-plan?id=1&session=s&caps=hevc,bogus,av1&t=secret")).json()
+        self.assertEqual(seen, [None, frozenset({"hevc", "av1"})])
+        self.assertEqual(plain["src"], "/stream?id=1&session=s")
+        self.assertEqual(declared["src"], "/stream?id=1&session=s&caps=av1,hevc")
+
+    async def test_whole_file_transcode_needs_a_session_and_never_starts_on_head(self):
+        """卡片悬停预览（无会话）和 HEAD 探测不得启动整片转码；有会话的 GET 才可以。"""
+        avi = self.media_root / "three.avi"
+        avi.write_bytes(b"avi-source")
+        con = sqlite3.connect(self.db)
+        con.execute(
+            "INSERT INTO asset(id,location,path,name,medium,size,first_seen) "
+            "VALUES(3,'local',?,'three.avi','video',10,'2026-08-15')",
+            (str(avi),),
+        )
+        con.commit()
+        con.close()
+        from peach.transcodes import TranscodeNotStarted
+        seen = []
+
+        def browser_path(asset_id, source, **kwargs):
+            seen.append(kwargs.get("allow_transcode"))
+            if not kwargs.get("allow_transcode"):
+                raise TranscodeNotStarted("needs session")
+            return avi, False
+
+        headers = {"X-Token": "secret"}
+        with patch.object(self.app.state.transcode_service, "browser_path", side_effect=browser_path):
+            anonymous = await self.client.get("/stream?id=3", headers=headers)
+            head = await self.client.head("/stream?id=3&session=s", headers=headers)
+            allowed = await self.client.get("/stream?id=3&session=s", headers=headers)
+        self.assertEqual(anonymous.status_code, 415)
+        self.assertEqual(head.status_code, 415)
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(seen, [False, False, True])
+
     async def test_cached_visual_assets_and_thumbnail(self):
         headers = {"X-Token": "secret"}
         poster = await self.client.get("/poster?id=1&c=4", headers=headers)
