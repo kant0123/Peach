@@ -67,7 +67,7 @@ class Mp4HeaderRepairTests(unittest.TestCase):
     def repair(self, path: Path, order=DECODE_TO_DISPLAY) -> RepairedHeader:
         """把「解一遍片子问显示顺序」换成已知答案，只验头里的算术。"""
         with patch.object(mp4repair, "_display_order",
-                          lambda ffprobe, source, times: list(order)):
+                          lambda ffprobe, source, times, timeout: list(order)):
             return repaired_header(path, Path("ffprobe"))
 
     def test_a_rebuilt_header_puts_every_frame_back_in_display_order(self):
@@ -132,6 +132,57 @@ class Mp4HeaderRepairTests(unittest.TestCase):
         assert elst is not None
         return moov[elst[0]:elst[1]]
 
+    def spliced(self, source: Path, header: RepairedHeader) -> bytes:
+        blob = source.read_bytes()
+        return header.prefix + blob[header.payload_start:header.payload_end] + header.suffix
+
+    def test_a_trailing_moov_is_rebuilt_in_place_after_the_media(self):
+        source = self.broken_mp4(self.root / "tail.mp4", moov_last=True)
+        header = self.repair(source)
+        blob = source.read_bytes()
+        times = composition_times(moov_of(header.suffix), 400)
+
+        self.assertEqual(header.prefix, blob[:header.payload_start])
+        self.assertEqual(blob[header.payload_start:header.payload_end],
+                         sample_bytes(len(DECODE_TO_DISPLAY)))
+        self.assertEqual([index for index, _ in sorted(enumerate(times), key=lambda pair: pair[1])],
+                         [DECODE_TO_DISPLAY.index(rank) for rank in range(len(DECODE_TO_DISPLAY))])
+
+    def test_a_trailing_moov_keeps_every_chunk_offset_on_its_sample(self):
+        source = self.broken_mp4(self.root / "tail.mp4", moov_last=True)
+        header = self.repair(source)
+        joined = self.spliced(source, header)
+        before = entries(table(moov_of(source.read_bytes()), b"stco"), ">I")
+        after = entries(table(moov_of(header.suffix), b"stco"), ">I")
+        samples = sample_bytes(len(DECODE_TO_DISPLAY))
+
+        self.assertEqual(before, after)
+        for index, (offset,) in enumerate(after):
+            self.assertEqual(joined[offset:offset + SAMPLE_SIZE],
+                             samples[index * SAMPLE_SIZE:(index + 1) * SAMPLE_SIZE])
+
+    def test_boxes_after_a_trailing_moov_stay_behind_it(self):
+        trailer = struct.pack(">I", 12) + b"free" + b"PAD!"
+        source = self.broken_mp4(self.root / "tail.mp4", moov_last=True, trailer=trailer)
+        header = self.repair(source)
+
+        self.assertTrue(header.suffix.endswith(trailer))
+        self.assertEqual(moov_of(header.suffix)[:4], moov_of(self.spliced(source, header))[:4])
+
+    def test_a_box_after_the_media_behind_a_leading_moov_is_refused(self):
+        trailer = struct.pack(">I", 12) + b"free" + b"PAD!"
+        source = self.broken_mp4(self.root / "trailer.mp4", trailer=trailer)
+
+        with self.assertRaises(RepairUnavailable):
+            self.repair(source)
+
+    def test_a_second_media_box_is_refused(self):
+        source = self.broken_mp4(self.root / "two.mp4", moov_last=True,
+                                 trailer=struct.pack(">I", 12) + b"mdat" + bytes(4))
+
+        with self.assertRaises(RepairUnavailable):
+            self.repair(source)
+
     def test_a_file_that_already_has_composition_offsets_is_refused(self):
         source = self.broken_mp4(self.root / "fine.mp4", composition_offsets=True)
 
@@ -152,6 +203,28 @@ class Mp4HeaderRepairTests(unittest.TestCase):
                                              [0, 400, 800, 1200])
 
         self.assertEqual(order, [0, 3, 1, 2])
+
+    def test_a_long_film_gets_a_decode_deadline_that_grows_with_its_length(self):
+        """两个半小时的片子解一遍要十几分钟，固定时限会把长片全判成修不了。"""
+        def mvhd(seconds: int) -> mp4repair._Box:
+            payload = struct.pack(">IIIII", 0, 0, 0, 1000, seconds * 1000) + bytes(80)
+            return mp4repair._Box(b"moov", None, [mp4repair._Box(b"mvhd", payload, [])])
+
+        self.assertEqual(mp4repair._probe_timeout(mvhd(60)), mp4repair.PROBE_TIMEOUT_SECONDS)
+        self.assertEqual(mp4repair._probe_timeout(mvhd(9300)),
+                         9300 * mp4repair.PROBE_SECONDS_PER_MEDIA_SECOND)
+
+    def test_the_decode_runs_with_the_deadline_it_was_given(self):
+        seen = {}
+
+        def run(*args, **options):
+            seen.update(options)
+            return _Probe(b"0\n")
+
+        with patch.object(mp4repair.subprocess, "run", run):
+            mp4repair._display_order(Path("ffprobe"), Path("movie.mp4"), [0], 4650)
+
+        self.assertEqual(seen["timeout"], 4650)
 
     def test_a_decode_that_loses_frames_is_refused_instead_of_guessed(self):
         """少一帧就说明这份表和码流对不上，宁可不修，也不能写一张错的 ctts。"""
