@@ -22,7 +22,7 @@ import { cx } from '@/utils/cx';
 
 import { errorMessage } from '../../api';
 import type { PlaylistsProps } from '../bundle';
-import { EmptyState } from '../components/empty-state';
+import { EmptyState, EmptyFocusButton } from '../components/empty-state';
 import { RetryNote } from '../components/grid-reveal';
 import { MixCard } from '../components/mix-card';
 import { ModalFrame } from '../components/modal-frame';
@@ -152,10 +152,10 @@ function PlaylistMenu({ name, onRename, onDelete }: { name: string; onRename(): 
         {/* 面板外宽 172px，同旧卡片菜单：外框再加 10px 内边距与 1px 描边。 */}
         <Dialog aria-label={t('播放列表操作：{name}', { name })} className="flex w-37.5 flex-col gap-0.5 outline-none">
           <button type="button" className={MENU_ROW} onClick={() => run(onRename)}>
-            <PENCIL aria-hidden className="size-4 shrink-0" />{t('编辑名称')}
+            <PENCIL aria-hidden className="size-(--icon-inline) shrink-0" />{t('编辑名称')}
           </button>
           <button type="button" className={MENU_ROW} onClick={() => run(onDelete)}>
-            <TRASH aria-hidden className="size-4 shrink-0" />{t('删除播放列表')}
+            <TRASH aria-hidden className="size-(--icon-inline) shrink-0" />{t('删除播放列表')}
           </button>
         </Dialog>
       </Popover>
@@ -227,7 +227,8 @@ export function PlaylistsPage({ openPlaylist, openEntity, canFlip, toast, revisi
           </div>
         )
         : (
-          <EmptyState icon={PLAYLIST} title={t('还没有播放列表')}>
+          <EmptyState icon={PLAYLIST} title={t('还没有播放列表')}
+            actions={<EmptyFocusButton target='[data-playlist-create] input'>{t('新建播放列表')}</EmptyFocusButton>}>
             {t('保存 Mix 或新建列表后，会在这里按自己的顺序继续播放。')}
           </EmptyState>
         )}

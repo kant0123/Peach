@@ -81,6 +81,13 @@ RECIPES = {
         "commands": (),
         "checks": (("uv", "lock", "--check"),),
     },
+    "amane": {
+        "label": "amane 桥的独立 Python 依赖",
+        "manifests": ("tools/amane-bridge/pyproject.toml", "tools/amane-bridge/uv.lock"),
+        "derived": (),
+        "commands": (),
+        "checks": (("uv", "lock", "--project", "tools/amane-bridge", "--check"),),
+    },
     "actions": {
         "label": "GitHub Actions 工作流",
         "manifests": (".github/workflows/",),
@@ -241,6 +248,7 @@ def commit_message(key: str, versions: list[str], pr: str | None,
                "所以接管到本地分支。")
     return (f"chore(deps): 接管 {recipe['label']} 的升级\n\n{why}\n\n"
             + ("升级：" + "、".join(versions) + "\n\n" if versions else "")
+            + (f"Refs #{pr}\n\n" if pr else "")
             + "README-Impact: none; 依赖版本与派生产物，README 不涉及。\n"
             + f"Co-Authored-By: {signature}\n")
 
@@ -278,7 +286,8 @@ def adopted(number: int, branch: str, *, root: Path = ROOT) -> bool:
     """
     base = run(("git", "merge-base", "HEAD", f"origin/{branch}"), root=root).strip()
     log = run(("git", "log", "--format=%B", f"{base}..HEAD"), root=root)
-    return re.search(rf"Dependabot PR #{number}(?!\d)", log) is not None
+    return re.search(rf"^Dependabot PR #{number}(?!\d) (?:只改了 manifest 与 lock|没有派生产物)",
+                     log, re.M) is not None
 
 
 def adopt(pr: dict, *, apply: bool, signature: str, root: Path = ROOT) -> dict:

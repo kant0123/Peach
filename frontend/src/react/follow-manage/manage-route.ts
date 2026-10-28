@@ -1,5 +1,6 @@
 import { t } from '../../i18n';
-export const FOLLOW_MANAGE_TABS = ['list', 'add', 'feeds'] as const;
+export const FOLLOW_MANAGE_NAV = [['list', t('关注列表')], ['add', t('添加关注')], ['tags', t('标签管理')]] as const;
+export const FOLLOW_MANAGE_TABS = FOLLOW_MANAGE_NAV.map(([key]) => key);
 export type FollowManageTab = (typeof FOLLOW_MANAGE_TABS)[number];
 export interface FollowManageRoute { tab: FollowManageTab; page: number; sort: string; dir: string }
 

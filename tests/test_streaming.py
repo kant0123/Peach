@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import sys
+import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+from starlette.requests import Request
 
 from peach.streaming import CancellableFileResponse, StreamSessionRegistry
 from peach.mp4index import segment_plan
-from peach.segments import build_hls_playlist
+from peach.routes_media import hls_segment
+from peach.segments import HlsSegmentService, build_hls_playlist
 
 
 async def _collect(response, requested: bytes | None, method: str = "GET"):
@@ -29,6 +38,140 @@ async def _collect(response, requested: bytes | None, method: str = "GET"):
         {key.decode(): value.decode() for key, value in start["headers"]},
         b"".join(message.get("body", b"") for message in messages[1:]),
     )
+
+
+class HlsDisconnectTests(unittest.IsolatedAsyncioTestCase):
+    """分片请求使用真实子进程验证断开、退出和并发请求的隔离。"""
+
+    async def asyncSetUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.source = self.root / "clip.mp4"
+        self.source.write_bytes(b"source")
+        self.started = asyncio.Queue()
+        started = self.started
+
+        class Registry(StreamSessionRegistry):
+            def register_process(self, session, process, **options):
+                registered = super().register_process(session, process, **options)
+                if registered:
+                    started.put_nowait(process)
+                return registered
+
+        self.registry = Registry()
+        # 子进程只用标准库；直接运行解释器，退出与管道均属于被登记的同一个进程。
+        self.python = sys._base_executable
+        self.service = HlsSegmentService(
+            Mock(ffmpeg=lambda: SimpleNamespace(path=Path(self.python))),
+            self.root / "cache", max_concurrent=1,
+        )
+        executor = ThreadPoolExecutor(max_workers=1)
+        self.addCleanup(executor.shutdown)
+        self.state = SimpleNamespace(
+            hls_service=self.service, stream_sessions=self.registry,
+            hls_plan_executor=executor,
+        )
+        self.child_code = "import time; time.sleep(60)"
+
+        def command(target):
+            target.write_bytes(b"segment")
+            return [self.python, "-c", self.child_code]
+
+        for patcher in (
+            patch("peach.routes_media._hls_plan", return_value=(
+                None, self.source, [(0, 6), (6, 6)], True,
+            )),
+            patch.object(self.service, "_attempts", return_value=[("process", command)]),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.tasks = []
+
+    async def asyncTearDown(self):
+        for task in self.tasks:
+            task.cancel()
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+        self.registry.cancel("shared")
+
+    def request(self, index=0):
+        disconnected = asyncio.Event()
+
+        async def receive():
+            await disconnected.wait()
+            return {"type": "http.disconnect"}
+
+        request = Request({"type": "http", "app": SimpleNamespace(state=self.state)}, receive)
+        task = asyncio.create_task(hls_segment(request, 1, index, "shared", "", {}))
+        self.tasks.append(task)
+        return task, disconnected
+
+    async def process(self):
+        return await asyncio.wait_for(self.started.get(), 5)
+
+    async def response(self, task):
+        return await asyncio.wait_for(asyncio.shield(task), 5)
+
+    async def test_disconnect_reaps_the_child_and_allows_the_slice_to_be_requested_again(self):
+        task, disconnected = self.request()
+        process = await self.process()
+        self.assertIsNone(process.returncode)
+        disconnected.set()
+        response = await self.response(task)
+        self.assertEqual(response.status_code, 410)
+        self.assertIsNotNone(process.returncode)
+        self.assertFalse(self.registry.is_cancelled("shared"))
+        self.assertEqual(list(self.root.rglob("*.tmp.ts")), [])
+        target = self.service.cached_path(self.source, 1, 0, transcode=True)
+        self.assertFalse(target.exists())
+
+        self.child_code = "pass"
+        retry, _ = self.request()
+        response = await self.response(retry)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Path(response.path).read_bytes(), b"segment")
+
+    async def test_disconnect_preserves_another_active_slice_in_the_same_session(self):
+        self.service = self.state.hls_service = HlsSegmentService(
+            self.service.resolver, self.root / "parallel", max_concurrent=2,
+        )
+        with patch.object(self.service, "_attempts", return_value=[(
+            "process", lambda target: [self.python, "-c", self.child_code],
+        )]):
+            first, disconnected = self.request(0)
+            first_process = await self.process()
+            second, _ = self.request(1)
+            second_process = await self.process()
+            disconnected.set()
+            self.assertEqual((await self.response(first)).status_code, 410)
+            self.assertIsNotNone(first_process.returncode)
+            self.assertIsNone(second_process.returncode)
+            self.assertFalse(second.done())
+            self.assertEqual(self.registry.cancel("shared"), 1)
+            self.assertEqual((await self.response(second)).status_code, 410)
+            self.assertIsNotNone(second_process.returncode)
+
+    async def test_disconnected_queued_slice_does_not_start_a_child(self):
+        first, _ = self.request(0)
+        process = await self.process()
+        second, disconnected = self.request(1)
+        disconnected.set()
+        self.assertEqual((await self.response(second)).status_code, 410)
+        self.assertTrue(self.started.empty())
+        self.assertIsNone(process.returncode)
+        self.assertEqual(self.registry.cancel("shared"), 1)
+        self.assertEqual((await self.response(first)).status_code, 410)
+        self.assertIsNotNone(process.returncode)
+
+    async def test_handler_cancellation_reaps_the_child_and_preserves_cancellation(self):
+        task, _ = self.request()
+        process = await self.process()
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        self.assertIsNotNone(process.returncode)
+        self.assertEqual(list(self.root.rglob("*.tmp.ts")), [])
+        self.assertEqual(self.registry.cancel("shared"), 0)
 
 
 class StreamSessionRegistryTests(unittest.IsolatedAsyncioTestCase):

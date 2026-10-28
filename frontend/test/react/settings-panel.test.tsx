@@ -85,7 +85,7 @@ function shellActions(): ShellActions {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn(() => ''), openFollow: vi.fn(), receipt: vi.fn(), toast: vi.fn(),
     failure: vi.fn(), revealSource: vi.fn(async () => ''), reopenTutorial: vi.fn(async () => {}),
-    requestConfigurationSection: vi.fn(), routeReview: vi.fn(),
+    routeReview: vi.fn(),
     routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '', routeIndex: vi.fn(),
     savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(), personAvatar: vi.fn(() => ({ html: '', face: '' })),
     authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),
@@ -109,7 +109,7 @@ async function connect(r: Loaded) {
 const settings = (): PanelSettings => ({
   theme: 'system', uiSounds: true, homeGlow: { ...normalizeHomeGlow(null), on: true, preset: 'ash' }, accent: 'blue',
   sidebarOrder: [''], batchSize: 60, defaultSort: 'seed', defaultSortDirection: '', groupCollapse: true,
-  javImage: 'cover', feedAutoScroll: true, feedHideGroupCompilations: true, feedHideSoloCompilations: false,
+  javImage: 'cover', feedAutoScroll: true, feedLimit: 12, feedHideGroupCompilations: true, feedHideSoloCompilations: false,
   feedHideExcerpts: true, hoverDelaySeconds: 5, detailAutoplay: false, miniplayer: true, seekSeconds: 10,
   relatedLimit: 24, searchHistoryLimit: 10, followInitialDays: 30, avatarRefreshDays: 90, faviconRefreshDays: 365,
 });
@@ -182,6 +182,15 @@ describe('设置面板与壳的接缝', () => {
     expect(panel.querySelector('#detailAutoplaySetting')?.closest('section')?.hidden).toBe(true);
     expect(panel.querySelector('#videoThumbnailSetting')).toBeNull();
     expect(panel.querySelector('#followScheduleSetting')).toBeNull();
+    /* 分卷与版次折叠在首页和资料页网格上都生效，归「浏览与播放」；新作数量归「JAV 与新作」。 */
+    const group = (selector: string) => panel.querySelector(selector)?.closest('[data-setting-group]')?.id;
+    expect([group('#groupCollapseSetting'), group('#hoverDelaySetting'), group('#feedLimitSetting')])
+      .toEqual(['settings-group-1', 'settings-group-1', 'settings-group-2']);
+    const headings = (index: number) => [...panel.querySelectorAll(`#settings-group-${index} [data-settings-subheading]`)]
+      .map((node) => node.textContent);
+    expect([headings(1), headings(2)]).toEqual([['作品列表', '播放'], ['作品显示', '新作显示']]);
+    /* 转码方式是运行 Peach 那台电脑的服务配置，在 Peach 配置里，弹窗里没有这一行（ADR-0103）。 */
+    expect(panel.querySelector('#playbackAccelerationSetting')).toBeNull();
     const entry = panel.querySelector<HTMLButtonElement>('[data-settings-service] button')!;
     expect(entry.disabled).toBe(true);
     await click(entry);
@@ -190,6 +199,7 @@ describe('设置面板与壳的接缝', () => {
     current.host.configurable = async () => true;
     await open(current);
     await settle();
+    expect(panel.querySelector('#playbackAccelerationSetting')).toBeNull();
     expect(entry.disabled).toBe(false);
     await click(entry);
     await settle();
@@ -218,6 +228,24 @@ describe('设置面板与壳的接缝', () => {
     current.changed.mockClear();
     await click(panel.querySelector('#themeSetting input[value="dark"]'));
     expect([current.value.theme, effects(current.changed)]).toEqual(['dark', ['theme']]);
+    await close(current);
+  });
+
+  it('新作显示数量：失焦提交后落盘一次、报 feedLimit，越界不提交', async () => {
+    const current = await setup();
+    const panel = await open(current, 'JAV 与新作');
+    const input = panel.querySelector<HTMLInputElement>('#feedLimitSetting input[type=number]')!;
+    const commit = (value: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    current.changed.mockClear();
+    current.save.mockClear();
+    await commit('101');
+    expect([current.value.feedLimit, current.save.mock.calls.length, effects(current.changed)]).toEqual([12, 0, []]);
+    await commit('30');
+    expect([current.value.feedLimit, current.save.mock.calls.length, effects(current.changed)]).toEqual([30, 1, ['feedLimit']]);
     await close(current);
   });
 

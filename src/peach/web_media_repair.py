@@ -175,6 +175,9 @@ def _record_replacement(contract, asset_id: int, source: Path, ffprobe: Path) ->
 
 
 def _recover(contract, asset_id: int, raw: str, tools: tuple[Path, Path, Path]) -> bool:
+    from .smb_media import resolve
+    if resolve(raw) is not None:
+        return False
     with contract.read_connection() as connection:
         row = connection.execute("SELECT location FROM asset WHERE id=?", (asset_id,)).fetchone()
     if row is None:

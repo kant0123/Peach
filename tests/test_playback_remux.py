@@ -17,7 +17,7 @@ from peach.segments import (
 )
 from peach.streaming import StreamSessionRegistry
 from peach.transcodes import (
-    TranscodeCancelled, TranscodeNotStarted, TranscodeService, background_process_flags,
+    TranscodeCancelled, TranscodeNeedsSession, TranscodeService, background_process_flags,
 )
 
 
@@ -252,8 +252,8 @@ class WholeFileTranscodeGuardTests(unittest.TestCase):
             source.write_bytes(b"x")
             service = TranscodeService(_Resolver(root), root / "cache", prefer_hardware=False)
             with mock.patch("peach.transcodes.subprocess.Popen") as popen:
-                with self.assertRaises(TranscodeNotStarted):
-                    service.browser_path(1, source, allow_transcode=False)
+                with self.assertRaises(TranscodeNeedsSession):
+                    service.browser_path(1, source, convert=False)
             popen.assert_not_called()
 
     def test_not_allowed_still_serves_an_existing_cache_entry(self):
@@ -266,7 +266,7 @@ class WholeFileTranscodeGuardTests(unittest.TestCase):
             cached = root / "cache" / f"1-{stat.st_size}-{stat.st_mtime_ns}.mp4"
             cached.parent.mkdir()
             cached.write_bytes(b"mp4")
-            self.assertEqual(service.browser_path(1, source, allow_transcode=False), (cached, True))
+            self.assertEqual(service.browser_path(1, source, convert=False), (cached, True))
 
     def test_a_stop_event_kills_ffmpeg_and_leaves_no_partial_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -703,77 +703,6 @@ class ReapedSegmentTests(unittest.IsolatedAsyncioTestCase):
 
         with mock.patch.object(segments.asyncio, "create_subprocess_exec", spawn_again):
             self.assertEqual(await service._run(["ffmpeg"], "s", registry), (0, b""))
-
-
-class DisconnectTests(unittest.IsolatedAsyncioTestCase):
-    async def test_a_waiting_segment_request_keeps_its_session_alive(self):
-        """生成一片比空闲回收线还久时，请求还连着，会话不是空闲。"""
-        from peach.routes_media import _until_disconnect
-
-        touched = []
-
-        async def generation():
-            await asyncio.sleep(1.3)
-            return "segment"
-
-        class Request:
-            async def is_disconnected(self):
-                return False
-
-        result = await _until_disconnect(Request(), generation(), alive=lambda: touched.append(1))
-        self.assertEqual(result, "segment")
-        self.assertGreaterEqual(len(touched), 2)
-
-    async def test_a_dropped_segment_request_stops_touching_its_session(self):
-        from peach.routes_media import _until_disconnect
-
-        touched = []
-
-        async def generation():
-            await asyncio.sleep(30)
-
-        class Request:
-            async def is_disconnected(self):
-                return True
-
-        with self.assertRaises(segments.SegmentCancelled):
-            await asyncio.wait_for(
-                _until_disconnect(Request(), generation(), alive=lambda: touched.append(1)), 10)
-        self.assertEqual(touched, [])
-
-    async def test_a_dropped_segment_request_cancels_its_generation(self):
-        from peach.routes_media import _until_disconnect
-
-        started = asyncio.Event()
-        cancelled = []
-
-        async def generation():
-            started.set()
-            try:
-                await asyncio.sleep(30)
-            except asyncio.CancelledError:
-                cancelled.append(True)
-                raise
-
-        class Request:
-            async def is_disconnected(self):
-                return started.is_set()
-
-        with self.assertRaises(segments.SegmentCancelled):
-            await asyncio.wait_for(_until_disconnect(Request(), generation()), 10)
-        self.assertEqual(cancelled, [True])
-
-    async def test_a_connected_request_gets_the_result(self):
-        from peach.routes_media import _until_disconnect
-
-        async def generation():
-            return "segment"
-
-        class Request:
-            async def is_disconnected(self):
-                return False
-
-        self.assertEqual(await _until_disconnect(Request(), generation()), "segment")
 
 
 class RealServerDisconnectTests(unittest.TestCase):

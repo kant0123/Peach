@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import sqlite3
 import subprocess
@@ -11,43 +10,57 @@ import tempfile
 import time
 import uuid
 import xml.etree.ElementTree as ET
-from collections import deque
-from contextlib import closing, nullcontext
+from contextlib import closing
+from contextvars import copy_context
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
-from pathlib import Path
+from functools import partial
+from pathlib import Path, PureWindowsPath
 from urllib.parse import urlparse
 
 from filelock import FileLock, Timeout
 from PIL import Image
 
-from .catalog_rules import (is_jav_code, normalise_code_key,
+from .catalog_rules import (compile_code_patterns, is_jav_code, is_local_extra, normalise_code_key,
                             release_code_from_filename, same_release_code, scrapes_as_jav)
 from .field_owners import SCAN_FILENAME, write_owned_fields
+from .profiles import read_settings
 from .images import measure_image_file
 from .jav_cover_fetch import MIN_WIDTH, DeadlineExceeded, NotFound
 from .sources.base import SourceFailure
-from .library_nfo import directory_files, read_nfo, sidecars, local_art, SidecarIndex
+from .library_nfo import sidecars, SidecarIndex
+from .media_io import directory_files, read_nfo, local_art, root_online, directory_entries, file_stat
 from .genre_decisions import load_genre_decisions
-from .metadata import extract_catalog_evidence, extract_peach_fields, validate_provider_code
+from .metadata import (candidate_text_is_valid, source_text_is_valid,
+                       extract_catalog_evidence, extract_peach_fields, validate_provider_code)
 from . import metadata_routes
+from . import media_identity
+from . import junk
 from . import sample_followup
 from .metadata_policy import SOURCE_SPECS, preferred_tag_source
-from .platform import root_online, translate_ledger_path
+from .platform import translate_ledger_path as _local_ledger_path
 from .review_csv import read_rows, write_rows
-from .scan import DirectoryCache, scan_location
+from .scan import scan_location
 from .fsutil import atomic_write_text
+from . import artifact_rules, upgrade_rules
 from .ffmpeg import FFmpegResolver
-from .jobs import DiskGuard
+from .jobs import DiskGuard, JobPolicyError
 from .media_probe import probe_unmeasured
 from .media_sources import cost_for
 from .media_processing_policy import metadata_only
-from .storage_profile import available_memory_bytes, solid_state
+from .scripting import HostLimiter
 from .strm import skip_background_read
 from .record_rehome import reattach_in
+from .processing_traffic import ProcessingTraffic
 from .processing_control import (task_control, bind_control, checkpoint_values,
                                  initial_estimate, ProcessingEstimate, interrupted_state,
-                                 deadline_after, resume_fields, CURRENT)
+                                 deadline_after, resume_fields, processing_item, ItemSkipped)
+
+
+def translate_ledger_path(raw):
+    from .smb_media import resolve
+    return resolve(raw) or _local_ledger_path(raw)
+
 
 FIELDS = ('item_key', 'code', 'query', 'asset_id', 'asset_path', 'field', 'field_label', 'current_value',
           'candidates_json', 'source_count', 'source_profile', 'policy_version', 'status',
@@ -62,34 +75,6 @@ ISSUE_PREVIEW_LIMIT = 20
 SCAN_STAGE, COLLECT_STAGE, ALL_STAGES = 'scan', 'collect', 'all'
 METADATA_STAGE, PREVIEWS_STAGE = 'metadata', 'previews'
 STAGES = (ALL_STAGES, SCAN_STAGE, COLLECT_STAGE, METADATA_STAGE, PREVIEWS_STAGE)
-
-#: 一趟同步可选的步骤：扫描文件、检查配套文件、媒体属性与预览、外部资料与封面。
-STEPS = ('sources', 'local', 'media', 'collect')
-#: 每个阶段名展开成的步骤；接口只给阶段名时按这张表执行。
-STAGE_STEPS = {ALL_STAGES: frozenset(STEPS), SCAN_STAGE: frozenset({'sources'}),
-               COLLECT_STAGE: frozenset({'local', 'media', 'collect'}),
-               METADATA_STAGE: frozenset({'local', 'collect'}), PREVIEWS_STAGE: frozenset({'media'})}
-#: `changed` 只处理上次之后有变化的目录与影片，`full` 全部重新检查。
-SCOPES = ('changed', 'full')
-
-
-def resolve_steps(stage, steps=None):
-    """把阶段名或显式步骤规范成步骤集合与估时所用的阶段名。
-
-    采集外部资料要用配套文件里读出的番号与资料，选了它就连带检查配套文件。
-    """
-    if steps is None:
-        if stage not in STAGES:
-            raise ValueError('处理阶段无效')
-        return STAGE_STEPS[stage], stage
-    if not isinstance(steps, (list, tuple, set, frozenset)) or not steps or any(step not in STEPS for step in steps):
-        raise ValueError('请至少选择一个有效的同步步骤')
-    chosen = set(steps)
-    if 'collect' in chosen:
-        chosen.add('local')
-    chosen = frozenset(chosen)
-    preset = next((name for name, value in STAGE_STEPS.items() if value == chosen), ALL_STAGES)
-    return chosen, preset
 
 #: 没有动作截止时间的阶段（本地读取）超过这么久没有心跳就在页面上预警。
 STALL_AFTER_SECONDS = 120.0
@@ -106,6 +91,10 @@ MISS_TTL_SECONDS = 7 * 24 * 3600
 #: 那条批量线仍按 5 秒跑。撞上 403 不再是盲等 24 小时——`scraping_access.FIRST_BLOCKED_PAUSE`
 #: 先停 15 分钟，连着再撞才翻倍，所以这一档收紧的代价是有限且可观测的（docs/SOURCING.md）。
 SOURCE_INTERVALS = {'javdb.com': 3.0, 'jdbstatic.com': 3.0}
+#: 按 `SOURCE_INTERVALS` 等的那一份间隔，整个进程共用。取想要的资料、取新作资料、资料处理
+#: 各起各的 provider，间隔若各算各的，几条同时跑时问同一主机的请求就叠在一起，配额照样按
+#: 出口 IP 一份算。
+SOURCE_LIMITER = HostLimiter(SOURCE_INTERVALS, default_interval=2.0)
 SOURCE_LABELS = {'r18dev': 'r18.dev', 'dmm': 'DMM / FANZA', 'avbase': 'AVBase', 'javbus': 'JavBus', 'javdb': 'javdb',
                  'fc2': 'FC2', 'fc2cmadb': 'FC2CMADB', 'fc2ppvdb': 'FC2PPV-DB', 'javten': 'JAVten',
                  'javarchive': 'JavArchive',
@@ -254,6 +243,12 @@ def describe_failure(error):
     if isinstance(error, (Unavailable, SourceFailure, SourcePaused, PickerError, httpx.TransportError)) and text:
         return text
     return f'处理出错（{type(error).__name__}）'
+
+
+def _source_failure_details(error, code, action, *, source=None):
+    """采集问题保留脱敏异常链和阶段，页面摘要不暴露内部错误正文。"""
+    from .error_reporting import exception_facts, scrub
+    return scrub({'stage': action, 'code': code, 'source': source, **exception_facts(error)})
 #: 来源说「没有」不是待办：馆藏里本来就有大量独立资源和创作者作品，任何目录站都收不到
 #: 它们。逐条记在日志里备查，界面只按这两类各报一个数（`state['notes']`），不进问题清单。
 MISS_MESSAGES = {'querying_metadata': '外部来源没有这部片的资料，7 天内不再问',
@@ -344,7 +339,7 @@ class LibraryMetadataProvider:
         self.transport = HostLimitedTransport(
             SourceTransport(secrets_root, max_requests=MAX_SOURCE_REQUESTS,
                             max_bytes=MAX_SOURCE_BYTES, max_seconds=MAX_SOURCE_SECONDS),
-            2.0, intervals=SOURCE_INTERVALS)
+            2.0, limiter=SOURCE_LIMITER)
 
     #: 由本机浏览器过验证的来源累计等人点验证的秒数（`_excuse`）。调用方拿它前后相减，把这段时间
     #: 从单项动作预算里扣掉：一个站第一次弹验证窗口时，那一问要等 `min(40, timeout) + 120` 秒，
@@ -398,13 +393,28 @@ class LibraryMetadataProvider:
             if timeout <= 1.0:
                 raise DeadlineExceeded('外部资料在预算时间内未取得')
         try:
-            bridge = metadata_amane.AmaneBridge.create(
-                self.tools_root if self.tools_root is not None else TOOLS_DIR)
+            tools = self.tools_root if self.tools_root is not None else TOOLS_DIR
+            try:
+                bridge = metadata_amane.AmaneBridge.create(tools)
+            except metadata_amane.BridgeMissing:
+                if previous := self.__dict__.get('_amane_preparation_error'):
+                    raise previous
+                started = time.monotonic()
+                try:
+                    metadata_amane.ensure(tools, secrets_root=self.secrets_root)
+                except metadata_amane.PreparationError as error:
+                    self._amane_preparation_error = error
+                    raise
+                finally:
+                    elapsed = time.monotonic() - started
+                    self.excused += elapsed
+                bridge = metadata_amane.AmaneBridge.create(tools)
             direct_sites = [site for site in sites if values_for(self.secrets_root, site).get('network') == 'direct']
             report = bridge.query(code, sites, timeout=timeout,
                                   proxy_options={'trust_env': False} if len(direct_sites) == len(sites)
                                   else peach_proxy.client_options(self.secrets_root), direct_sites=direct_sites)
         except Exception as error:  # noqa: BLE001 - 桥没装、venv 坏了、超时：整档未取得，原因给人看
+            _raise_task_failure(error)
             return Unavailable(f'amane 桥：{str(error).strip() or describe_failure(error)}')
         raw_sites = report.get('sites')
         raw_sites = raw_sites if isinstance(raw_sites, dict) else {}
@@ -477,6 +487,7 @@ class LibraryMetadataProvider:
                     return found
                 raise
             except Exception as error:
+                _raise_task_failure(error)
                 if is_missing(error):
                     said_no.append(source)
                     continue
@@ -548,6 +559,7 @@ class LibraryMetadataProvider:
                     raise
                 break
             except Exception as error:  # noqa: BLE001 - 原因由调用方汇总成一句话
+                _raise_task_failure(error)
                 if not is_missing(error):
                     state['problems'].append(error)
             finally:
@@ -572,6 +584,7 @@ class LibraryMetadataProvider:
             try:
                 cache[code] = [(ONEPONDO.name, self.site(ONEPONDO.name, code, deadline=deadline))]
             except Exception as error:  # noqa: BLE001 - 原因由调用方汇总成一句话
+                _raise_task_failure(error)
                 cache[code] = error
         if isinstance(cache[code], Exception):
             raise _again(cache[code])
@@ -613,6 +626,7 @@ class LibraryMetadataProvider:
         except DeadlineExceeded:
             raise
         except Exception as error:  # noqa: BLE001 - 交给 `cover()` 汇总成一句话
+            _raise_task_failure(error)
             # 「没有」交回 `cover()` 时是传输层那一档的 `NotFound`：它按这一档跳到社区来源。
             if is_missing(error):
                 raise NotFound(str(error)) from error
@@ -735,8 +749,8 @@ def misses_path(config):
 
 
 def _save(path, payload):
-    # 状态文件每次轮询都有人读：Windows 上目标被打开的一瞬间 os.replace 会抛 PermissionError，
-    # 所以走共用的原子落盘，它带独立临时名并等读者放手。
+    # 进度条轮询会在写入间隙打开这份状态，Windows 上替换被占着的目标会拒绝访问，
+    # 交给 fsutil 等读者放手。
     atomic_write_text(path, json.dumps(payload, ensure_ascii=False))
 
 
@@ -755,6 +769,11 @@ def decorate(state, *, now=None):
                                        path=str(row.get('path') or ''), message=str(row.get('message') or ''))
                                   for row in legacy[:ISSUE_PREVIEW_LIMIT]]
         state['issues_truncated'] = len(legacy) > ISSUE_PREVIEW_LIMIT
+    # 完整走完各阶段且留有问题的历史快照仍可展示已取得的结果。
+    if state.get('status') == 'failed' and 'outcome' not in state:
+        state['outcome'] = ('partial' if state.get('stage') == '处理结束'
+                            and state.get('completed_at') and state.get('issue_count')
+                            else 'interrupted')
     if state.get('status') != 'running' or state.get('waiting_for_update'):
         return state
     now = time.time() if now is None else now
@@ -848,7 +867,7 @@ def snapshot(config):
                 if state.get('status') == 'running':
                     # 拿得到锁说明写入者已经不在了。结论写回文件：只改副本的话，另一个读取者
                     # 正好短暂占着锁时会读到原样的「运行中」，界面就在两种状态之间来回跳。
-                    state.update(status='failed', error='处理被中断，可重试未完成的部分。',
+                    state.update(status='failed', outcome='interrupted', error='处理被中断，可重试未完成的部分。',
                                  completed_at=state.get('last_progress_at') or time.time())
                     _save(state_path(config), state)
         except Timeout:
@@ -884,10 +903,11 @@ def snapshot(config):
     return decorate(state)
 
 
-def _queue_local_poster(video, code, cover_root, payload=None, posters=None, *, enqueue):
+def _queue_local_poster(video, code, cover_root, payload=None, posters=None, *, enqueue, generated=False):
     """`posters` 是调用方已经从同目录索引里挑出的海报候选，给了就不再列目录。"""
     target = cover_root / (code + '.jpg')
-    if target.is_file():
+    if target.is_file() and (not generated or artifact_rules.current(
+            target, upgrade_rules.LOCAL_POSTERS, source_required=True)):
         return
     if posters is None:
         _, posters = sidecars(video)
@@ -900,39 +920,52 @@ def _queue_local_poster(video, code, cover_root, payload=None, posters=None, *, 
     enqueue(posters[0], code, target)
 
 
-def _read_local_posters(jobs, state, *, update, issue):
+def _read_local_posters(jobs, state, *, update, issue, generated_root=None):
     """按档位领取配套图片，空闲后补位；主线程保存结果并经过安全停点。"""
     from .cover_artwork import install_cover
     from .local_poster import read_jpeg, TIMEOUT_SECONDS
+    def read(source, derived):
+        stamp = artifact_rules.fingerprint(source) if derived else None
+        return (*read_jpeg(source, isolated=True), stamp)
     failed = set()
     done = submitted = 0
     futures = {}
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix='PeachLocalPoster') as executor:
         while submitted < len(jobs) or futures:
             row, started = (jobs[submitted][0], time.time()) if not futures else (
-                next(iter(futures.values()))[0], next(iter(futures.values()))[3])
+                next(iter(futures.values()))[0], next(iter(futures.values()))[4])
             update(stage='读取配套图片', checked=done, total=len(jobs), current_action='reading_local_cover',
                    current_asset_id=row['id'], current_asset_name=row['name'],
                    current_started_at=started, current_deadline_at=started + TIMEOUT_SECONDS)
             workers = {'low': 1, 'standard': 2, 'high': 4}[state['speed_mode']]
             while submitted < len(jobs) and len(futures) < workers:
                 row, source, code, target = jobs[submitted]
-                futures[executor.submit(read_jpeg, source, isolated=row.get('location') != 'local')] = (
-                    row, code, target, time.time())
+                derived = generated_root is not None and target.parent == generated_root
+                futures[executor.submit(copy_context().run, read, source, derived)] = (
+                    row, code, target, source, time.time())
                 submitted += 1
             completed, _ = wait(futures, return_when=FIRST_COMPLETED)
             for future in completed:
-                row, code, target, _ = futures.pop(future)
+                row, code, target, source, _ = futures.pop(future)
                 try:
-                    if not target.is_file():
-                        data, size = future.result()
-                        install_cover(target, code, data, size)
-                        state['covers'] += 1
+                    data, size, stamp = future.result()
+                    derived = generated_root is not None and target.parent == generated_root
+                    if derived and stamp != artifact_rules.fingerprint(source):
+                        raise OSError('配套图片在读取时发生变化')
+                except InterruptedError:
+                    raise
                 except (OSError, ValueError, subprocess.TimeoutExpired) as error:
                     failed.add(row['id'])
                     message = ('读取配套图片超时，可稍后重试' if isinstance(error, subprocess.TimeoutExpired)
                                else '配套图片无法读取')
                     issue(row, message, action='reading_local_cover', retryable=True)
+                else:
+                    if not target.is_file() or derived:
+                        install_cover(target, code, data, size)
+                        if derived and not artifact_rules.remember(
+                                target, upgrade_rules.LOCAL_POSTERS, source=source, source_fingerprint=stamp):
+                            raise OSError('配套图片在保存时发生变化')
+                        state['covers'] += 1
                 done += 1
                 update(checked=done, covers=state['covers'])
     return failed
@@ -962,7 +995,7 @@ def _fields(payload, genre_decisions=None):
         values = [value for value in values if value]
         if values:
             fields['tags'] = dict(value=values, display_value='、'.join(values), warnings=[])
-    return fields
+    return {field: value for field, value in fields.items() if candidate_text_is_valid(value)}
 
 
 def _require_writer(config, db_path):
@@ -1045,6 +1078,8 @@ def _merge_candidates(groups, row, code, source, document, evidence_path, genre_
                          provider_id=str(document.get('id') or ''), content_id=str(document.get('content_id') or ''),
                          source_kind='local' if local else spec.kind if spec else 'community', official=official,
                          catalog_evidence=extract_catalog_evidence(document))
+        if source == 'javdb':
+            candidate.update(javdb_rule=document.get('javdb_rule'), source_id=document.get('source_id'))
         if mode == 'review':
             candidate['requires_review'] = True
         # 只有 tags 字段有未收录原文；别的字段挂一个空列表只是让每条候选都胖一圈。
@@ -1181,7 +1216,8 @@ def _answered_sources(groups, target_key, fields):
     for field in fields:
         group = groups.get(f'{target_key}:{field}')
         if group:
-            answered.update(entry.get('source') for entry in json.loads(group.get('candidates_json') or '[]'))
+            answered.update(entry.get('source') for entry in json.loads(group.get('candidates_json') or '[]')
+                            if candidate_text_is_valid(entry))
     return answered
 
 
@@ -1190,13 +1226,22 @@ class _DirectoryIndex:
 
     def __init__(self):
         self._cache: dict[str, dict[str, Path]] = {}
+        self._errors: dict[str, OSError] = {}
         self._sidecars: dict[str, SidecarIndex] = {}
 
     def files(self, directory: Path) -> dict[str, Path]:
         key = str(directory)
+        if key in self._errors:
+            raise self._errors[key]
         found = self._cache.get(key)
         if found is None:
-            found = self._cache[key] = directory_files(directory)
+            try:
+                found = self._cache[key] = directory_files(directory)
+            except InterruptedError:
+                raise
+            except OSError as error:
+                self._errors[key] = error
+                raise
         return found
 
     def sidecars(self, video):
@@ -1208,7 +1253,7 @@ class _DirectoryIndex:
 
 #: 记忆文件的格式号。按站记、带各站接入时刻的是这一版；没有这个键的文件是按档记、
 #: 整份绑一个来源目录指纹的写法（`_legacy_fingerprint`）。
-MISS_FORMAT = 2
+MISS_FORMAT = 3
 #: 几站合成一档的档名（`metadata_routes.stages_for_chain`）。按档记的文件里这几个键下的
 #: 「没有」说不清是哪一站说的。
 _MERGED_STAGES = frozenset({'community', 'fc2', 'amane', 'amane_official'})
@@ -1267,6 +1312,12 @@ class _MissCache:
             if isinstance(codes, dict):
                 self._entries[source] = {code: float(stamp) for code, stamp in codes.items()
                                          if isinstance(stamp, (int, float))}
+        if ('cover' in self._entries
+                and loaded.get('cover_catalog_rules') != upgrade_rules.OFFICIAL_COVER_CATALOG_MISSES):
+            # FC2 商品图不查询官方综合目录，单站答复与这一目录判据无关。
+            self._entries['cover'] = {
+                code: stamp for code, stamp in self._entries.get('cover', {}).items()
+                if code.upper().startswith('FC2-PPV-')}
 
     def fresh(self, source, code, lineup=()):
         """`source` 对 `code` 说过「没有」且还在期内。`lineup` 是这条记忆当时应当问过的几站：
@@ -1280,6 +1331,7 @@ class _MissCache:
         self._entries.setdefault(source, {})[code] = now
         _save(self._path, {
             'format': MISS_FORMAT, 'sites': self._sites,
+            'cover_catalog_rules': upgrade_rules.OFFICIAL_COVER_CATALOG_MISSES,
             'joined': {site: stamp for site, stamp in self._joined.items() if now - stamp < self._ttl},
             'misses': {name: {key: stamp for key, stamp in codes.items() if now - stamp < self._ttl}
                        for name, codes in self._entries.items()}})
@@ -1304,23 +1356,28 @@ class _MetadataResults:
             self.received(fresh)
 
     def save(self, found):
-        entries = [self.remote._evidence(name, self.code, payload) for name, payload in found
-                   if self.known.get(name) != payload]
-        self.cached(entries)
+        try:
+            entries = [self.remote._evidence(name, self.code, payload) for name, payload in found
+                       if self.known.get(name) != payload]
+            self.cached(entries)
+        except InterruptedError:
+            raise
+        except OSError as error:
+            raise _ProcessingPersistenceError(f'资料证据无法保存：{error}') from error
 
 
 class _RemoteSession:
     """一个任务共用的外部来源连接，加上来源说过「没有」的记忆。"""
 
-    def __init__(self, config, provider_factory, misses, *, retrying, routes=None):
+    def __init__(self, config, provider_factory, misses, *, retrying, recheck_existing=False, routes=None):
         self._config = config
         self._factory = provider_factory
         self._provider = None
         self.misses = misses
         #: 用户对每种内容类型的来源链覆盖，形状见 `metadata_routes.parse_route_overrides`。
         self._routes = routes or None
-        # 「重试未完成项」按上一任务的失败集合强制重试，不看记忆；答复仍照记。
-        self._consult = not retrying
+        # 定向重试或明确重采不看旧记忆；本次答复仍照记。
+        self._consult = not (retrying or recheck_existing)
         self._task_evidence = {}
         self._task_absent = set()
 
@@ -1339,8 +1396,47 @@ class _RemoteSession:
         if self._provider is not None and hasattr(self._provider, 'close'):
             self._provider.close()
 
-    def collect(self, row, code, missing, cover_root, *, update, issue, answered=(), received=lambda entries: None):
+    def prepare(self, prepared, stages_of, update, *, cover_root=None, groups=None):
+        """只为本趟实际需要的来源准备工具，不消费单片查询预算。"""
+        if self._factory:
+            return
+        from . import metadata_amane
+        from .scraping_access import paused_until
+        required = []
+        for row, code, verify, local_fields, *_rest in prepared:
+            if not _scrapes_as_jav(row, code):
+                continue
+            allowed = stages_of(row['path'])
+            missing = list(COLLECTED_FIELDS) if verify else _missing_fields(row, local_fields)
+            chain = self._chain(code, *_studio_evidence(row))
+            metadata = 'metadata' in allowed and bool(missing)
+            cover = ('cover' in allowed and _asks_cover(code, *_studio_evidence(row))
+                     and (cover_root is None or not cover_settled(cover_root / (code + '.jpg')))
+                     and not self._fresh_miss('cover', code, chain))
+            if not (metadata or cover):
+                continue
+            answered = () if verify or cover else _answered_sources(groups or {}, f"asset:{row['id']}", missing)
+            members = self._askable([name for name in chain if name in metadata_amane.SITES], code, answered)
+            cached = {name for name, *_ in self._cached_evidence(members, code)}
+            if any(name not in cached and not paused_until(self._config.directory('secrets'), name)
+                   for name in members):
+                required.append(row['id'])
+        if required:
+            try:
+                metadata_amane.ensure(self._config.directory('tools'),
+                    secrets_root=self._config.directory('secrets'),
+                    progress=lambda: update(stage='准备采集工具', current_action='preparing_sources',
+                                            current_asset_id=None, current_asset_name='',
+                                            current_started_at=time.time(), current_deadline_at=None))
+            except metadata_amane.PreparationError as error:
+                error.asset_ids = tuple(required)
+                raise
+
+    def collect(self, row, code, missing, cover_root, *, update, issue, answered=(), received=lambda entries: None,
+                fetch_cover=True):
         """给这一行补外部资料与封面；返回 (证据条目, 新落盘的封面数)。
+
+        `missing` 为空时不问资料，`fetch_cover` 为假时不找封面：媒体库处理方式关掉的那一步不联网。
 
         文件名被读成番号的创作者作品一家都不问，判据见 `catalog_rules.scrapes_as_jav`；
         本地海报在调用方那一步已经登记过，这里跳过的只是外部来源。`answered` 是在这一行
@@ -1356,7 +1452,7 @@ class _RemoteSession:
                                   or not set(answered).intersection(chain)):
             entries = self._metadata(row, code, missing, update=update, issue=issue, answered=answered,
                                      received=received)
-        if _asks_cover(code, *_studio_evidence(row)) and not cover_settled(cover_root / (code + '.jpg')):
+        if fetch_cover and _asks_cover(code, *_studio_evidence(row)) and not cover_settled(cover_root / (code + '.jpg')):
             snapshots, absent = self._cover_inputs(code, chain, entries)
             covers = self._cover(row, code, cover_root, update=update, issue=issue,
                                  snapshots=snapshots, absent=absent)
@@ -1377,6 +1473,7 @@ class _RemoteSession:
 
     def _evidence(self, source, code, payload):
         _save(self._evidence_path(code, source), payload)
+        artifact_rules.remember(self._evidence_path(code, source), str(upgrade_rules.PROVIDER_EVIDENCE))
         entry = (source, payload, self._evidence_path(code, source))
         self._task_evidence[source, code] = entry
         return entry
@@ -1400,9 +1497,18 @@ class _RemoteSession:
                 continue
             path = self._evidence_path(code, name)
             try:
+                if not artifact_rules.current(path, str(upgrade_rules.PROVIDER_EVIDENCE)):
+                    continue
                 if time.time() - path.stat().st_mtime > MISS_TTL_SECONDS:
                     continue
-                entry = (name, json.loads(path.read_text(encoding='utf-8')), path)
+                payload = json.loads(path.read_text(encoding='utf-8'))
+                if name == 'javdb':
+                    from .javdb_identity import current_evidence
+                    if not current_evidence(payload):
+                        continue
+                if not source_text_is_valid(payload):
+                    continue
+                entry = (name, payload, path)
                 self._task_evidence[name, code] = entry
                 found.append(entry)
             except (OSError, ValueError):
@@ -1495,6 +1601,7 @@ class _RemoteSession:
         wants_tags = 'tags' in missing
         results = _MetadataResults(self, code, received)
         problems, held, entries = [], [], results.entries
+        failures = []
         attempted = set(answered)
         stages = metadata_routes.stages_for_chain(chain)
         for source, then in zip(stages, (*stages[1:], '')):
@@ -1513,6 +1620,7 @@ class _RemoteSession:
                     continue
             try:
                 # 浏览器来源等人点验证的那段不算进这部片的预算（`LibraryMetadataProvider.excused`）。
+                update(current_source={'key': source, 'label': PROVIDER_NAMES.get(source, source)})
                 found = self._ask(source, code, members, cached, required=required, evidence=evidence,
                                   deadline=_extended(deadline, _excused(self._provider) - mark),
                                   received=results.save)
@@ -1523,6 +1631,7 @@ class _RemoteSession:
                 issue(row, '外部资料在预算时间内未取得，可稍后重试', action=action, retryable=True)
                 return []
             except Exception as error:
+                _raise_task_failure(error)
                 if is_missing(error):
                     for name in getattr(error, 'sites', None) or members:
                         self._record_miss(name, code)
@@ -1532,6 +1641,7 @@ class _RemoteSession:
                 problems.append(describe_failure(error)
                                 if source in ('community', 'amane', 'amane_official')
                                 else f'{SOURCE_LABELS.get(source, source)}：{describe_failure(error)}')
+                failures.append(_source_failure_details(error, code, action, source=source))
                 held.append(source_paused(error))
                 continue
             update(stage='保存待确认资料')
@@ -1548,7 +1658,8 @@ class _RemoteSession:
         paused = bool(held) and all(held)
         issue(row, ('外部资料本趟没轮到：' if paused else '外部资料未取得：') + '；'.join(problems)
               if problems else MISS_MESSAGES[action],
-              action=action, retryable=True, paused=paused)
+              action=action, retryable=True, paused=paused,
+              **({'diagnostics': {'failures': failures}} if failures else {}))
         return []
 
     def _preferred_tags(self, row, code, missing, chain, entries, answered, *, update, issue, deadline):
@@ -1564,6 +1675,7 @@ class _RemoteSession:
         try:
             payload = self.provider().query(code, source, deadline=deadline)
         except Exception as error:
+            _raise_task_failure(error)
             if isinstance(error, DeadlineExceeded):
                 self.reset()
                 issue(row, 'JavDB 标签在预算时间内未取得', action='querying_metadata', retryable=True)
@@ -1571,7 +1683,8 @@ class _RemoteSession:
                 self._record_miss(source, code)
             else:
                 issue(row, 'JavDB 标签未取得：' + describe_failure(error),
-                      action='querying_metadata', retryable=True, paused=source_paused(error))
+                      action='querying_metadata', retryable=True, paused=source_paused(error),
+                      diagnostics=_source_failure_details(error, code, 'querying_metadata', source=source))
             return []
         update(stage='保存待确认资料')
         return [self._evidence(source, code, payload)]
@@ -1587,7 +1700,7 @@ class _RemoteSession:
             return 0
         budget = ACTION_BUDGETS[action]
         update(stage='采集缺失封面', current_action=action,
-               current_started_at=time.time(), current_deadline_at=time.time() + budget)
+               current_started_at=time.time(), current_deadline_at=time.time() + budget, current_source=None)
         try:
             return int(self.provider().cover(code, cover_root, deadline=deadline_after(budget),
                                              evidence=_studio_evidence(row), snapshots=snapshots,
@@ -1601,9 +1714,11 @@ class _RemoteSession:
             self._record_miss('cover', code, lineup)
             issue(row, MISS_MESSAGES[action], action=action, retryable=True)
         except Exception as error:
+            _raise_task_failure(error)
             paused = source_paused(error)
             issue(row, ('封面本趟没轮到：' if paused else '封面未取得：') + describe_failure(error),
-                  action=action, retryable=True, paused=paused)
+                  action=action, retryable=True, paused=paused,
+                  diagnostics=_source_failure_details(error, code, action))
         return 0
 
 
@@ -1632,6 +1747,14 @@ def _enrich_finished_performers(database, groups, config, candidate_root, remote
     if database is None or not active():
         return empty
     from .metadata_performer_profiles import enrich_performer_profiles
+    from .jav_cover_fetch import HostLimitedTransport
+    from .scraping_access import SourceTransport
+
+    def profile_transport():
+        return HostLimitedTransport(
+            SourceTransport(config.directory('secrets'), max_requests=MAX_SOURCE_REQUESTS,
+                            max_bytes=MAX_SOURCE_BYTES, max_seconds=MAX_SOURCE_SECONDS),
+            2.0, limiter=SOURCE_LIMITER)
     # 问题清单要的是这条资产的 id 和路径，候选行上都有。
     rows = {int(group['asset_id']): {'id': int(group['asset_id']),
                                      'path': group.get('asset_path') or ''}
@@ -1639,7 +1762,7 @@ def _enrich_finished_performers(database, groups, config, candidate_root, remote
     return enrich_performer_profiles(
         database, groups.values(), config.directory('generated') / 'avatars',
         candidate_root / 'provider-cache' / 'performer-avatars',
-        transport_factory=lambda: getattr(remote.provider(), 'transport', None),
+        transport_factory=profile_transport,
         active=active, progress=update,
         # 头像取不到是可重试的：下一次「重试失败项」会连着这条资产一起再来一遍。
         issue=lambda asset_id, message: issue(rows.get(asset_id), message,
@@ -1752,15 +1875,30 @@ def _chosen_asset_paths(db_path, asset_ids):
     return {source: tuple(paths) for source, paths in chosen.items()}
 
 
+def _within_processing_root(path, root):
+    """按资源身份比较归属，不为逐影片筛选访问挂载目录。"""
+    from .platform import within_root
+    from .smb_media import SmbResource
+    if isinstance(path, SmbResource) or isinstance(root, SmbResource):
+        return within_root(path, root)
+    return path.is_relative_to(root)
+
+
 def _online_source_root(source, root, chosen_paths, *, retrying, issue):
     translated_root = translate_ledger_path(root)
     relevant = not retrying or any(
-        path.is_relative_to(translated_root)
+        _within_processing_root(path, translated_root)
         for path in chosen_paths.get(source, ()))
     if not relevant:
         return None
-    if root_online(translated_root):
-        return translated_root
+    try:
+        if root_online(translated_root):
+            return translated_root
+    except InterruptedError:
+        raise
+    except OSError as error:
+        issue(None, f'{source} 来源目录读取失败：{error}', action='reading_local')
+        return None
     issue(None, f'{source} 来源离线', action='reading_local')
     return None
 
@@ -1771,30 +1909,25 @@ class _SourceScan:
     scanned: int = 0
     probed: int = 0
     scanned_bytes: int = 0
-    added: int = 0
-    unchanged_directories: int = 0
+    junk_isolated: int = 0
+    new_ids: tuple[int, ...] = ()
 
 
-def directory_cache_path(config):
-    return config.directory('state') / 'scan-directories.sqlite'
-
-
-def _scan_sources(config, db_path, *, locations, asset_ids, steps, guard, update, issue,
-                  scan_checkpoints=None, save_checkpoint=lambda: None, initial_probed=0, scope='full'):
-    """发现本趟可访问的来源根，按所选步骤登记文件并探测新视频。
-
-    只扫描文件时顺带读取新视频的时长与分辨率；差分范围只重新列出修改时间变了的目录。
-    """
+def _scan_sources(config, db_path, *, locations, asset_ids, stage, guard, update, issue,
+                  scan_checkpoints=None, save_checkpoint=lambda: None, initial_probed=0, incremental=False):
+    """发现本趟可访问的来源根，按阶段登记文件并探测新视频。"""
     result = _SourceScan([], probed=initial_probed)
+    def count_junk(checked):
+        result.junk_isolated += checked['isolated']
     scan_checkpoints = scan_checkpoints if scan_checkpoints is not None else {}
     chosen_paths = _chosen_asset_paths(db_path, asset_ids)
-    scan = asset_ids is None and 'sources' in steps
-    probe_now = steps == {'sources'}
+    scan = asset_ids is None and stage in (ALL_STAGES, SCAN_STAGE)
     mounts = {key: tuple(str(value) for value in values) for key, values in config.mounts.items()}
-    ffprobe = _ffprobe_path(config) if probe_now else None
-    with closing(DirectoryCache(directory_cache_path(config))) if scan else nullcontext() as cache:
-        for source, root in ((source, root) for source, roots in locations.items() for root in roots
-                             if steps != {'media'} or source == 'local'):
+    ffprobe = _ffprobe_path(config) if stage == SCAN_STAGE else None
+    for source, roots in locations.items():
+        if stage == PREVIEWS_STAGE and source != 'local':
+            continue
+        for root in roots:
             guard.check()
             translated_root = _online_source_root(
                 source, root, chosen_paths, retrying=asset_ids is not None, issue=issue)
@@ -1802,51 +1935,137 @@ def _scan_sources(config, db_path, *, locations, asset_ids, steps, guard, update
                 continue
             result.online_roots.append(translated_root)
             if scan:
-                key = f'{source}:{root}'
+                key = f'{source}:{PureWindowsPath(root)}'.casefold()
                 def remember(value, key=key):
                     scan_checkpoints[key] = value
                     save_checkpoint()
                 registered = scan_location(db_path, source, root, declared_roots=config.locations,
                                            mounts=mounts, report=lambda line: None,
+                                           read_directory=partial(directory_entries, file_identity=source == 'local'),
+                                           onerror=lambda error: issue(None, str(error), action='scanning_files'),
                                            resume_state=scan_checkpoints.get(key), save_checkpoint=remember,
-                                           directory_cache=cache, reuse_unchanged=scope == 'changed',
-                                           progress=lambda files, size, added: update(
+                                           new_only=incremental,
+                                           progress=lambda files, size: update(
                                                stage='扫描文件', scanned=result.scanned + files,
                                                scanned_bytes=result.scanned_bytes + size,
-                                               added=result.added + added,
                                                checked=0, total=0, current_action='scanning_files'))
                 result.scanned += registered.files
                 result.scanned_bytes += registered.total_bytes
-                result.added += registered.added
-                result.unchanged_directories += registered.unchanged_directories
-                if probe_now:
+                result.junk_isolated += registered.junk_isolated
+                result.new_ids += registered.new_ids
+                if stage == SCAN_STAGE:
                     result.probed += probe_unmeasured(
                         db_path, ffprobe, source, root, config=config,
+                        on_junk=count_junk, asset_ids=list(registered.new_ids) if incremental else None,
                         report=lambda done, total: update(stage='读取时长与分辨率',
                             checked=result.probed + done, total=result.probed + total, probed=result.probed + done))
                 reattach_in(db_path, registered.new_ids)
-                update(scanned=result.scanned, added=result.added, probed=result.probed,
-                       unchanged_directories=result.unchanged_directories)
+                update(scanned=result.scanned, probed=result.probed)
     return result
 
 
-def _probe_sources(config, db_path, locations, online_roots, asset_ids, update, *, total_pending=0, initial_probed=0):
-    """已登记视频按可访问来源逐项读取媒体属性。"""
+def _probe_sources(config, db_path, locations, online_roots, asset_ids, update, *, total_pending=0,
+                   initial_probed=0, protected_ids=(), on_junk=lambda result: None):
+    """已登记视频按可访问来源逐项读取媒体属性；媒体库处理方式不读视频信息的根目录跳过。"""
     probed = initial_probed
     checked = initial_probed
     ffprobe = _ffprobe_path(config)
+    stages = media_identity.stages_by_root(config)
     def report(done, total):
         update(stage='读取时长与分辨率', checked=checked + done, probed=checked + done,
                total=max(initial_probed + total_pending, checked + total))
     for source, roots in locations.items():
         for root in roots:
+            if 'probe' not in stages.get(media_identity.path_key(root), media_identity.STAGES):
+                continue
             if translate_ledger_path(root) in online_roots:
                 probed += probe_unmeasured(
                     db_path, ffprobe, source, root, asset_ids=asset_ids, config=config,
-                    report=report)
+                    report=report, protected_ids=protected_ids, on_junk=on_junk)
                 checked = probed
     update(probed=probed)
     return probed
+
+
+def _library_stages(config):
+    """按作品账本路径查所属媒体库要做的处理步骤（ADR-0116）；不在已配置根目录下的按自动补全。"""
+    from .platform import resolve_root
+    by_root = media_identity.stages_by_root(config)
+    every = frozenset(media_identity.STAGES)
+
+    def stages_of(path):
+        location, index, _tail = resolve_root(path, config.locations)
+        if location is None:
+            return every
+        return by_root.get(media_identity.path_key(config.locations[location][index]), every)
+    return stages_of
+
+
+def _people_allowed(config):
+    """有没有哪个媒体库的处理方式联网补人物图片；都没有时整轮不补人物资料、不派实体后继。"""
+    return any('people' in stages for stages in media_identity.stages_by_root(config).values())
+
+
+def _collect_allowed(remote, traffic, row, code, missing, allowed, cover_root, covered, *,
+                     update, issue, answered, received, succeeded):
+    """按这一行所属媒体库的处理方式问外部来源（ADR-0116），返回 (证据条目, 新落盘的封面数)。
+
+    关掉的联网步骤不问：不补资料时不带缺失字段，不补封面时不找封面，两样都关就整行不联网。
+    不补人物图片的媒体库，这一行换上的封面不记进 `covered`，不因此派补头像后继。"""
+    found, covers = [], 0
+    if allowed & {'metadata', 'cover'}:
+        traffic.start_metadata(code)
+        try:
+            with processing_item(row['id']):
+                found, covers = remote.collect(row, code, missing if 'metadata' in allowed else [], cover_root,
+                                               update=update, issue=issue, answered=answered, received=received,
+                                               fetch_cover='cover' in allowed)
+        except ItemSkipped:
+            remote.reset()
+            issue(row, '已跳过这部影片，可在任务结束后重试', action='skipped', retryable=True)
+        finally:
+            traffic.finish_work('metadata', code, successful=succeeded())
+            update(current_source=None)
+    if 'people' in allowed:
+        covered.append((row['id'], covers))
+    return found, covers
+
+
+def _check_processing_junk(database, locations, online_roots, asset_ids, protected_ids, state, update):
+    """只检查本趟可访问目录或显式选择，并把隔离与复核计数记进可恢复状态。"""
+    roots = [(source, root) for source, paths in locations.items() for root in paths
+             if translate_ledger_path(root) in online_roots]
+    checked = junk.isolate(database, asset_ids=asset_ids, roots=roots, protected_ids=protected_ids)
+    update(junk_isolated=state.get('junk_isolated', 0) + checked['isolated'],
+           junk_review=checked['review'])
+
+
+def _prepare_processing_media(config, db_path, database, locations, sources, asset_ids,
+                              protected_ids, stage, state, update):
+    """在配套资料、预览和联网采集前检查已知证据，补媒体测量后重新检查。"""
+    update(stage='检查垃圾文件', checked=0, total=0)
+    _check_processing_junk(database, locations, sources.online_roots, asset_ids, protected_ids, state, update)
+    if stage in (ALL_STAGES, COLLECT_STAGE, PREVIEWS_STAGE):
+        _probe_sources(config, db_path, locations, sources.online_roots, asset_ids, update,
+                       initial_probed=state['probed'], protected_ids=protected_ids,
+                       on_junk=lambda result: update(junk_isolated=state['junk_isolated'] + result['isolated']))
+        update(stage='复查垃圾文件', checked=0, total=0)
+        _check_processing_junk(database, locations, sources.online_roots, asset_ids, protected_ids, state, update)
+
+
+def _active_prepared(database, prepared):
+    """媒体处理后的活动视频携带最新测量值，已隔离或被用户移出的条目不继续采集。"""
+    if not prepared:
+        return []
+    ids = [row[0]['id'] for row in prepared]
+    with database.read_connection() as connection:
+        current = {}
+        for start in range(0, len(ids), 500):
+            batch = ids[start:start + 500]
+            current.update((row['id'], dict(row)) for row in connection.execute(
+                "SELECT * FROM asset WHERE disposal IS NULL AND id IN (" + ','.join('?' for _ in batch) + ')', batch))
+    return [(dict(item[0], **current[item[0]['id']]), *item[1:]) for item in prepared
+            if item[0]['id'] in current]
 
 
 def _collection_rows(db_path, *, locations, online_roots, asset_ids):
@@ -1862,12 +2081,15 @@ def _collection_rows(db_path, *, locations, online_roots, asset_ids):
         query += ' AND id IN (' + ','.join('?' * len(asset_ids)) + ')'
         parameters = asset_ids
     query += ' ORDER BY id'
+    library_roots = tuple(root for roots in locations.values() for root in roots)
     with closing(sqlite3.connect(db_path, timeout=30)) as connection:
         connection.row_factory = sqlite3.Row
         # 路径归属只比字面，避免逐行 resolve() 访问挂载服务。
         rows = [dict(row) for row in connection.execute(query, parameters)
-                if row['location'] in locations
-                and any(translate_ledger_path(row['path']).is_relative_to(root) for root in online_roots)]
+                if not is_local_extra(row['name'], row['path'],
+                                      library_roots=library_roots)
+                and row['location'] in locations
+                and any(_within_processing_root(translate_ledger_path(row['path']), root) for root in online_roots)]
         genre_decisions = load_genre_decisions(connection)
     return rows, genre_decisions
 
@@ -1890,13 +2112,17 @@ def _candidate_scope(groups, asset_ids):
 
 
 def _finish_collection(config, database, candidate_root, cover_root, groups, remote, *,
-                       asset_ids, active, update, issue, watermark, covered):
-    """结算本趟候选并补人物资料，全库任务同时推进存量后继。"""
+                       asset_ids, active, update, issue, watermark, covered, people=True):
+    """结算本趟候选并补人物资料，全库任务同时推进存量后继。
+
+    `people` 为假（没有哪个媒体库的处理方式联网补人物图片）时不补人物资料，也不派实体后继。"""
     auto_apply = _apply_finished_candidates(database, candidate_root, active, asset_ids)
-    profiles = _enrich_finished_performers(
+    profiles = (_enrich_finished_performers(
         database, _candidate_scope(groups, asset_ids), config, candidate_root, remote, active, update, issue)
+        if people else dict(aliases=0, avatars=0, conflicts=0, failed=0))
     followups = [] if asset_ids is not None else sample_followup.plan(database, config, cover_root)
-    followups += _entity_followups(database, config, watermark, covered, include_stock=asset_ids is None)
+    if people:
+        followups += _entity_followups(database, config, watermark, covered, include_stock=asset_ids is None)
     return dict(followups=followups, auto_applied=auto_apply['applied'],
                 auto_rejected=auto_apply['auto_rejected'], performer_aliases=profiles['aliases'],
                 performer_avatars=profiles['avatars'], performer_profile_conflicts=profiles['conflicts'],
@@ -1920,12 +2146,26 @@ def _asset_selection(db_path, asset_ids):
     return chosen
 
 
+PREVIEW_TIMEOUT_SECONDS = 120.0
+
+
+class _ProcessingPersistenceError(RuntimeError):
+    """公共进度或检查点未保存，必须由任务层处理。"""
+
+
+def _raise_task_failure(error):
+    if isinstance(error, (InterruptedError, JobPolicyError, sqlite3.Error, _ProcessingPersistenceError)):
+        raise error
+
+
 class _PreviewCaptureError(ValueError):
     """预览失败的操作提示及脱敏工具证据。"""
 
     def __init__(self, diagnostics):
         from .error_reporting import scrub
-        self.diagnostics = scrub(diagnostics)
+        from .diagnostic_exceptions import media_details
+        category = media_details(None, diagnostics, {})
+        self.diagnostics = {**scrub(diagnostics), 'failure_category': category or 'unclassified'}
         message = {
             'timeout': '视频抽帧超时，可重试；反馈问题请导出诊断报告',
             'ffmpeg_error': 'FFmpeg 抽帧失败，反馈问题请导出诊断报告',
@@ -1934,68 +2174,39 @@ class _PreviewCaptureError(ValueError):
         super().__init__(message)
 
 
-def _capture_preview_frames(config, choice, video, duration, frames, progress, batch_threads):
-    """九个采样点的帧写进 `frames`；任务改为只采资料时回 `False`。"""
-    from . import frame_capture
-    timestamps = [duration * (0.03 + 0.94 * (index + 0.5) / 9) for index in range(9)]
-    paths = [frames / f's{index:02d}.jpg' for index in range(9)]
-    if batch_threads:
-        if metadata_only(config.directory('state')):
-            return False
-        progress()
-        batch = {}
-        if frame_capture.capture_frames(str(choice.path), str(video), timestamps, paths,
-                                        threads=batch_threads, diagnostics=batch):
-            return True
-        if batch.get('reason') == 'timeout':
-            batch.update(frame_index=None, duration_seconds=duration, tool_name=Path(choice.path).name,
-                         tool_source=choice.source if hasattr(choice, 'source') else 'unknown',
-                         stderr=batch.get('stderr', '').replace(str(video), '<media>')[-4096:])
-            raise _PreviewCaptureError(batch)
-    for index, timestamp in enumerate(timestamps):
-        if metadata_only(config.directory('state')):
-            return False
-        progress()
-        diagnostic = {}
-        if not frame_capture.capture_with_retry(
-                str(choice.path), str(video), timestamp, paths[index], diagnostics=diagnostic):
-            for attempt in diagnostic.get('attempts', []):
-                attempt['stderr'] = attempt.get('stderr', '').replace(str(video), '<media>')[-4096:]
-            diagnostic['stderr'] = diagnostic.get('stderr', '').replace(str(video), '<media>')[-4096:]
-            diagnostic.update(frame_index=index, duration_seconds=duration,
-                              tool_source=choice.source if hasattr(choice, 'source') else 'unknown',
-                              tool_name=Path(choice.path).name)
-            raise _PreviewCaptureError(diagnostic)
-    return True
-
-
-def _generate_preview(config, row, database, resolver, *, progress, batch_threads=0):
-    """复用九宫格抽帧原语，产物可用后在共享写锁内登记。
-
-    `batch_threads` 大于 0 时先用一个 FFmpeg 进程抽完九帧；未成功（超时除外）回到逐帧路径。
-    """
+def _generate_preview(config, row, database, resolver, *, progress):
+    """复用九宫格抽帧原语，产物可用后在共享写锁内登记。"""
     from . import frame_capture, media_probe
     from .fsutil import atomic_path
     from .previews import PreviewUnavailable
+
+    deadline = deadline_after(PREVIEW_TIMEOUT_SECONDS)
+
+    def remaining(limit):
+        value = deadline - time.monotonic()
+        if value <= 0:
+            raise _PreviewCaptureError(dict(reason='timeout', timeout_seconds=PREVIEW_TIMEOUT_SECONDS))
+        return min(limit, value)
 
     root = (config.directory('generated') / 'snapshots').resolve()
     previous = row.get('snapshot_path')
     if previous:
         previous = translate_ledger_path(previous)
-        if previous.is_relative_to(root) and measure_image_file(previous):
+        if previous.is_relative_to(root) and artifact_rules.current(previous) and measure_image_file(previous):
             return False
     choice = resolver.ffmpeg()
     if choice is None:
         raise PreviewUnavailable('未找到 FFmpeg，无法生成预览图，请在诊断页检查工具状态')
     video = translate_ledger_path(row['path'])
-    if not video.is_file():
+    import stat
+    if not stat.S_ISREG(file_stat(video, timeout=remaining(20)).st_mode):
         raise PreviewUnavailable('媒体文件不可访问')
     duration = row.get('duration') or 0
     if duration <= 0:
         probe = resolver.ffprobe()
         if probe is None:
             raise PreviewUnavailable('未找到 ffprobe，无法读取视频时长')
-        measured = media_probe.measure(str(probe.path), row['id'], str(video))
+        measured = media_probe.measure(str(probe.path), row['id'], str(video), timeout=remaining(20))
         duration = measured[0]
         if duration <= 0:
             raise PreviewUnavailable('视频时长未取得，请检查媒体文件后重试')
@@ -2004,18 +2215,36 @@ def _generate_preview(config, row, database, resolver, *, progress, batch_thread
             connection.execute(media_probe.UPDATE, measured)
     digest = hashlib.sha1(str(row['path']).encode('utf-8')).hexdigest()[:16]
     destination = root / 'local' / digest[:2] / (digest + '.jpg')
-    if not measure_image_file(destination):
+    if not artifact_rules.current(destination) or not measure_image_file(destination):
         with tempfile.TemporaryDirectory(prefix='peach-preview-') as temporary:
             frames = Path(temporary)
-            if not _capture_preview_frames(config, choice, video, duration, frames, progress, batch_threads):
-                return False
+            for index in range(9):
+                if metadata_only(config.directory('state')):
+                    return False
+                progress()
+                timestamp = duration * (0.03 + 0.94 * (index + 0.5) / 9)
+                diagnostic = {}
+                if not frame_capture.capture_with_retry(
+                        str(choice.path), str(video), timestamp, frames / f's{index:02d}.jpg',
+                        diagnostics=diagnostic, timeout=remaining(45)):
+                    for attempt in diagnostic.get('attempts', []):
+                        attempt['stderr'] = attempt.get('stderr', '').replace(str(video), '<media>')[-4096:]
+                    diagnostic['stderr'] = diagnostic.get('stderr', '').replace(str(video), '<media>')[-4096:]
+                    diagnostic.update(frame_index=index, duration_seconds=duration,
+                                      tool_source=choice.source if hasattr(choice, 'source') else 'unknown',
+                                      tool_name=Path(choice.path).name)
+                    raise _PreviewCaptureError(diagnostic)
             progress()
-            with atomic_path(destination) as output:
-                if not frame_capture.tile_frames(str(choice.path), str(frames / 's%02d.jpg'), 3, 3, output,
-                                                 **({'threads': batch_threads} if batch_threads else {})):
-                    raise ValueError('预览图未生成，请检查媒体文件后重试')
-                if not measure_image_file(output):
-                    raise ValueError('预览图无法读取，请重试')
+            try:
+                with atomic_path(destination) as output:
+                    if not frame_capture.tile_frames(str(choice.path), str(frames / 's%02d.jpg'), 3, 3, output,
+                                                     timeout=remaining(60)):
+                        raise ValueError('预览图未生成，请检查媒体文件后重试')
+                    if not measure_image_file(output):
+                        raise ValueError('预览图无法读取，请重试')
+            except OSError as error:
+                raise _ProcessingPersistenceError(f'预览图无法保存：{error}') from error
+    artifact_rules.remember(destination)
     progress()
     with database.write_transaction() as connection:
         result = connection.execute(
@@ -2024,128 +2253,53 @@ def _generate_preview(config, row, database, resolver, *, progress, batch_thread
     return bool(result.rowcount)
 
 
-#: 高强度并行抽帧的并发上限与每路预留的内存（一路 FFmpeg 解码一个 GOP，常驻几十 MB，留足余量）。
-PREVIEW_WORKER_CAP = 4
-PREVIEW_WORKER_MEMORY = 768 * 1024**2
-
-
-def _preview_workers():
-    """高强度下同时抽帧的路数：不超过核数的一半、内存余量和上限；其余档位恒为 1。"""
-    control = CURRENT.get()
-    if control is None or control.mode != 'high':
-        return 1
-    memory = available_memory_bytes()
-    if memory is None:
-        return 1
-    return max(1, min(PREVIEW_WORKER_CAP, (os.cpu_count() or 1) // 2, memory // PREVIEW_WORKER_MEMORY))
-
-
-def _fast_preview_source(row):
-    """高强度且视频在本机固态盘上才合并抽帧、并行；机械盘、网络盘与判不出来的盘照旧逐帧。"""
-    control = CURRENT.get()
-    return (control is not None and control.mode == 'high'
-            and solid_state(translate_ledger_path(row['path'])))
-
-
-class _NoMarks:
-    """不记差分的抽帧：没有已知失败，结果也不留。"""
-
-    def known_preview_failure(self, row, retry_failed):
-        return False
-
-    def record_preview(self, row, *, ok):
-        pass
-
-
-_NO_MARKS = _NoMarks()
-
-
 def _generate_previews(config, rows, database, *, update, issue, guard,
-                       completed=(), checkpoint=lambda row: None, initial_made=0, marks=_NO_MARKS,
-                       retry_failed=True):
-    """只读本机视频；来源失败与抽帧失败各自保留可重试项目。
-
-    高强度且视频在固态盘上时，每个视频合并成一次 FFmpeg 抽帧，并按核数与内存同时处理
-    若干个；工作线程只做抽帧和登记，进度、检查点、问题记录与 `marks` 仍在主线程，暂停与停止
-    都在两个视频之间生效。`marks` 记下每个文件的抽帧结果；`retry_failed` 为假时，
-    文件没变的失败项本趟跳过。
-    """
+                       completed=(), checkpoint=lambda row: None, initial_made=0):
+    """只读本机视频；来源失败与抽帧失败各自保留可重试项目。媒体库处理方式不生成九宫格的作品跳过。"""
     from .previews import PreviewUnavailable
     if database is None:
         return 0
+    stages_of = _library_stages(config)
     rows = [row for row in rows if row['location'] == 'local' and not skip_background_read(row['path'])
-            and not marks.known_preview_failure(row, retry_failed)]
+            and 'preview' in stages_of(row['path'])]
     base_done = sum(_checkpoint_key(row) in completed for row in rows)
     rows = [row for row in rows if _checkpoint_key(row) not in completed]
     resolver = FFmpegResolver(config.directory('tools') / 'ffmpeg')
     made = initial_made
-    done = 0
-    pending = deque(rows)
-    flights = {}
-
-    def announce(row):
-        update(stage='生成预览图', checked=base_done + done, total=base_done + len(rows), previews=made,
-               current_asset_id=row['id'], current_asset_name=Path(str(row['name'] or '')).name,
-               current_action='generating_preview', current_started_at=time.time(),
-               current_deadline_at=time.time() + 90)
-
-    def finish(row, produce):
-        nonlocal made, done
+    for index, row in enumerate(rows):
+        if metadata_only(config.directory('state')):
+            break
+        started = time.time()
+        deadline = deadline_after(PREVIEW_TIMEOUT_SECONDS)
+        def progress(row=row, index=index, made=made, started=started, deadline=deadline):
+            guard.check()
+            try:
+                update(stage='生成预览图', checked=base_done + index, total=base_done + len(rows), previews=made,
+                       current_asset_id=row['id'], current_asset_name=Path(str(row['name'] or '')).name,
+                       current_action='generating_preview', current_started_at=started,
+                       current_deadline_at=time.time() + max(0, deadline - time.monotonic()))
+            except InterruptedError:
+                raise
+            except OSError as error:
+                raise _ProcessingPersistenceError(f'处理进度无法保存：{error}') from error
+        progress()
         try:
-            generated = produce()
-            made += int(generated)
-            update(previews=made)
-            # 已有预览的影片重查只是读一次图片头，不必为它重写一次状态文件。
-            if generated:
-                checkpoint(row)
-            marks.record_preview(row, ok=True)
+            made += int(_generate_preview(config, row, database, resolver, progress=progress))
         except InterruptedError:
             raise
         except (OSError, ValueError, subprocess.SubprocessError, PreviewUnavailable) as error:
             from .error_reporting import event
             event('library-preview', error, asset_id=row['id'])
-            marks.record_preview(row, ok=False)
             message = (str(error) if isinstance(error, (ValueError, PreviewUnavailable)) else
                        '生成预览图超时，请重试' if isinstance(error, subprocess.SubprocessError) else
                        '生成预览图失败，请检查 FFmpeg 与目录权限后重试')
             details = {'diagnostics': error.diagnostics} if isinstance(error, _PreviewCaptureError) else {}
             issue(row, message, action='generating_preview', retryable=True, **details)
-        done += 1
-        update(checked=base_done + done, previews=made, current_asset_id=None, current_asset_name='',
+        else:
+            update(previews=made)
+            checkpoint(row)
+        update(checked=base_done + index + 1, previews=made, current_asset_id=None, current_asset_name='',
                current_action='', current_started_at=None, current_deadline_at=None)
-
-    def inline(row):
-        def progress():
-            guard.check()
-            announce(row)
-        progress()
-        finish(row, lambda: _generate_preview(config, row, database, resolver, progress=progress))
-
-    def harvest():
-        finished, _ = wait(flights, return_when=FIRST_COMPLETED)
-        for future in finished:
-            finish(flights.pop(future), future.result)
-        if flights:
-            announce(next(iter(flights.values())))
-
-    with ThreadPoolExecutor(max_workers=PREVIEW_WORKER_CAP, thread_name_prefix='PeachPreview') as executor:
-        while pending or flights:
-            if metadata_only(config.directory('state')):
-                pending.clear()
-            if not pending:
-                harvest()
-            elif not _fast_preview_source(pending[0]):
-                harvest() if flights else inline(pending.popleft())
-            else:
-                workers = _preview_workers()
-                while pending and len(flights) < workers and _fast_preview_source(pending[0]):
-                    row = pending.popleft()
-                    guard.check()
-                    announce(row)
-                    flights[executor.submit(
-                        _generate_preview, config, row, database, resolver, progress=lambda: None,
-                        batch_threads=1 if workers > 1 else 2)] = row
-                harvest()
     return made
 
 
@@ -2156,8 +2310,14 @@ def _checkpoint_key(row):
 class _LibraryCheckpoints:
     """只有预览登记或候选落盘成功才提交影片检查点。"""
 
-    def __init__(self, state, previous, database):
+    def __init__(self, state, previous, database, db_path):
+        self.db_path = db_path
         previous = previous or {}
+        if previous.get('processing_rule') != upgrade_rules.PROCESSING:
+            state['local_metadata'] = {}
+            previous = {key: value for key, value in previous.items()
+                        if key not in ('completed_previews', 'completed_metadata', 'local_metadata')}
+        state['processing_rule'] = upgrade_rules.PROCESSING
         self.state = state
         self.completed = {phase: set(previous.get(phase) or [])
                           for phase in ('completed_previews', 'completed_metadata')}
@@ -2181,34 +2341,32 @@ class _LibraryCheckpoints:
     def commit_metadata(self, flush):
         if not self.pending_metadata:
             return
+        completed_ids = [int(key.split(':',1)[0]) for key in self.pending_metadata]
         self.completed['completed_metadata'].update(self.pending_metadata)
         self.pending_metadata.clear()
         self.state['completed_metadata'] = sorted(self.completed['completed_metadata'])
         flush(force=True)
+        from .library_new_assets import remember
+        remember(self.db_path, completed=completed_ids)
 
     def remaining_metadata(self, rows):
         return ((index, row) for index, row in enumerate(rows)
                 if _checkpoint_key(row) not in self.completed['completed_metadata'])
 
 
-def _validate_processing_request(config, db_path, steps, scope, retry_failed, asset_ids, retry_ids, database):
-    """校验处理范围、选择与预览生成所需条件，返回规范的所选影片、范围与是否重试失败项。
-
-    指定影片与失败重试总是全部处理；全部重新检查本来就包括上次失败的项目。
-    """
+def _validate_processing_request(config, db_path, stage, asset_ids, retry_ids, database):
+    """校验处理范围、选择与预览生成所需条件，返回规范的所选影片。"""
     _require_writer(config, db_path)
-    if scope not in SCOPES:
-        raise ValueError('同步范围无效')
-    if steps == {'media'} and metadata_only(config.directory('state')):
+    if stage not in STAGES:
+        raise ValueError('处理阶段无效')
+    if stage == PREVIEWS_STAGE and metadata_only(config.directory('state')):
         raise ValueError('视频预览生成已关闭，请先在媒体库设置中开启')
     if asset_ids is not None and retry_ids is not None:
         raise ValueError('选择项目与失败重试不能同时使用')
     selected_ids = _asset_selection(db_path, asset_ids)
-    if steps == {'media'} and database is None:
+    if stage == PREVIEWS_STAGE and database is None:
         raise ValueError('生成预览图需要共享馆藏写入连接')
-    if selected_ids is not None or retry_ids is not None:
-        scope = 'full'
-    return selected_ids, scope, retry_failed or scope == 'full'
+    return selected_ids
 
 
 def _candidate_baseline(database, row, code, verify_existing):
@@ -2223,17 +2381,23 @@ def _candidate_baseline(database, row, code, verify_existing):
     return {**row, **{COLUMN_OF.get(value['field'], value['field']): value['current_value'] for value in values}}
 
 
-def _read_local_metadata(config, db_path, row, cover_root, listing, state, update, issue, poster_jobs):
-    """读取一部影片的本地证据，返回可独立发布的资料与在线核查范围。"""
+def _read_local_metadata(config, db_path, row, cover_root, listing, state, update, issue, poster_jobs,
+                         code_patterns=()):
+    """读取一部影片的本地证据，返回可独立发布的资料与在线核查范围。
+
+    `code_patterns` 是用户在设置里写的番号识别规则，已编译，先于内置规则试。"""
     video = translate_ledger_path(row['path'])
     try:
         files = listing.files(video.parent)
-    except OSError:
-        files = {}
+    except InterruptedError:
+        raise
+    except OSError as error:
+        issue(row, str(error), action='reading_local', retryable=True)
+        return None
     if video.name.casefold() not in files:
         issue(row, '媒体文件不可访问', action='reading_local', retryable=True)
         return None
-    code = _provider_code(row['code']) or release_code_from_filename(row['name'])
+    code = _provider_code(row['code']) or release_code_from_filename(row['name'], patterns=code_patterns)
     payload = None
     entries = []
     nfo, posters = listing.sidecars(video)
@@ -2243,8 +2407,10 @@ def _read_local_metadata(config, db_path, row, cover_root, listing, state, updat
             if payload['id'] and code and not same_release_code(code, payload['id']):
                 raise ValueError('文件名与 NFO 番号冲突，请复核')
             code = code or _provider_code(payload['id'])
+        except InterruptedError:
+            raise
         except (OSError, ValueError, ET.ParseError) as error:
-            issue(row, str(error), action='reading_local')
+            issue(row, str(error), action='reading_local', retryable=isinstance(error, OSError))
             payload = None
     if code and not row['code']:
         with closing(sqlite3.connect(db_path, timeout=30)) as connection, connection:
@@ -2253,7 +2419,10 @@ def _read_local_metadata(config, db_path, row, cover_root, listing, state, updat
     try:
         poster_root = cover_root if code else config.directory('generated') / 'posters'
         _queue_local_poster(video, code or f"{row['id']}_4", poster_root, payload, posters=posters,
-                            enqueue=lambda source, key, target: poster_jobs.append((row, source, key, target)))
+                            enqueue=lambda source, key, target: poster_jobs.append((row, source, key, target)),
+                            generated=not code)
+    except InterruptedError:
+        raise
     except (OSError, ValueError):
         issue(row, '配套图片无法读取', action='reading_local_cover', retryable=True)
     if payload:
@@ -2266,20 +2435,33 @@ def _read_local_metadata(config, db_path, row, cover_root, listing, state, updat
     return code, nfo is not None, payload, entries
 
 
-def _processing_steps(steps, asset_ids, *, metadata_only_enabled):
+def _settle_collection_state(state, summary, rows, update):
+    summary['auto_applied'] = summary.get('auto_applied', 0) + state['auto_applied']
+    summary['auto_rejected'] = summary.get('auto_rejected', 0) + state['auto_rejected']
+    update(status='failed' if state['issue_count'] else 'complete', stage='处理结束',
+           outcome='partial' if state['issue_count'] else 'complete',
+           checked=len(rows), total=len(rows), **summary,
+           error=issue_summary(state['issue_count'], state['paused_count']),
+           completed_at=time.time(), current_asset_id=None, current_asset_name='',
+           current_action='', current_started_at=None, current_deadline_at=None)
+
+
+def _processing_steps(stage, asset_ids, *, metadata_only_enabled):
     """按本趟真实处理范围构造有序阶段清单。"""
-    scanning = asset_ids is None and 'sources' in steps
-    shown = [('sources', '扫描文件' if scanning else '检查媒体目录')]
-    if 'local' in steps:
-        shown.append(('local', '检查配套文件'))
-    if 'media' in steps:
-        media_label = ('生成视频预览' if steps == {'media'} else
-                       '读取媒体属性' if metadata_only_enabled else '读取媒体属性与生成预览')
-        shown.append(('media', media_label))
-    if 'collect' in steps:
-        shown.append(('collect', '采集外部资料与封面'))
+    scanning = asset_ids is None and stage in (ALL_STAGES, SCAN_STAGE)
+    steps = [('sources', '扫描文件' if scanning else '检查媒体目录')]
+    steps.append(('inspect', '检查垃圾文件' if stage in (SCAN_STAGE, PREVIEWS_STAGE, METADATA_STAGE)
+                  else '读取媒体属性与检查垃圾'))
+    if stage not in (SCAN_STAGE, PREVIEWS_STAGE):
+        steps.append(('local', '检查配套文件'))
+    if stage == PREVIEWS_STAGE or stage in (ALL_STAGES, COLLECT_STAGE):
+        media_label = ('生成视频预览' if stage == PREVIEWS_STAGE or not metadata_only_enabled
+                       else '检查媒体预览设置')
+        steps.append(('media', media_label))
+    if stage not in (SCAN_STAGE, PREVIEWS_STAGE):
+        steps.append(('collect', '采集外部资料与封面'))
     return [dict(id=key, label=label, status='current' if index == 0 else 'pending')
-            for index, (key, label) in enumerate(shown)]
+            for index, (key, label) in enumerate(steps)]
 
 
 def _complete_processing_step(steps, key):
@@ -2294,16 +2476,16 @@ def _complete_processing_step(steps, key):
     return progress
 
 
-def _processing_workload(config, rows, steps, database, completed_previews):
+def _processing_workload(config, rows, stage, database, completed_previews):
     """按处理范围和已完成检查点建立各阶段的待处理数量。"""
     pending = {}
-    if 'local' in steps:
+    if stage not in (SCAN_STAGE, PREVIEWS_STAGE):
         pending.update(local=len(rows), metadata=len(rows))
-    if 'media' in steps and steps != {'media'}:
+    if stage in (ALL_STAGES, COLLECT_STAGE):
         pending['probe'] = sum(row['duration'] is None for row in rows
                                if not skip_background_read(row['path'])
                                and cost_for(row['location'], row['path'], config) == 'free')
-    if (database is not None and 'media' in steps
+    if (database is not None and stage in (ALL_STAGES, COLLECT_STAGE, PREVIEWS_STAGE)
             and not metadata_only(config.directory('state'))):
         pending['previews'] = sum(row['location'] == 'local' and not skip_background_read(row['path'])
                                   and _checkpoint_key(row) not in completed_previews for row in rows)
@@ -2314,7 +2496,7 @@ def _restore_processing_counts(state, previous):
     """同一处理任务沿用累计数、问题清单和已保存证据索引。"""
     previous = previous or {}
     for key in ('started_at', 'identified', 'covers', 'previews', 'probed', 'issue_count', 'paused_count',
-                'issue_preview', 'issues_truncated', 'notes', 'retryable_asset_ids'):
+                'issue_preview', 'issues_truncated', 'notes', 'retryable_asset_ids', 'junk_isolated', 'junk_review'):
         if key in previous:
             state[key] = previous[key]
     for key in ('scan_checkpoints', 'local_metadata'):
@@ -2323,135 +2505,19 @@ def _restore_processing_counts(state, previous):
         state[key] = previous.get(key, 0)
 
 
-def marks_path(config):
-    return config.directory('state') / 'library-processing-marks.sqlite'
-
-
-class ProcessingMarks:
-    """每部影片各步骤上次处理时的输入指纹与结果，差分同步凭它跳过没有变化的影片。
-
-    步骤名：`local` 配套文件读取成功、`collect` 外部资料问过、`preview` 抽帧结果。
-    这是可重建的派生记录，放在状态目录，不进账本；删掉它下一趟就按全部重新检查。
-    """
-
-    def __init__(self, path):
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(path, timeout=30)
-        self._connection.execute(
-            "CREATE TABLE IF NOT EXISTS mark(asset_id INTEGER NOT NULL, step TEXT NOT NULL,"
-            " fingerprint TEXT NOT NULL, ok INTEGER NOT NULL, marked_at REAL NOT NULL,"
-            " PRIMARY KEY(asset_id, step))")
-        self._marks = {(asset_id, step): (fingerprint, bool(ok)) for asset_id, step, fingerprint, ok in
-                       self._connection.execute("SELECT asset_id,step,fingerprint,ok FROM mark")}
-        self._dirty = {}
-        self._flushed_at = time.monotonic()
-
-    def done(self, asset_id, step, fingerprint, *, retry_failed=False):
-        """上次处理这一步时输入相同，且成功或本趟不重试失败项。"""
-        previous = self._marks.get((asset_id, step))
-        return (fingerprint is not None and previous is not None and previous[0] == fingerprint
-                and (previous[1] or not retry_failed))
-
-    def known_preview_failure(self, row, retry_failed):
-        """文件没变的上次抽帧失败项；本趟要重试失败项时一律不算。"""
-        previous = self._marks.get((row['id'], 'preview'))
-        return (not retry_failed and previous is not None
-                and previous[0] == _file_fingerprint(row) and not previous[1])
-
-    def record_preview(self, row, *, ok):
-        self.put(row['id'], 'preview', _file_fingerprint(row), ok=ok)
-
-    def record_local(self, asset_id, local, collect, *, ok, collectable):
-        """配套文件读取没出问题才记；没有番号也没有 NFO 的影片没有可问的外部来源，同时记作问过。"""
-        if not ok:
-            return
-        self.put(asset_id, 'local', local, ok=True)
-        if not collectable:
-            self.put(asset_id, 'collect', collect, ok=True)
-
-    def record_collect(self, asset_id, fingerprint, *, ok, paused):
-        """来源冷却这类「本趟没轮到」不算问过，下一趟照问。"""
-        if not paused:
-            self.put(asset_id, 'collect', fingerprint, ok=ok)
-
-    def put(self, asset_id, step, fingerprint, *, ok):
-        if fingerprint is None:
-            return
-        self._marks[asset_id, step] = self._dirty[asset_id, step] = (fingerprint, ok)
-        if time.monotonic() - self._flushed_at >= STATE_FLUSH_SECONDS:
-            self.flush()
-
-    def flush(self):
-        self._flushed_at = time.monotonic()
-        if not self._dirty:
-            return
-        now = time.time()
-        with self._connection:
-            self._connection.executemany(
-                "INSERT INTO mark(asset_id,step,fingerprint,ok,marked_at) VALUES(?,?,?,?,?)"
-                " ON CONFLICT(asset_id,step) DO UPDATE SET fingerprint=excluded.fingerprint,"
-                " ok=excluded.ok, marked_at=excluded.marked_at",
-                [(asset_id, step, fingerprint, int(ok), now)
-                 for (asset_id, step), (fingerprint, ok) in self._dirty.items()])
-        self._dirty.clear()
-
-    def close(self):
-        self.flush()
-        self._connection.close()
-
-
-def _digest(value):
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest()
-
-
-def _file_fingerprint(row):
-    """账本里登记的路径、大小与日期：文件被替换或改写后就对不上。"""
-    return f"{row['path']}|{row.get('size')}|{row.get('mtime')}"
-
-
-def _local_fingerprint(row, listing):
-    """影片文件与同目录配套文件（NFO、海报）的名字、大小与修改时间，外加账本番号。
-
-    读不到目录或文件不在时给 `None`，交给读取那一步报告问题。
-    """
-    video = translate_ledger_path(row['path'])
-    try:
-        files = listing.files(video.parent)
-        if video.name.casefold() not in files:
-            return None
-        nfo, posters = listing.sidecars(video)
-        stats = [(path.name, found.st_size, found.st_mtime_ns)
-                 for path in [video, *([nfo] if nfo else []), *sorted(posters, key=str)]
-                 for found in (path.stat(),)]
-    except OSError:
-        return None
-    # 文件名读出的番号第一趟会写进账本，按同一口径取值，写入前后指纹不变。
-    return _digest([row['path'], _provider_code(row['code']) or release_code_from_filename(row['name']), stats])
-
-
-def _unchanged(marks, asset_id, steps, local, collect, retry_failed):
-    """这部影片在本趟所选的步骤上都已按相同输入处理过。"""
-    return (marks.done(asset_id, 'local', local)
-            and ('collect' not in steps or marks.done(asset_id, 'collect', collect, retry_failed=retry_failed)))
-
-
-def _collect_fingerprint(local, routes):
-    """外部采集的输入：本地证据与来源链覆盖，任一项变了就重问。
-
-    不含账本字段：采集结果自动落库后字段就变了，含进来下一趟又会把同一部片重问一遍。
-    来源后来补录的资料与人工清空的字段，由「全部重新检查」去问。
-    """
-    if local is None:
-        return None
-    return _digest([local, routes or {}])
-
-
 class _LocalEvidenceCache:
     """保存已经读出的本地证据与待处理图片，供同一影片的后续阶段复用。"""
 
     def __init__(self, config, db_path, cover_root, listing, state, path):
         self.config, self.db_path, self.cover_root = config, db_path, cover_root
         self.listing, self.state, self.path = listing, state, path
+        with closing(sqlite3.connect(db_path, timeout=30)) as connection:
+            stored = read_settings(connection).get('codePatterns')
+        try:
+            self.code_patterns = compile_code_patterns(stored)
+        except ValueError:
+            # 保存时已经校验过；被手改坏的规则当没设置过，不让整轮处理失败。
+            self.code_patterns = ()
 
     def read(self, row, update, issue, poster_jobs):
         key = _checkpoint_key(row)
@@ -2462,12 +2528,12 @@ class _LocalEvidenceCache:
             cached = None
         if cached is not None:
             code, verify, payload, entries = cached['local']
-            poster_jobs.extend((row, Path(source), name, Path(target))
+            poster_jobs.extend((row, translate_ledger_path(source), name, Path(target))
                                for source, name, target in cached['posters'])
-            return code, verify, payload, [(source, document, Path(path)) for source, document, path in entries]
+            return code, verify, payload, [(source, document, translate_ledger_path(path)) for source, document, path in entries]
         offset, issues_before = len(poster_jobs), self.state['issue_count']
         local = _read_local_metadata(self.config, self.db_path, row, self.cover_root, self.listing,
-                                     self.state, update, issue, poster_jobs)
+                                     self.state, update, issue, poster_jobs, self.code_patterns)
         if local is not None and self.state['issue_count'] == issues_before:
             code, verify, payload, entries = local
             record = dict(local=[code, verify, payload, [(source, document, str(path)) for source, document, path in entries]],
@@ -2481,11 +2547,59 @@ class _LocalEvidenceCache:
         return local
 
 
+class _ProcessingStateFile:
+    """按时间间隔保存任务状态，关键状态允许立即落盘。"""
+
+    def __init__(self, path, state):
+        self.path, self.state = path, state
+        self.saved_at = 0.0
+
+    def __call__(self, force=False):
+        if force or time.time() - self.saved_at >= STATE_FLUSH_SECONDS:
+            _save(self.path, self.state)
+            self.saved_at = time.time()
+
+
+class _ProcessingIssues:
+    """将带资产身份的问题写入日志，并同步任务进度。"""
+
+    def __init__(self, state, log_path, flush_state, report):
+        self.state, self.log_path = state, log_path
+        self.flush_state, self.report = flush_state, report
+
+    def __call__(self, asset, message, *, action='', retryable=False, paused=False, diagnostics=None):
+        asset = asset or {}
+        title = str(asset.get('catalog_title') or '') or Path(str(asset.get('name') or '')).name
+        severity, retryable = _issue_classification(message, retryable, paused)
+        _record_issue(self.state, self.log_path, {
+            'asset_id': asset.get('id'), 'title': title, 'path': str(asset.get('path') or ''),
+            'message': message, 'severity': severity, 'failed_action': action, 'retryable': retryable,
+            'last_failed_at': time.time()}, diagnostics=diagnostics)
+        self.state['last_progress_at'] = time.time()
+        self.flush_state()
+        self.report(dict(self.state))
+
+
+def _initial_processing_scope(db_path, selected_ids, retry_ids, incremental, resume_state):
+    """区分待发现范围与首次预估范围；增量恢复沿用已冻结的影片集合。"""
+    if incremental:
+        from .library_new_assets import pending
+        previous = (resume_state or {}).get('incremental_ids')
+        return None, list(previous) if previous is not None else pending(db_path)
+    if selected_ids is not None:
+        return selected_ids, selected_ids
+    if retry_ids is not None:
+        chosen = list(dict.fromkeys(map(int, retry_ids)))
+        return chosen, chosen
+    return None, None
+
+
 def process_library(config, db_path, candidate_root, cover_root, *, location='configured',
                     report=lambda state: None, provider_factory=None, job_id=None,
                     retry_ids=None, active=lambda: True, stage=ALL_STAGES,
                     database=None, route_overrides=None, state_file=None, asset_ids=None,
-                    resume_state=None, speed_mode=None, steps=None, scope='full', retry_failed=True):
+                    resume_state=None, speed_mode=None, protected_ids=(), recheck_existing=False,
+                    incremental=False):
     """登记文件与确定的番号，外部资料保留为可复核候选。
 
     `retry_ids` 为 `None` 时处理整个馆藏；给定时只处理这些项目（上一任务记录的
@@ -2493,78 +2607,74 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
 
     `stage` 指定处理范围：`all` 扫描并补全资料与本地预览，`scan` 只扫描，
     `collect` 补全资料与本地预览，`metadata` 只采集资料，`previews` 只生成本地预览。
-    `steps` 给出时取代 `stage`，是 `STEPS` 的任意组合。
     `asset_ids` 指定仍在馆藏中的视频，不扫描来源目录；空选择无效。
 
-    `scope` 为 `changed` 时只处理上次之后有变化的目录与影片（`ProcessingMarks`）；
-    `retry_failed` 为假时，文件没变的上次失败项也跳过。指定影片与失败重试总是全部处理。
-
     `database` 是调用方已经在用的 `LedgerDatabase`。给了它才做收尾的自动落库与人物
-    资料补齐与本地预览登记，并且与调用方共用同一把进程内写锁；不给就只采集候选。
+    资料补齐与本地预览登记，并且与调用方共用同一把进程内写锁。所有模式都会按范围
+    检查垃圾并隔离到回收站；不给 `database` 时外部资料只采集候选。
 
     `route_overrides` 覆盖某几种内容类型的来源链，形状与判据见
     `metadata_routes.parse_route_overrides`；不给就用内建那张表。
     `state_file` 给后台定向任务保存独立进度，共享候选写入仍使用全库处理锁。
     """
-    plan, stage = resolve_steps(stage, steps)
-    selected_ids, scope, retry_failed = _validate_processing_request(
-        config, db_path, plan, scope, retry_failed, asset_ids, retry_ids, database)
+    selected_ids = _validate_processing_request(config, db_path, stage, asset_ids, retry_ids, database)
+    from .repository import LedgerDatabase
+    judgement_database = database if database is not None else LedgerDatabase(db_path)
     routes = metadata_routes.parse_route_overrides(route_overrides)
     path = Path(state_file) if state_file is not None else state_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
     retrying = retry_ids is not None
-    targeted = retrying or selected_ids is not None
-    chosen_ids = selected_ids if selected_ids is not None else list(dict.fromkeys(map(int, retry_ids or [])))
-    scope_ids = chosen_ids if targeted else None
+    scope_ids, initial_ids = _initial_processing_scope(db_path, selected_ids, retry_ids, incremental, resume_state)
     control = task_control(config, state_file)
     identity = job_id or uuid.uuid4().hex
+    from .processing_inventory import recent_rows
+    traffic = ProcessingTraffic(config, db_path, stage, initial_ids,
+                                resume_state=resume_state, inventory_rows=recent_rows(config, db_path, stage, scope_ids))
     def control_report(**values):
         resume_fields(state, values)
         state.update(values)
         estimate.update(state)
+        state['traffic'] = traffic.snapshot(finished=state.get('status') in ('complete', 'failed'))
         flush_state(force=True)
         report(dict(state))
     from .update_tasks import activity
-    with (activity(Path(db_path), 'library-processing'),
+    with (activity(Path(db_path), 'library-processing'), traffic.bind(),
           FileLock(str(state_path(config)) + '.lock', timeout=0),
           bind_control(control, identity, publish=control_report, active=active, db_path=Path(db_path),
                        mode=speed_mode)):
         state = dict(job_id=identity, status='running',
                      stage='检查配套文件' if retrying else '扫描文件',
-                     checked=0, total=0, scanned=0, scanned_bytes=0, added=0, probed=0, identified=0, candidates=0, covers=0, previews=0,
-                     requested_stage=stage, requested_steps=sorted(plan), scope=scope,
-                     retry_failed=retry_failed, unchanged_directories=0, unchanged_videos=0,
-                     asset_ids=scope_ids,
+                     checked=0, total=0, scanned=0, scanned_bytes=0, probed=0, identified=0, candidates=0, covers=0, previews=0,
+                     requested_stage=stage, asset_ids=scope_ids, incremental=incremental,
                      issue_count=0, paused_count=0, issue_preview=[], issues_truncated=False,
                      notes={}, retryable_asset_ids=[],
                      last_progress_at=time.time(), progress_seq=0,
                      current_asset_id=None, current_asset_name='', current_action='',
                      current_started_at=None, current_deadline_at=None,
                      followups=[],
+                     junk_isolated=0, junk_review=0,
                      started_at=time.time(), error='')
-        state.update(initial_estimate(config, db_path, stage, scope_ids, speed_mode))
-        state['steps'] = _processing_steps(plan, scope_ids,
+        state.update(initial_estimate(config, db_path, stage, initial_ids, speed_mode))
+        if incremental:
+            state['incremental_ids'] = initial_ids
+            traffic.unknown_files = True
+        state['steps'] = _processing_steps(stage, scope_ids,
             metadata_only_enabled=metadata_only(config.directory('state')))
         _restore_processing_counts(state, resume_state)
         estimate = ProcessingEstimate(config, state, control)
         # 实体表的水位在开工前记一次：比它大的实体就是这一轮建出来的（`_entity_followups`）。
-        checkpoints = _LibraryCheckpoints(state, resume_state, database)
+        checkpoints = _LibraryCheckpoints(state, resume_state, database, db_path)
         entity_watermark = checkpoints.entity_watermark
         # 每行这一轮换上了几张封面，`(asset_id, 张数)`：换上了的作品，女优可能截得出更清楚的脸。
         covered = []
+        stages_of = _library_stages(config)
         log_path = _processing_issue_log(config, path, state['job_id'], state_file is not None,
                                          resume=bool(resume_state))
         # 界面只展示前 20 条，完整清单在这个文件里；地址跟着状态一起给出，
         # 不让人按 job_id 自己去拼路径。
         state['issues_log'] = str(log_path)
 
-        saved_at = 0.0
-
-        def flush_state(force=False):
-            nonlocal saved_at
-            if force or time.time() - saved_at >= STATE_FLUSH_SECONDS:
-                _save(path, state)
-                saved_at = time.time()
+        flush_state = _ProcessingStateFile(path, state)
 
         def update(**values):
             _require_writer(config, db_path)
@@ -2573,80 +2683,78 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
             checkpoint_values(values)
             state.update(values)
             estimate.update(state)
+            state['traffic'] = traffic.snapshot(finished=state.get('status') in ('complete', 'failed'))
             state['last_progress_at'] = time.time()
             state['progress_seq'] += 1
             flush_state(force='status' in values)
             report(dict(state))
 
-        def issue(asset, message, *, action='', retryable=False, paused=False, diagnostics=None):
-            """`asset` 是这一项的馆藏行，来源离线一类与具体项目无关的问题给 `None`。
-
-            每条问题都带上标题与路径：光有「NFO 无法解析」和一个链接，人得逐个点开
-            才知道是哪个文件，而路径才是去磁盘上确认或改名时真正要用的东西。
-            """
-            asset = asset or {}
-            asset_id = asset.get('id')
-            title = str(asset.get('catalog_title') or '') or Path(str(asset.get('name') or '')).name
-            asset_path = str(asset.get('path') or '')
-            severity, retryable = _issue_classification(message, retryable, paused)
-            _record_issue(state, log_path, {
-                'asset_id': asset_id, 'title': title, 'path': asset_path, 'message': message,
-                'severity': severity, 'failed_action': action, 'retryable': retryable,
-                'last_failed_at': time.time()}, diagnostics=diagnostics)
-            state['last_progress_at'] = time.time()
+        def traffic_report():
+            state['traffic'] = traffic.snapshot()
             flush_state()
             report(dict(state))
 
+        traffic.publish = traffic_report
+
+        issue = _ProcessingIssues(state, log_path, flush_state, report)
+
         def finish_step(key):
             """阶段成功返回后发布完成状态；异常退出的阶段保留当前状态。"""
+            traffic.finish_work(key)
             update(steps=_complete_processing_step(state['steps'], key))
 
         update()
         remote = _RemoteSession(config, provider_factory, _MissCache(misses_path(config)),
-                                retrying=retrying, routes=routes)
+                                retrying=retrying, recheck_existing=recheck_existing, routes=routes)
         flush_candidates = lambda force=False: None
-        marks = ProcessingMarks(marks_path(config))
 
         try:
             guard = DiskGuard(config.data_root, 1)
             guard.check(force=True)
             locations = config.locations if location == 'configured' else {location: config.locations[location]}
             sources = _scan_sources(config, db_path, locations=locations, asset_ids=scope_ids,
-                                    steps=plan, guard=guard, update=update, issue=issue, scope=scope,
+                                    stage=stage, guard=guard, update=update, issue=issue,
                                     scan_checkpoints=state['scan_checkpoints'],
-                                    save_checkpoint=lambda: flush_state(force=True), initial_probed=state['probed'])
-            state.update(scanned=sources.scanned, scanned_bytes=sources.scanned_bytes,
-                         added=sources.added, probed=sources.probed,
-                         unchanged_directories=sources.unchanged_directories)
+                                    save_checkpoint=lambda: flush_state(force=True), initial_probed=state['probed'],
+                                    incremental=incremental)
+            if incremental:
+                from .library_new_assets import _active_videos
+                scope_ids = _active_videos(db_path, sorted(set(initial_ids) | set(sources.new_ids)))
+                state['asset_ids'] = state['incremental_ids'] = scope_ids
+                traffic.asset_ids = scope_ids
+            state.update(scanned=sources.scanned, scanned_bytes=sources.scanned_bytes, probed=sources.probed)
+            state['junk_isolated'] = max(state['junk_isolated'], sources.junk_isolated)
+            traffic.unknown_files = False
+            traffic.refresh_plan()
             finish_step('sources')
-            if plan == {'sources'}:
+            if incremental and not scope_ids:
+                _settle_collection_state(state, {}, [], update)
+                return state
+            _prepare_processing_media(config, db_path, judgement_database, locations, sources,
+                                      scope_ids, protected_ids, stage, state, update)
+            finish_step('inspect')
+            if stage == SCAN_STAGE:
                 # `checked`／`total` 在探时长时借给进度条用过；只扫描这一段没有采集，读数归零。
                 update(status='failed' if state['issue_count'] else 'complete',
+                       outcome='partial' if state['issue_count'] else 'complete',
                        stage='处理结束', completed_at=time.time(), checked=0, total=0,
                        error=issue_summary(state['issue_count'], state['paused_count']))
                 return state
             rows, genre_decisions = _collection_rows(
                 db_path, locations=locations, online_roots=sources.online_roots, asset_ids=scope_ids)
-            pending = _processing_workload(config, rows, plan, database, checkpoints.completed['completed_previews'])
+            traffic.refresh_plan(rows)
+            pending = _processing_workload(config, rows, stage, database, checkpoints.completed['completed_previews'])
             update(estimate_pending=dict(pending))
-
-            def run_media():
-                if plan != {'media'}:
-                    _probe_sources(config, db_path, locations, sources.online_roots, scope_ids, update,
-                                   total_pending=pending.get('probe', 0), initial_probed=state['probed'])
-                    pending.pop('probe', None)
-                    update(estimate_pending=dict(pending), stage='准备生成预览', checked=0, total=0)
-                if not metadata_only(config.directory('state')):
-                    _generate_previews(config, rows, database, update=update, issue=issue, guard=guard,
-                                       completed=checkpoints.completed['completed_previews'],
-                                       initial_made=state['previews'], marks=marks, retry_failed=retry_failed,
-                                       checkpoint=lambda row: checkpoints.mark('completed_previews', row, flush_state))
-                pending.pop('previews', None)
+            if stage == PREVIEWS_STAGE:
+                _generate_previews(config, rows, database, update=update, issue=issue, guard=guard,
+                                   completed=checkpoints.completed['completed_previews'],
+                                   initial_made=state['previews'],
+                                   checkpoint=lambda row: checkpoints.mark('completed_previews', row, flush_state))
+                _check_processing_junk(judgement_database, locations, sources.online_roots,
+                                       scope_ids, protected_ids, state, update)
                 finish_step('media')
-
-            if 'local' not in plan:
-                run_media()
                 update(status='failed' if state['issue_count'] else 'complete', stage='处理结束',
+                       outcome='partial' if state['issue_count'] else 'complete',
                        completed_at=time.time(), error=issue_summary(state['issue_count'], state['paused_count']))
                 return state
             output = candidate_root / 'library-metadata-field-candidates.csv'
@@ -2694,23 +2802,16 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
                        current_asset_id=row['id'], current_asset_name=Path(str(row['name'] or '')).name,
                        current_action='reading_local', current_started_at=time.time(),
                        current_deadline_at=None)
-                local_key = _local_fingerprint(row, listing)
-                collect_key = _collect_fingerprint(local_key, routes)
-                if scope == 'changed' and _unchanged(marks, row['id'], plan, local_key, collect_key, retry_failed):
-                    state['unchanged_videos'] += 1
-                    update(checked=completed_count + index + 1, unchanged_videos=state['unchanged_videos'])
-                    continue
                 local = local_evidence.read(row, update, issue, poster_jobs)
                 if local is None:
                     continue
                 code, verify_existing, payload, entries = local
+                verify_existing = bool(verify_existing or recheck_existing)
                 local_fields = _fields(payload, genre_decisions) if payload else {}
                 publish(row, code, local_fields, verify_existing, entries)
-                marks.record_local(row['id'], local_key, collect_key, ok=state['issue_count'] == issues_before,
-                                   collectable=bool(code or payload))
                 if code or payload:
                     prepared.append((row, code, verify_existing, local_fields, entries,
-                                     state['issue_count'] == issues_before, collect_key))
+                                     state['issue_count'] == issues_before))
                 update(checked=completed_count + index + 1)
             flush_candidates(force=True)
             pending.pop('local')
@@ -2719,35 +2820,56 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
             update(estimate_pending=dict(pending), stage='准备读取配套图片', checked=0, total=0,
                    current_asset_id=None, current_asset_name='', current_action='',
                    current_started_at=None, current_deadline_at=None)
-            poster_failed = _read_local_posters(poster_jobs, state, update=update, issue=issue)
+            poster_failed = _read_local_posters(poster_jobs, state, update=update, issue=issue,
+                                                generated_root=config.directory('generated') / 'posters')
             pending.pop('images')
             update(estimate_pending=dict(pending), stage='检查配套文件', checked=0, total=0,
                    current_asset_id=None, current_asset_name='', current_action='',
                    current_started_at=None, current_deadline_at=None)
             finish_step('local')
-            if 'media' in plan:
-                run_media()
+            traffic.prepare_metadata(prepared)
+            if stage in (ALL_STAGES, COLLECT_STAGE):
+                pending.pop('probe', None)
+                update(estimate_pending=dict(pending), stage='准备生成预览', checked=0, total=0)
+                if not metadata_only(config.directory('state')):
+                    _generate_previews(config, rows, database, update=update, issue=issue, guard=guard,
+                        completed=checkpoints.completed['completed_previews'],
+                        initial_made=state['previews'],
+                        checkpoint=lambda row: checkpoints.mark('completed_previews', row, flush_state))
+                pending.pop('previews', None)
                 update(estimate_pending=dict(pending), stage='准备采集外部资料', checked=0, total=0)
-            if 'collect' not in plan:
-                prepared = []
-            for position, (row, code, verify_existing, local_fields, local_entries, local_ok,
-                           collect_key) in enumerate(prepared):
+                finish_step('media')
+            _check_processing_junk(judgement_database, locations, sources.online_roots,
+                                   scope_ids, protected_ids, state, update)
+            prepared = _active_prepared(judgement_database, prepared)
+            from .metadata_amane import PreparationError
+            try:
+                remote.prepare(prepared, stages_of, update, cover_root=cover_root, groups=groups)
+            except PreparationError as error:
+                message = f'采集工具准备失败：{error}'
+                issue(None, message, action='preparing_sources')
+                blocked = set(error.asset_ids)
+                state['retryable_asset_ids'] = sorted(set(state['retryable_asset_ids'])
+                                                     | blocked)
+                prepared = [entry for entry in prepared if entry[0]['id'] not in blocked]
+                update(current_action='', current_started_at=None, current_deadline_at=None)
+            for position, (row, code, verify_existing, local_fields, local_entries, local_ok) in enumerate(prepared):
                 local_ok = local_ok and row['id'] not in poster_failed
                 guard.check()
-                issues_before, paused_before = state['issue_count'], state['paused_count']
+                issues_before = state['issue_count']
                 update(stage='采集缺失资料', checked=completed_count + position,
                        total=completed_count + len(prepared), current_asset_id=row['id'],
                        current_asset_name=Path(str(row['name'] or '')).name)
                 target_key = f"asset:{row['id']}"
                 missing = list(COLLECTED_FIELDS) if verify_existing else _missing_fields(row, local_fields)
-                found, covers = remote.collect(row, code, missing, cover_root, update=update, issue=issue,
+                found, covers = _collect_allowed(
+                    remote, traffic, row, code, missing, stages_of(row['path']), cover_root, covered,
+                    update=update, issue=issue,
                     answered=() if verify_existing else _answered_sources(groups, target_key, missing),
                     received=lambda entries, row=row, code=code, fields=local_fields, verify=verify_existing:
-                        publish(row, code, fields, verify, entries))
+                        publish(row, code, fields, verify, entries),
+                    succeeded=lambda before=issues_before: state['issue_count'] == before)
                 state['covers'] += covers
-                covered.append((row['id'], covers))
-                marks.record_collect(row['id'], collect_key, ok=state['issue_count'] == issues_before,
-                                     paused=state['paused_count'] != paused_before)
                 update(stage='保存待确认资料', current_action='writing_candidates',
                        current_started_at=time.time(), current_deadline_at=None)
                 checkpoints.queue_metadata(row, local_entries + found if local_ok else [], issues_before)
@@ -2759,28 +2881,23 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
             update(estimate_pending={}, stage='整理采集结果', checked=0, total=0)
             # 候选完整落盘后立即执行调用方注入的窄规则，不再等人打开复核页才触发。
             # 核心处理层不反向依赖 Web 复核层；CLI 与 Web 两个组装入口都传入同一实现。
-            summary = {}
-            if 'collect' in plan:
-                summary = _finish_collection(
-                    config, database, candidate_root, cover_root, groups, remote, asset_ids=scope_ids,
-                    active=active, update=update, issue=issue, watermark=entity_watermark, covered=covered)
-                finish_step('collect')
-            summary['auto_applied'] = summary.get('auto_applied', 0) + state['auto_applied']
-            summary['auto_rejected'] = summary.get('auto_rejected', 0) + state['auto_rejected']
-            update(status='failed' if state['issue_count'] else 'complete', stage='处理结束',
-                   checked=len(rows), total=len(rows),
-                   **summary,
-                   error=issue_summary(state['issue_count'], state['paused_count']),
-                   completed_at=time.time(), current_asset_id=None, current_asset_name='',
-                   current_action='', current_started_at=None, current_deadline_at=None)
+            summary = _finish_collection(
+                config, database, candidate_root, cover_root, groups, remote, asset_ids=scope_ids,
+                active=active, update=update, issue=issue, watermark=entity_watermark, covered=covered,
+                people=_people_allowed(config))
+            finish_step('collect')
+            _settle_collection_state(state, summary, rows, update)
         except Exception:
-            state.update(status='failed', error='处理被中断。核对媒体目录后重试。', completed_at=time.time())
+            state.update(status='failed', outcome='interrupted', error='处理被中断。核对媒体目录后重试。', completed_at=time.time())
             state.update(interrupted_state(control))
+            state['traffic'] = traffic.snapshot(finished=state.get('status') in ('failed', 'cancelled'))
             _save(path, state)
             raise
         finally:
             # 被打断也把已经攒下的候选写全：文件里要么是上一份完整的，要么是这一份完整的。
             flush_candidates(force=True)
             remote.close()
-            marks.close()
+        from .library_new_assets import remember
+        unfinished = set(state['retryable_asset_ids'])
+        remember(db_path, completed=[row['id'] for row in rows if row['id'] not in unfinished])
         return state

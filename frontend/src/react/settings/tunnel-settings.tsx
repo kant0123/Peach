@@ -7,6 +7,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Radio } from 'react-aria-components';
 
 import { Button } from '@/components/base/buttons/button';
+import { StatusLabel } from '../components/status-label';
 import { Input } from '@/components/base/input/input';
 
 import { ApiError, apiSend, errorMessage } from '../../api';
@@ -98,7 +99,8 @@ export function TunnelSettings({ revision: initialRevision, initial, receipt }: 
   ));
 
   return (
-    <Section title={t('Cloudflare 公网入口')} onSubmit={submit}>
+    <Section id="tunnel" title={t('Cloudflare 公网入口')} onSubmit={submit} aside={<StatusLabel tone={state.error ? 'error' : active ? 'progress' : 'neutral'}>
+      {state.error ? t('连接失败') : state.state === 'running' ? t('运行中') : state.state === 'starting' ? t('连接中') : t('已停止')}</StatusLabel>}>
       <Stack>
         {state.named_available
           ? <RadioGroup aria-label={t('公网入口的形态（二选一）')} value={mode} isDisabled={active}

@@ -150,6 +150,7 @@ const lucideIcons = new Map([
   ["folder-cog", "folder-cog"],
   // 配置页每行文件夹的「选择文件夹」：弹系统对话框去挑。`folder-open` 归「打开位置」，不兼任。
   ["folder-search", "folder-search"],
+  ["network", "network"],
   // 详情标题旁的「裁剪封面」：和同一排的定位、同步删除同为线条字形、同一线宽。
   ["crop", "crop"],
   ["sun", "sun"], ["moon", "moon"],

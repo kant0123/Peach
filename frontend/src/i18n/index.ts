@@ -15,7 +15,7 @@ export const LOCALES: readonly { value: Locale; label: string }[] = [
 
 const STORAGE_KEY = 'peach.locale';
 
-/** 没有存过语言时的默认值。构建时用环境变量 `VITE_DEFAULT_LOCALE=ja` 打出默认日语的包，见 ADR-0114。 */
+/** 没有存过语言时的默认值。构建时用环境变量 `VITE_DEFAULT_LOCALE=ja` 打出默认日语的包，见 ADR-0130。 */
 const DEFAULT_LOCALE: Locale = import.meta.env?.VITE_DEFAULT_LOCALE === 'ja' ? 'ja' : 'zh-CN';
 
 function readLocale(): Locale {

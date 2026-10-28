@@ -5,7 +5,10 @@ import sys
 import tempfile
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
+from threading import Event
 from unittest import mock
 
 from scripts import agent_worktree, release_tag
@@ -91,6 +94,94 @@ class _WorktreeCase(unittest.TestCase):
         self.tmp.cleanup()
 
 class AgentWorktreeTests(_WorktreeCase):
+    def test_document_integration_keeps_its_checks_without_waiting_for_full_suite(self):
+        result = create(self.repo, "Codex", "readme", self.root / "worktrees")
+        worker = Path(result["path"])
+        (worker / "README.md").write_text("# Example\n", encoding="utf-8")
+        _git(worker, "add", "README.md")
+        _git(worker, "commit", "-m", "docs: example")
+        folder = agent_worktree.test_evidence.evidence_dir(self.repo)
+        with agent_worktree.test_evidence.held(folder / "full-suite.lock", scope="full"):
+            report = integrate(self.repo, str(result["branch"]), lock_timeout=0)
+        self.assertEqual(report["files"], ["README.md"])
+        agent_worktree.require_verified.assert_called_once_with(worker, "main", {"README.md"})
+        self.assertEqual((self.repo / "README.md").read_text(encoding="utf-8"), "# Example\n")
+
+    def test_other_document_paths_use_the_same_checks_boundary(self):
+        for index, name in enumerate(("CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md")):
+            with self.subTest(path=name):
+                result = create(self.repo, "Codex", f"document-{index}", self.root / "worktrees")
+                worker = Path(result["path"])
+                (worker / name).parent.mkdir(parents=True, exist_ok=True)
+                (worker / name).write_text("# Example\n", encoding="utf-8")
+                _git(worker, "add", name)
+                _git(worker, "commit", "-m", "docs: example")
+                folder = agent_worktree.test_evidence.evidence_dir(self.repo)
+                with agent_worktree.test_evidence.held(folder / "full-suite.lock", scope="full"):
+                    report = integrate(self.repo, str(result["branch"]), lock_timeout=0)
+                self.assertEqual(report["files"], [name])
+
+    def test_runtime_markdown_still_waits_for_full_suite(self):
+        result = create(self.repo, "Codex", "runtime-document", self.root / "worktrees")
+        worker = Path(result["path"])
+        name = "frontend/src/react/boardui/ORIGIN.md"
+        (worker / name).parent.mkdir(parents=True)
+        (worker / name).write_text("# Origin\n", encoding="utf-8")
+        _git(worker, "add", name)
+        _git(worker, "commit", "-m", "docs: origin")
+        folder = agent_worktree.test_evidence.evidence_dir(self.repo)
+        with agent_worktree.test_evidence.held(folder / "full-suite.lock", scope="full"), \
+                self.assertRaisesRegex(WorkspaceError, "全量验证"):
+            integrate(self.repo, str(result["branch"]), lock_timeout=0)
+        self.assertFalse((self.repo / name).exists())
+
+    def test_waiting_code_integration_does_not_block_documents(self):
+        code = create(self.repo, "Codex", "queued-code", self.root / "worktrees")
+        worker = Path(code["path"])
+        (worker / "worker.txt").write_text("code\n", encoding="utf-8")
+        commit(worker, "worker change")
+        docs = create(self.repo, "Codex", "parallel-docs", self.root / "worktrees")
+        (Path(docs["path"]) / "README.md").write_text("# Example\n", encoding="utf-8")
+        _git(Path(docs["path"]), "add", "README.md")
+        _git(Path(docs["path"]), "commit", "-m", "docs: example")
+        folder = agent_worktree.test_evidence.evidence_dir(self.repo)
+        waiting = Event()
+        held = agent_worktree.test_evidence.held
+
+        @contextmanager
+        def observed(lock, **kwargs):
+            if kwargs.get("branch") == code["branch"] and lock.name == "full-suite.lock":
+                waiting.set()
+            with held(lock, **kwargs):
+                yield
+
+        with ThreadPoolExecutor() as executor, mock.patch.object(
+                agent_worktree.test_evidence, "held", observed):
+            with held(folder / "full-suite.lock", scope="full"):
+                future = executor.submit(integrate, self.repo, str(code["branch"]), lock_timeout=120)
+                self.assertTrue(waiting.wait(5), "代码集成尚未进入全量锁等待")
+                report = integrate(self.repo, str(docs["branch"]), lock_timeout=0)
+                self.assertEqual(report["files"], ["README.md"])
+                self.assertFalse(future.done())
+            self.assertEqual(future.result(timeout=60)["files"], ["worker.txt"])
+        self.assertEqual((self.repo / "worker.txt").read_text(encoding="utf-8"), "code\n")
+
+    def test_code_integration_waits_for_full_suite_without_changing_master(self):
+        result = create(self.repo, "Codex", "code", self.root / "worktrees")
+        worker = Path(result["path"])
+        (worker / "worker.txt").write_text("worker\n", encoding="utf-8")
+        (worker / "README.md").write_text("# Example\n", encoding="utf-8")
+        _git(worker, "add", "README.md")
+        commit(worker, "worker change")
+        before = _git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        folder = agent_worktree.test_evidence.evidence_dir(self.repo)
+        with agent_worktree.test_evidence.held(folder / "full-suite.lock", scope="full"), \
+                self.assertRaisesRegex(WorkspaceError, "全量验证"):
+            integrate(self.repo, str(result["branch"]), lock_timeout=0)
+        self.assertEqual(_git(self.repo, "rev-parse", "HEAD").stdout.strip(), before)
+        self.assertEqual((self.repo / "worker.txt").read_text(encoding="utf-8"), "base\n")
+        self.assertFalse((self.repo / "README.md").exists())
+
     def test_create_ready_and_integrate_non_overlapping_branch(self):
         result = create(self.repo, "Claude", "metadata batch", self.root / "worktrees")
         worker = Path(result["path"])
@@ -208,13 +299,13 @@ class CommitMessageGuardTests(_WorktreeCase):
                 self.assertIn("README-Impact", result.stderr)
 
     def test_counterpart_review_trailer_requires_a_file_reason_and_contiguous_block(self):
-        for declaration in ("README-Reviewed: README.en.md; 已核对\n\n",
-                            "README-Reviewed: README.en.md;\n",
+        for declaration in ("README-Reviewed: README.zh-CN.md; 已核对\n\n",
+                            "README-Reviewed: README.zh-CN.md;\n",
                             "README-Reviewed: unknown.md; 已核对\n"):
             result = self.attempt("test: 核对声明\n\n" + declaration + AUTHOR)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("README-Reviewed", result.stderr)
-        result = self.attempt("test: 核对声明\n\nREADME-Reviewed: README.en.md; 英文正确\n" + AUTHOR)
+        result = self.attempt("test: 核对声明\n\nREADME-Reviewed: README.zh-CN.md; 中文正确\n" + AUTHOR)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_valid_trailers_and_amend_preserve_the_message(self):
@@ -294,6 +385,31 @@ class PruneTests(_WorktreeCase):
         self.assertNotIn("reclaimable",
                          _git(self.repo, "branch", "--list", "agent/codex/reclaimable").stdout,
                          "已并入的分支也应一并删掉")
+
+    def test_a_worktree_with_files_under_build_is_kept_even_when_clean_and_merged(self):
+        """`build/` 被 Git 忽略，`status` 看不见它；里面却是会话的日志、报告和派单，删了没有备份。"""
+        (self.repo / ".git" / "info").mkdir(exist_ok=True)
+        (self.repo / ".git" / "info" / "exclude").write_text("build/\n", encoding="utf-8")
+        worker = self._integrated("has-build")
+        (worker / "build").mkdir()
+        (worker / "build" / "report.md").write_text("复盘报告\n", encoding="utf-8")
+        report = prune(self.repo, apply=True)
+        self.assertTrue((worker / "build" / "report.md").is_file())
+        self.assertEqual(report["reclaimed"], [])
+        self.assertIn("build/", next(row["why"] for row in report["kept"] if row["path"] == str(worker)))
+
+    def test_a_worktree_a_process_is_working_in_is_kept(self):
+        """会话、终端或预览服务还开在里面的工作树不回收：分支合入了，人还在用。"""
+        worker = self._integrated("in-use")
+        process = subprocess.Popen([sys._base_executable, "-c", "import time; time.sleep(60)"], cwd=worker)
+        try:
+            report = prune(self.repo, apply=True)
+        finally:
+            process.kill()
+            process.wait(timeout=15)
+        self.assertTrue(worker.is_dir())
+        why = next(row["why"] for row in report["kept"] if row["path"] == str(worker))
+        self.assertIn(str(process.pid), why)
 
     def test_a_dirty_worktree_is_refused_even_when_its_branch_is_merged(self):
         """分支已合入不等于工作区里没东西。
@@ -588,8 +704,8 @@ class ReadmeImpactTests(unittest.TestCase):
         git(self.repo, "init", "-b", "main")
         git(self.repo, "config", "user.name", "Test")
         git(self.repo, "config", "user.email", "test@example.invalid")
-        self.save("README.md", "中文")
-        self.save("README.en.md", "English")
+        self.save("README.md", "English")
+        self.save("README.zh-CN.md", "中文")
         git(self.repo, "commit", "-m", "base")
         self.base = git(self.repo, "rev-parse", "HEAD").strip()
         git(self.repo, "checkout", "-b", "worker")
@@ -619,23 +735,23 @@ class ReadmeImpactTests(unittest.TestCase):
     def test_single_language_typo_accepts_explicit_counterpart_review(self):
         self.save("README.md", "修正错字")
         self.assertEqual(self.commit("README-Impact: updated; 中文错字\n"
-                                     "README-Reviewed: README.en.md; 英文表述正确，无需修改"), [])
+                                     "README-Reviewed: README.zh-CN.md; 中文表述正确，无需修改"), [])
 
     def test_counterpart_review_requires_correct_file_and_reason(self):
         self.save("README.md", "修正错字")
-        for trailer in ("README-Reviewed: README.md; 已核对", "README-Reviewed: README.en.md;",
-                        "README-Reviewed: README.en.md; 已核对\nREADME-Reviewed: README.en.md; 重复"):
+        for trailer in ("README-Reviewed: README.md; 已核对", "README-Reviewed: README.zh-CN.md;",
+                        "README-Reviewed: README.zh-CN.md; 已核对\nREADME-Reviewed: README.zh-CN.md; 重复"):
             self.assertTrue(self.commit("README-Impact: updated; 中文错字\n" + trailer))
             git(self.repo, "reset", "--soft", "HEAD^")
 
     def test_bilingual_update_accepts_review(self):
         self.save("README.md", "新内容")
-        self.save("README.en.md", "New content")
+        self.save("README.zh-CN.md", "New content")
         self.assertEqual(self.commit("README-Impact: updated; 功能说明"), [])
 
     def test_none_cannot_describe_document_changes(self):
         self.save("README.md", "新内容")
-        self.save("README.en.md", "New content")
+        self.save("README.zh-CN.md", "New content")
         self.assertTrue(self.commit("README-Impact: none; 内部改动"))
 
     def test_test_only_change_needs_no_declaration(self):
@@ -646,7 +762,7 @@ class ReadmeImpactTests(unittest.TestCase):
         self.save("frontend/package.json", "{}")
         self.commit("README-Impact: updated; 工具要求")
         self.save("README.md", "新内容")
-        self.save("README.en.md", "New content")
+        self.save("README.zh-CN.md", "New content")
         self.assertTrue(check(self.repo, self.base))
 
     def test_missing_reason_and_duplicate_trailers_are_rejected(self):
@@ -672,7 +788,7 @@ class ReadmeImpactTests(unittest.TestCase):
             key.assert_not_called()
 
 
-from scripts import co_author
+from scripts import check_commit_message, co_author
 
 
 class CoAuthorTests(unittest.TestCase):
@@ -727,6 +843,39 @@ class CoAuthorTests(unittest.TestCase):
 
     def test_human_coauthor_requires_an_agent_signature(self):
         self.assertTrue(self.signed("Co-Authored-By: Contributor <contributor@example.invalid>"))
+
+    def contributed(self, *trailers):
+        """采纳的社区补丁：作者是贡献者本人，不是本机提交者。"""
+        git(self.repo, "commit", "--allow-empty", "-m", "测试", "-m", "\n".join(trailers) or "说明",
+            "--author", "Contributor <contributor@example.invalid>")
+        return co_author.check(self.repo, "main")
+
+    def test_a_contributor_commit_is_not_given_an_agent_signature_it_never_had(self):
+        """外部贡献者是否用了 AI 由本人说明；门槛不能逼维护者替他补一行 AI 署名。"""
+        self.assertEqual(self.contributed(), [])
+
+    def test_a_contributor_may_name_a_tool_the_maintainer_has_not_registered(self):
+        """工具名单约束的是本机智能体，贡献者用什么工具是他自己的事。"""
+        self.assertEqual(self.contributed("Co-Authored-By: Qoder (Qwen 3) <noreply@qoder.com>"), [])
+
+    def test_a_contributor_signature_still_has_to_be_well_formed(self):
+        self.assertTrue(self.contributed("Co-Authored-By: Codex (GPT-6) <noreply@anthropic.com>"))
+        self.assertTrue(co_author.problems("测试", ["Codex <someone@example.invalid>"], own=False))
+
+    def test_the_local_committer_signs_even_beside_an_adopted_commit(self):
+        self.contributed()
+        self.assertEqual(len(self.signed()), 1)
+
+    def test_an_unknown_local_identity_is_treated_as_the_local_committer(self):
+        """取不到本机邮箱时无法判断作者是谁，按本机提交从严检查。"""
+        self.assertTrue(co_author.is_own("contributor@example.invalid", ""))
+        self.assertFalse(co_author.is_own("contributor@example.invalid", "test@example.invalid"))
+        self.assertTrue(co_author.is_own("Test@Example.invalid", "test@example.invalid"))
+
+    def test_the_commit_hook_reads_the_author_actually_used(self):
+        self.assertEqual(check_commit_message.author_mail(self.repo), "test@example.invalid")
+        self.assertEqual(check_commit_message.check(self.repo, "测试\n", own=False), [])
+        self.assertTrue(check_commit_message.check(self.repo, "测试\n", own=True))
 
     def test_human_coauthor_requires_a_name_and_email(self):
         agent = "Co-Authored-By: Codex (GPT-6) <noreply@openai.com>"

@@ -60,12 +60,12 @@ export async function searchRecommendations(request: Request): Promise<SuggestGr
     }
   }
   return [
-    { kind: 'performer', label: t('艺人与新作'), items: [...people.values()].slice(0, 3), href: '/subscriptions?tab=feeds', action: t('订阅新作') },
+    { kind: 'performer', label: t('艺人与新作'), items: [...people.values()].slice(0, 3), href: '/subscriptions?tab=add', action: t('订阅新作') },
     { kind: 'author', label: t('关注作者'), items: authors, href: '/subscriptions?tab=add', action: t('添加关注') },
     { kind: 'asset', label: t('作品推荐'), items: library.map(card => work(card)), href: '/', action: t('全部作品') },
     { kind: 'jav', label: t('JAV 推荐'), items: jav.map(card => work(card, `/assets/${card.asset_id || card.id}`)), href: '/jav?tab=discover', action: t('发现 JAV') },
     { kind: 'post', label: t('关注作品'), items: posts.slice(0, 5), href: '/follow', action: t('全部关注作品') },
     { kind: 'photo', label: t('关注图片'), items: photos.slice(0, 5), href: '/follow?media=images', action: t('全部关注图片') },
-    { kind: 'release', label: t('订阅新作'), items: releases.filter(card => card.code).map(card => work({ ...card, sourceWork: true }, `/works/${encodeURIComponent(card.code)}`)), href: '/subscriptions?tab=feeds', action: t('管理订阅') },
+    { kind: 'release', label: t('订阅新作'), items: releases.filter(card => card.code).map(card => work({ ...card, sourceWork: true }, `/works/${encodeURIComponent(card.code)}`)), href: '/subscriptions', action: t('管理订阅') },
   ];
 }

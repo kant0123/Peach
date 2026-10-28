@@ -1,16 +1,16 @@
 /* 用户自配索引器；地址和 API key 分开保存，读取时只返回凭据是否存在。 */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/base/buttons/button';
 import { Checkbox } from '@/components/base/checkbox/checkbox';
 import { Input } from '@/components/base/input/input';
 import { apiGet, apiSend, errorMessage } from '../../api';
-import { LoadingDots } from '../components/loading-dots';
-import { Disclosure, ErrorText, ExternalLink, Footer, Help, Section, Stack } from './section';
+import { indexersSkeleton, rememberShape } from '../../configuration-skeleton';
+import { randomId } from '../../core/random-id';
+import { Disclosure, ErrorText, ExternalLink, Footer, Help, Section, SectionSkeleton, Stack } from './section';
 import { busyProps, useAction } from './use-action';
 import { t } from '../../i18n';
-import { randomId } from '../../random-id';
 
 const URL = '/api/configuration/indexers';
 interface Indexer {
@@ -22,13 +22,32 @@ interface State { indexers: Indexer[]; max_indexers: number }
 export function IndexerSettings({ receipt }: { receipt(message: string): void }) {
   const query = useQuery({ queryKey: ['indexers'], queryFn: ({ signal }) => apiGet<State>(URL, signal), refetchOnMount: 'always' });
   if (query.error) return <ErrorText>{errorMessage(query.error)}</ErrorText>;
-  if (query.isFetching) return <LoadingDots label={t('正在读取资源搜索设置')} />;
+  if (query.isFetching) return <SectionSkeleton label={t('正在读取资源搜索设置')} html={indexersSkeleton} />;
   return query.data ? <IndexerForm initial={query.data} receipt={receipt} /> : null;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new globalThis.URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+function IndexerSummary({ row, index }: { row: Indexer; index: number }) {
+  const facts = [row.url ? hostOf(row.url) : t('未填地址'), row.enabled ? t('已启用') : t('已停用'),
+    row.api_key_set && !row.clear_api_key ? t('已保存 API key') : row.api_key ? t('API key 待保存') : t('没有 API key')];
+  return <span className="flex min-w-0 items-baseline gap-3">
+    <span className="shrink-0 text-text-primary">{row.name || t('索引器 {value}', { value: index + 1 })}</span>
+    <span className="truncate text-body-2-regular text-text-secondary">{facts.join(' · ')}</span>
+  </span>;
 }
 
 function IndexerForm({ initial, receipt }: { initial: State; receipt(message: string): void }) {
   const [rows, setRows] = useState(initial.indexers);
   const action = useAction();
+  /* 记下几条索引器、哪条展开，下次骨架照这个结构画。 */
+  useEffect(() => { rememberShape('indexers', { open: initial.indexers.map(row => !row.url) }) }, [initial]);
   const update = (key: string, fields: Partial<Indexer>) =>
     setRows((current) => current.map((row) => row.key === key ? { ...row, ...fields } : row));
   const save = (event: FormEvent<HTMLFormElement>) => {
@@ -41,29 +60,40 @@ function IndexerForm({ initial, receipt }: { initial: State; receipt(message: st
   return (
     <Section title={t('资源搜索')} onSubmit={save}>
       <Stack>
-        <Disclosure summary={t('索引器连接帮助')}><Help>{t('填写 Prowlarr 或 Jackett 提供的 Torznab 地址和 API key。')}</Help>
-          <ExternalLink href="https://github.com/peach-mitao/peach/blob/master/docs/RESOURCE_SEARCH.md">{t('详细配置说明')}</ExternalLink>
+        <div className="flex min-w-0 flex-col gap-4">
+        <Disclosure summary={t('索引器连接帮助')}><Help>{t('填写 Prowlarr 或 Jackett 提供的 Torznab 地址和 API key。')}{' '}
+          <ExternalLink href="https://github.com/peach-mitao/peach/blob/master/docs/RESOURCE_SEARCH.md">{t('详细配置说明')}</ExternalLink></Help>
         </Disclosure>
+        {/* 一个索引器收成一行摘要：名称、地址主机、启用与凭据状态；点开才是那几栏输入。
+            新加的一行（还没有地址）默认展开。 */}
         {rows.map((row, index) => (
-          <div key={row.key} className="flex min-w-0 flex-col gap-4 border-t border-separator-border pt-4">
-            <Input label={t('索引器 {n} 名称', { n: index + 1 })} value={row.name} maxLength={80}
-              isDisabled={Boolean(action.busy)} onChange={(name) => update(row.key, { name })} />
-            <Input label={t('索引器 {n} Torznab 地址', { n: index + 1 })} value={row.url} type="url" autoComplete="off"
-              placeholder={t('索引器提供的 API 地址')} isDisabled={Boolean(action.busy)}
-              onChange={(url) => update(row.key, { url })} />
-            <Input label={t('索引器 {n} API key', { n: index + 1 })} type="password" autoComplete="new-password"
-              value={row.api_key || ''} placeholder={row.api_key_set ? t('已保存，留空不改') : undefined}
-              isDisabled={Boolean(action.busy)} onChange={(api_key) => update(row.key, { api_key })} />
-            <Checkbox isSelected={row.enabled} isDisabled={Boolean(action.busy)}
-              onChange={(enabled) => update(row.key, { enabled })}>{t('启用')}</Checkbox>
-            {row.api_key_set ? <Checkbox isSelected={Boolean(row.clear_api_key)}
-              isDisabled={Boolean(action.busy)} onChange={(clear_api_key) => update(row.key, { clear_api_key })}>
-              {t('清除已保存的 API key')}
-            </Checkbox> : null}
-            <div><Button variant="danger" type="button" disabled={Boolean(action.busy)}
-              onClick={() => setRows(rows.filter((item) => item.key !== row.key))}>{t('移除索引器 {n}', { n: index + 1 })}</Button></div>
+          <div key={row.key} className="min-w-0 border-t border-separator-border pt-2">
+            <Disclosure defaultOpen={!row.url} summary={<IndexerSummary row={row} index={index} />}>
+              <div className="flex min-w-0 flex-col gap-4">
+                <Input label={t('名称')} aria-label={t('索引器 {value} 名称', { value: index + 1 })} value={row.name} maxLength={80}
+                  isDisabled={Boolean(action.busy)} onChange={(name) => update(row.key, { name })} />
+                <Input label={t('Torznab 地址')} aria-label={t('索引器 {value} Torznab 地址', { value: index + 1 })} value={row.url} type="url"
+                  autoComplete="off" placeholder={t('索引器提供的 API 地址')} isDisabled={Boolean(action.busy)}
+                  onChange={(url) => update(row.key, { url })} />
+                <Input label="API key" aria-label={t('索引器 {value} API key', { value: index + 1 })} type="password" autoComplete="new-password"
+                  value={row.api_key || ''} placeholder={row.api_key_set ? t('已保存，留空不改') : undefined}
+                  isDisabled={Boolean(action.busy)} onChange={(api_key) => update(row.key, { api_key })} />
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  <Checkbox isSelected={row.enabled} isDisabled={Boolean(action.busy)}
+                    onChange={(enabled) => update(row.key, { enabled })}>{t('启用')}</Checkbox>
+                  {row.api_key_set ? <Checkbox isSelected={Boolean(row.clear_api_key)}
+                    isDisabled={Boolean(action.busy)} onChange={(clear_api_key) => update(row.key, { clear_api_key })}>
+                    {t('清除已保存的 API key')}
+                  </Checkbox> : null}
+                  <Button variant="danger" type="button" size="small" disabled={Boolean(action.busy)}
+                    aria-label={t('移除索引器 {value}', { value: index + 1 })}
+                    onClick={() => setRows(rows.filter((item) => item.key !== row.key))}>{t('移除')}</Button>
+                </div>
+              </div>
+            </Disclosure>
           </div>
         ))}
+        </div>
         {action.error ? <ErrorText>{action.error}</ErrorText> : null}
       </Stack>
       <Footer>

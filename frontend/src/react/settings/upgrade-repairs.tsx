@@ -1,0 +1,48 @@
+/** 升级补修与程序安装分别显示；复核和重试都由用户明确发起。 */
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/base/buttons/button';
+import { apiSend } from '../../api';
+import { useClientUpdates } from '../client-updates';
+import type { ClientUpdates } from '../client-updates';
+import { AnimatedNumber } from '../components/animated-number';
+import { StatusLabel } from '../components/status-label';
+import { ErrorText, ExternalLink, Fact, FactList, Footer, Help, Section, Stack, TaskCenterLink } from './section';
+import { useAction } from './use-action';
+import { t } from '../../i18n';
+
+const LABELS: Record<string, string> = { pending: t('等待修复'), running: t('正在修复'), failed: t('需要重试'),
+  review: t('需要复核'), complete: t('已完成'), unavailable: t('当前部署未启用') };
+
+export function UpgradeRepairs() {
+  const { snapshot } = useClientUpdates();
+  const [saved, setSaved] = useState<ClientUpdates['repairs'] | null>(null);
+  const action = useAction();
+  useEffect(() => setSaved(null), [snapshot]);
+  const data = saved ?? snapshot?.repairs;
+  const state = data?.state || 'pending';
+  const pending = data?.items.reduce((count, row) => count + (row.pending || 0), 0) || 0;
+  const failed = data?.items.reduce((count, row) => count + (row.failed || 0), 0) || 0;
+  const review = data?.items.reduce((count, row) => count + (row.review_count || 0), 0) || 0;
+  const retry = () => void action.run('retry', signal => apiSend<ClientUpdates['repairs']>(
+    '/api/configuration/upgrade-repairs/retry', {}, 'POST', signal), next => {
+    setSaved(next);
+    document.dispatchEvent(new Event('peach:client-updates'));
+  });
+  return <Section id="upgradeRepairs" title={t('自动修复')} aside={<StatusLabel
+    tone={state === 'failed' ? 'error' : state === 'running' ? 'progress' : state === 'review' ? 'warning'
+      : state === 'complete' ? 'success' : 'neutral'}><span key={state}
+        data-copy-key={`upgradeRepairs.${state}.status`}>{LABELS[state] || t('未取得')}</span></StatusLabel>}>
+    <Stack><Help>{t('升级后自动修正资料、更新缓存。')}</Help></Stack>
+    <FactList>
+      <Fact term={t('待完成')}><span><AnimatedNumber value={pending} /> {t('项')}</span></Fact>
+      <Fact term={t('失败')}><span><AnimatedNumber value={failed} /> {t('项')}</span></Fact>
+      <Fact term={t('待复核')}><span><AnimatedNumber value={review} /> {t('项')}</span></Fact>
+    </FactList>
+    {data?.message || action.error ? <Stack><ErrorText>{action.error || data?.message}</ErrorText></Stack> : null}
+    {state === 'running' ? <Stack><Help>{t('资料与预览正在后台补全。')}</Help><TaskCenterLink /></Stack> : null}
+    <Footer status={review ? <ExternalLink href="/api/configuration/upgrade-repairs/review">{t('下载复核记录')}</ExternalLink> : undefined}>
+      <Button size="small" variant="secondary" disabled={!data?.available || state === 'running' || !!action.busy || (!failed && state !== 'failed')}
+        onClick={retry}>{t('重试失败项')}</Button>
+    </Footer>
+  </Section>;
+}

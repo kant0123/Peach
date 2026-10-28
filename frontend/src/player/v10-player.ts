@@ -1,7 +1,7 @@
 /* Peach 播放会话：Video.js 10 的媒体、原生事件与自有控制条共用同一枚 video。 */
+import { randomId } from '../core/random-id';
 import type { PlayerEvents, PlayerSource, QualityLevelList, VideojsFactory, VjsPlayer } from './types';
 import { t } from '../i18n';
-import { randomId } from '../random-id';
 
 interface HlsEngine {
   bandwidthEstimate: number;
@@ -183,6 +183,8 @@ export const createV10Player: VideojsFactory = (video, options) => {
     bandwidth: () => media.engine?.bandwidthEstimate || 0,
     addRemoteTextTrack: (track: Record<string, unknown>) => {
       const node = document.createElement('track');
+      node.id = String(track.id || '');
+      if (track.legacyId) node.dataset.subtitleAlias = String(track.legacyId);
       node.kind = String(track.kind || 'subtitles'); node.src = String(track.src || '');
       node.srclang = String(track.srclang || ''); node.label = String(track.label || ''); video.append(node);
     },

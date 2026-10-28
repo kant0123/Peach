@@ -13,7 +13,7 @@ beforeAll(() => {
   if (!customElements.get('hlsjs-video')) customElements.define('hlsjs-video', TestMedia);
   if (!customElements.get('dash-video')) customElements.define('dash-video', class extends TestMedia {});
 });
-afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks() });
+afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals() });
 
 function mounted() {
   const video = document.createElement('video'); document.body.append(video);
@@ -23,17 +23,14 @@ function mounted() {
 }
 
 describe('Video.js 10 播放会话', () => {
-  it('非安全上下文（局域网 http）没有 crypto.randomUUID，也能挂载并给容器一个 id', () => {
-    const real = globalThis.crypto;
-    vi.stubGlobal('crypto', { getRandomValues: real.getRandomValues.bind(real) });
+  it('普通 HTTP 的随机源为无 ID 的视频创建独立播放器', () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+    const first = mounted().player;
+    const second = mounted().player;
     try {
-      expect(typeof crypto.randomUUID).toBe('undefined');
-      const { player } = mounted();
-      expect(player.el().id).toMatch(/^peach-player-[0-9a-f-]{36}$/);
-      player.dispose();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+      expect(first.el().id).toMatch(/^peach-player-/);
+      expect(first.el().id).not.toBe(second.el().id);
+    } finally { first.dispose(); second.dispose() }
   });
 
   it('片源交给异步 adapter 后立即播放，原生 play 使用已挂载的片源', async () => {

@@ -122,7 +122,7 @@ function shellActions(): ShellActions {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn(() => ''), openFollow: vi.fn(), receipt: vi.fn(), toast: vi.fn(),
     failure: vi.fn(), revealSource: vi.fn(async () => ''), reopenTutorial: vi.fn(async () => {}),
-    requestConfigurationSection: vi.fn(), routeReview: vi.fn(),
+    routeReview: vi.fn(),
     routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '', routeIndex: vi.fn(),
     savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(), personAvatar: vi.fn(() => ({ html: '', face: '' })),
     authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),
@@ -249,6 +249,7 @@ describe('常驻组件', () => {
     let finish!: (value: unknown) => void;
     vi.stubGlobal('fetch', vi.fn((url: string) => url === '/api/library-processing'
       ? Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'idle' }) })
+      : url === '/api/local-players' ? Promise.resolve({ ok: true, status: 200, json: async () => ({ players: [] }) })
       : new Promise(resolve => { finish = resolve })));
     const opening = api.open(request(1));
     const dialog = q<HTMLDialogElement>('#stage')!;

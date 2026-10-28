@@ -11,7 +11,7 @@
     [string]$OutputDirectory = ''
 )
 
-# 构建默认界面语言为日语的 Windows 安装包。流程与取舍见 ADR-0114「日语安装包」。
+# 构建默认界面语言为日语的 Windows 安装包。流程与取舍见 ADR-0130「日语安装包」。
 #   .\scripts\build_ja_installer.ps1 -Sync     上游有更新：合并 → 检查 → 构建
 #   .\scripts\build_ja_installer.ps1           只重新构建当前分支
 $ErrorActionPreference = 'Stop'

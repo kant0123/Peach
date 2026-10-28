@@ -18,6 +18,7 @@ import json
 import time
 from typing import Protocol
 
+from .catalog_rules import compile_code_patterns
 from .feeds import DEFAULT_HIDDEN_COMPILATIONS, EXCERPT, GROUP_COMPILATION, SOLO_COMPILATION
 from .media_sources import SCANNABLE_LOCATIONS
 from .remote_media_cache import AVATAR_REFRESH_SECONDS, FAVICON_REFRESH_SECONDS
@@ -51,10 +52,11 @@ SEARCH_HISTORY_LIMIT_MAX = 50
 #: 整理模板（ADR-0039）同理：它是「我要我的库长什么样」，不是这台设备上的顺手。
 #: 新作那一行收不收合集（`feeds.compilation_kind`）同样是服务端行为：列表、未读数和
 #: 替哪些壳补封面都按它算，所以跟着账本走。
+#: 番号识别规则描述的是这套馆藏的命名，处理任务按它往账本里写番号，同样跟着账本走。
 SYNCED_SETTING_KEYS = frozenset({
     "sidebarOrder", "followInitialDays", "postSetupTutorialDone",
     "organizeTemplates", "feedHideGroupCompilations", "feedHideSoloCompilations",
-    "feedHideExcerpts", "searchHistoryLimit",
+    "feedHideExcerpts", "searchHistoryLimit", "codePatterns",
 })
 #: 三个收起开关的键与各自对应的那一类，缺省值取 `feeds.DEFAULT_HIDDEN_COMPILATIONS`。
 FEED_COMPILATION_SWITCHES = (
@@ -149,6 +151,24 @@ def organize_templates(contract: SettingsContract) -> dict:
     return normalise_organize_templates(_stored(contract).get("organizeTemplates"))
 
 
+def normalise_code_patterns(raw) -> list[str]:
+    """收敛番号识别规则：一组正则，去掉空行。
+
+    存之前就编译一遍：写错的规则在保存那一刻报给用户（`ValueError`，API 翻成 400），
+    不等到下一次处理时才在后台悄悄失效。
+    """
+    compile_code_patterns(raw)
+    return [str(rule).strip() for rule in raw or () if str(rule or "").strip()]
+
+
+def _stored_code_patterns(payload: dict) -> list[str]:
+    """存进去之后又被手改坏的规则当没设置过：页面照常打开，处理也不因此中断。"""
+    try:
+        return normalise_code_patterns(payload.get("codePatterns"))
+    except (TypeError, ValueError):
+        return []
+
+
 def _feed_switches(payload: dict) -> dict[str, bool]:
     return {key: payload[key] if isinstance(payload.get(key), bool)
             else kind in DEFAULT_HIDDEN_COMPILATIONS
@@ -186,6 +206,7 @@ def q_settings(contract: SettingsContract, _args=None) -> dict:
         "followInitialDays": normalise_follow_initial_days(payload.get("followInitialDays")),
         "postSetupTutorialDone": payload.get("postSetupTutorialDone") is True,
         "organizeTemplates": normalise_organize_templates(payload.get("organizeTemplates")),
+        "codePatterns": _stored_code_patterns(payload),
         **_feed_switches(payload),
         "searchHistoryLimit": normalise_search_history_limit(payload.get("searchHistoryLimit")),
     }
@@ -214,6 +235,8 @@ def w_settings(contract: SettingsContract, body) -> dict:
         merged["postSetupTutorialDone"] = body["postSetupTutorialDone"] is True
     if "organizeTemplates" in body:
         merged["organizeTemplates"] = normalise_organize_templates(body["organizeTemplates"])
+    if "codePatterns" in body:
+        merged["codePatterns"] = normalise_code_patterns(body["codePatterns"])
     if "searchHistoryLimit" in body:
         limit = normalise_search_history_limit(body["searchHistoryLimit"])
         if limit is None:

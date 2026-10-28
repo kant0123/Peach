@@ -1,21 +1,22 @@
-/* 关注管理页的「JAV 订阅源」页签：上面一张「添加 JAV 订阅」卡，下面一张和关注列表同一个外观的表，
+/* 关注列表里的 JAV 订阅表：
  * 一行一条源，名字前是她的资料图，列出类型、来源、状态、频率、上次拉取与新增，行尾是启用开关、
  * 拉取键与移除键（ADR-0042）。行尾这三样和关注列表那一行一一对应，两张表看起来是一回事。
  *
- * 订阅从人物页的「订阅新作」或这里按名字进，两条路都不收地址（ADR-0047、ADR-0083）。拉回来的
+ * 订阅从人物页的「订阅新作」或「添加关注」按名字进，两条路都不收地址（ADR-0047、ADR-0083）。拉回来的
  * 新作排在首页与人物页筛选栏下面那一行，不在这里列——这里再列一遍就成了第二个入口，两处的
  * 已读状态会各说各话。
  * 服务端是唯一真相：开关与移除之后重取这一份，不在前端按响应拼一份新的本地状态。
  *
  * 勾选和关注列表同一套：勾在行首，点一行的空白处也是选这一行，选中了底部浮出批量操作。 */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   createColumnHelper, createPaginatedRowModel, createSortedRowModel, flexRender, rowPaginationFeature,
-  rowSelectionFeature, rowSortingFeature, tableFeatures, useTable,
+  rowSelectionFeature, rowSortingFeature, columnVisibilityFeature, tableFeatures, useTable,
   type RowSelectionState, type SortingState,
 } from '@tanstack/react-table';
-import { RiDeleteBinLine, RiRefreshLine, RiRssLine } from '@remixicon/react';
+import { RiDeleteBinLine, RiExternalLinkLine, RiRefreshLine, RiRssLine } from '@remixicon/react';
 import { VisuallyHidden } from 'react-aria-components';
 
 import { avatarInner } from '@peach/card-art';
@@ -33,17 +34,20 @@ import { ChevronSortDown } from '@/components/foundations/icons/chevrons';
 
 import { errorMessage } from '../../api';
 import { DataTableFrame } from '../components/data-table-frame';
+import { useTablePreferences } from '../components/table-column-preferences';
+import { TableColumnControls, TableColumnResizer } from '../components/table-column-controls';
+import { TableSelectionHeader } from '../components/table-selection-header';
 import { DataTableFooter, DataTableSort } from '../components/table-controls';
 import { cardClass } from '../components/card';
 import { EmptyState } from '../components/empty-state';
 import { LEGACY_AVATAR_IMG } from '../components/legacy-avatar';
+import { SiteLabel } from '../components/source-label';
 import { Note } from '../components/note';
 import { SelectionDock } from '../components/selection-dock';
 import { queryClient } from '../query';
 import { ErrorText, Help } from '../settings/section';
 import { busyProps, useAction } from '../settings/use-action';
 import { localTime } from '../time';
-import { AddFeed } from './add-feed';
 import {
   checkFeeds, errorHeadline, FEEDS_KEY, feedIntervalText, fetchFeeds, removeFeed, setFeedEnabled,
   pageWindow, type FeedSource,
@@ -54,6 +58,7 @@ const feedTableFeatures = tableFeatures({
   rowPaginationFeature,
   rowSelectionFeature,
   rowSortingFeature,
+  columnVisibilityFeature,
   sortedRowModel: createSortedRowModel(),
   paginatedRowModel: createPaginatedRowModel(),
 });
@@ -71,7 +76,13 @@ const COLUMN_LABELS: Record<string, string> = {
 };
 
 /** 表头里不占字的列：勾选那一格自己会说「选择 谁」，行尾三个控件也各带自己的名字。 */
-const SILENT_COLUMNS = new Set(['select', 'actions']);
+const SILENT_COLUMNS = new Set(['actions']);
+const preferenceColumns = Object.entries(COLUMN_LABELS).map(([id, label]) => ({ id, label,
+  width: id === 'select' ? 48 : id === 'name' ? 300 : id === 'actions' ? 208 : id === 'fetched' ? 200 : 160,
+  min: id === 'select' ? 48 : id === 'actions' ? 200 : id === 'name' ? 300 : 112, max: id === 'select' ? 48 : id === 'name' ? 2000 : 800,
+  flex: id === 'name',
+  required: id === 'select' || id === 'name',
+}));
 
 const reload = () => queryClient.invalidateQueries({ queryKey: FEEDS_KEY, exact: true });
 
@@ -87,10 +98,11 @@ function originHost(url: string): string {
   }
 }
 
-/** 一条源此刻的状态：拉不动最要紧，其次才是开着还是停着。 */
+/** 启用状态与已取得的拉取结果共同决定当前标签。 */
 function StatusChip({ source }: { source: FeedSource }) {
+  if (!source.enabled) return <Chip variant="caption" color="gray">{t('已暂停')}</Chip>;
   if (source.last_error) return <Chip variant="caption" color="rose">{t('拉取失败')}</Chip>;
-  if (!source.enabled) return <Chip variant="caption" color="neutral">{t('已暂停')}</Chip>;
+  if (!source.last_fetched_at) return <Chip variant="caption" color="gray">{t('未检查')}</Chip>;
   return <Chip variant="caption" color="lime">{t('正常')}</Chip>;
 }
 
@@ -153,14 +165,22 @@ function confirmRemove(sources: FeedSource[], write: () => Promise<unknown>) {
   });
 }
 
-export function FeedSources({ readOnly, toast }: {
-  readOnly: boolean; toast(message: string): void;
+export function FeedSources({ readOnly, toast, onAdd, selection }: {
+  readOnly: boolean; toast(message: string): void; onAdd(): void;
+  selection?: {
+    ids: ReadonlySet<number>;
+    onChange: Dispatch<SetStateAction<ReadonlySet<number>>>;
+    onActivate(): void;
+  };
 }) {
   const feeds = useQuery({ queryKey: FEEDS_KEY, queryFn: ({ signal }) => fetchFeeds(signal) });
   const action = useAction();
+  const preferences = useTablePreferences('jav-feeds', preferenceColumns);
   const data = feeds.data;
   const sources = useMemo(() => data?.sources ?? [], [data]);
-  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set<number>());
+  const [ownSelected, setOwnSelected] = useState<ReadonlySet<number>>(new Set<number>());
+  const selected = selection?.ids ?? ownSelected;
+  const setSelected = selection?.onChange ?? setOwnSelected;
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -174,7 +194,7 @@ export function FeedSources({ readOnly, toast }: {
       const next = new Set([...now].filter((id) => alive.has(id)));
       return next.size === now.size ? now : next;
     });
-  }, [sources]);
+  }, [sources, setSelected]);
 
   const bulk = useMutation({
     mutationFn: async (work: { ids: number[]; action: 'enabled' | 'paused' | 'remove' }) => {
@@ -225,7 +245,7 @@ export function FeedSources({ readOnly, toast }: {
     return column.columns([
       column.display({
         id: 'select',
-        header: label('select'),
+        header: context => <TableSelectionHeader table={context.table} label={t('全选本页订阅源')} page />,
         /* `slot={null}`：表格自带一个叫 selection 的插槽，摆进去的勾不声明归属就会被它
            拦下报错。这一列的勾归 TanStack Table 那份行选择管，不走 Table 自己的选择。 */
         cell: (context) => (
@@ -263,9 +283,11 @@ export function FeedSources({ readOnly, toast }: {
         id: 'origin',
         header: label('origin'),
         cell: (context) => (
-          <a href={context.getValue()} target="_blank" rel="noreferrer noopener" title={t('打开来源页面')}
+          <a href={context.getValue()} target="_blank" rel="noopener noreferrer" title={t('打开来源页面')}
             className="text-text-primary underline-offset-2 hover:underline">
-            {originHost(context.getValue())}
+            <SiteLabel site={context.row.original.kind.startsWith('javdb') ? 'javdb' : originHost(context.getValue())}
+              label={originHost(context.getValue())} />
+            <RiExternalLinkLine aria-hidden className="size-(--icon-inline) shrink-0" />
           </a>
         ),
       }),
@@ -299,13 +321,13 @@ export function FeedSources({ readOnly, toast }: {
             <Switch aria-label={t('启用 {value}', { value: feedName(context.row.original) })}
               isSelected={context.row.original.enabled} isDisabled={handlers.current.readOnly}
               onChange={(enabled) => handlers.current.toggle(context.row.original, enabled)} />
-            <Button variant="secondary" size="xs" iconOnly leadingIcon={RiRefreshLine}
-              aria-label={t('拉取 {value}', { value: feedName(context.row.original) })}
+            <Button variant="secondary" size="small" iconOnly leadingIcon={RiRefreshLine}
+              aria-label={t('拉取 {feedName}', { feedName: feedName(context.row.original) })}
               disabled={handlers.current.readOnly}
               {...busyProps(handlers.current.busy === `check-${context.row.original.id}`)}
               onClick={() => handlers.current.fetch(context.row.original)} />
-            <Button variant="secondary" size="xs" iconOnly leadingIcon={RiDeleteBinLine}
-              aria-label={t('移除 {value}', { value: feedName(context.row.original) })}
+            <Button variant="secondary" size="small" iconOnly leadingIcon={RiDeleteBinLine}
+              aria-label={t('移除 {feedName}', { feedName: feedName(context.row.original) })}
               disabled={handlers.current.readOnly}
               onClick={() => handlers.current.remove(context.row.original)} />
           </span>
@@ -321,10 +343,12 @@ export function FeedSources({ readOnly, toast }: {
     data: sources,
     columns,
     getRowId: (row) => String(row.id),
-    state: { rowSelection, sorting, pagination: { pageIndex: win.page - 1, pageSize } },
+    state: { rowSelection, sorting, pagination: { pageIndex: win.page - 1, pageSize }, columnVisibility: preferences.visibility },
+    onColumnVisibilityChange: preferences.change,
     onSortingChange: (next) => { setSorting(next); setPage(1); },
     enableRowSelection: true,
     onRowSelectionChange: (updater) => {
+      selection?.onActivate();
       const next = typeof updater === 'function' ? updater(rowSelection) : updater;
       setSelected(new Set(Object.entries(next).filter(([, on]) => on).map(([id]) => Number(id))));
     },
@@ -337,25 +361,32 @@ export function FeedSources({ readOnly, toast }: {
   }
 
   const check = () => void action.run('check', (signal) => checkFeeds(signal), () => void reload());
-  const toggleRow = (id: number) => setSelected((now) => {
-    const next = new Set(now);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  const toggleRow = (id: number) => {
+    selection?.onActivate();
+    setSelected((now) => {
+      const next = new Set(now);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
   const chosen = sources.filter((source) => selected.has(source.id));
   const failing = sources.filter((source) => source.last_error);
 
   return (
     <div className="flex flex-col gap-3">
-      <AddFeed readOnly={readOnly} toast={toast} onAdded={() => void reload()} />
       <section aria-label={t('JAV 订阅列表')}
         className={cardClass({ padding: 'none', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })}>
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="mr-auto text-title-2-medium text-text-primary">{t('JAV 订阅源')}</h3>
+      <div data-responsive-toolbar="">
+        <div data-toolbar-heading="">
+        <h3 className="text-title-2-medium text-text-primary">{t('JAV 订阅源')}</h3>
         <span className="text-body-2-regular text-text-secondary">{t('{value} 个订阅源 · {value2} 条未看', { value: sources.length.toLocaleString(), value2: (Number(data.unread) || 0).toLocaleString() })}</span>
+        </div>
+        <div data-toolbar-actions="">
         <Button onClick={check} disabled={readOnly} {...busyProps(action.busy === 'check')}>{t('立即拉取')}</Button>
+        <TableColumnControls preferences={preferences} label={t('JAV 订阅源')} />
         <DataTableSort label={t('JAV 订阅源')} sorting={sorting} onChange={(next) => { setSorting(next); setPage(1); }}
           options={['name', 'kind', 'origin', 'status', 'interval', 'fetched', 'fresh'].map((id) => ({ id, label: COLUMN_LABELS[id]! }))} />
+        </div>
       </div>
 
       {failing.length || action.error ? (
@@ -390,7 +421,7 @@ export function FeedSources({ readOnly, toast }: {
         </SelectionDock>
 
       {sources.length ? (
-        <DataTableFrame follow onRowClick={(key) => toggleRow(Number(key))}>
+        <DataTableFrame follow preferences={preferences} onRowClick={(key) => toggleRow(Number(key))}>
           <Table aria-label={t('JAV 订阅源')} size="sm"
             sortDescriptor={sorting[0] ? { column: sorting[0].id, direction: sorting[0].desc ? 'descending' : 'ascending' } : undefined}
             onSortChange={(sort) => table.getColumn(String(sort.column))?.toggleSorting(sort.direction === 'descending')}>
@@ -398,31 +429,34 @@ export function FeedSources({ readOnly, toast }: {
               {table.getHeaderGroups()[0]!.headers.map((header) => {
                 const text = flexRender(header.column.columnDef.header, header.getContext());
                 return (
-                  <TableColumn key={header.id} id={header.id} isRowHeader={header.column.id === 'name'} allowsSorting={header.column.getCanSort()}>
-                    {({ sortDirection }) => SILENT_COLUMNS.has(header.column.id) ? <VisuallyHidden>{text}</VisuallyHidden>
+                  <TableColumn key={header.id} id={header.id} isRowHeader={header.column.id === 'name'} allowsSorting={header.column.getCanSort()} {...preferences.columnProps(header.id)}>
+                    {({ sortDirection }) => <>{SILENT_COLUMNS.has(header.column.id) ? <VisuallyHidden>{text}</VisuallyHidden>
                       : <span className="flex items-center gap-0.5">{text}
                         {header.column.getCanSort() ? <span data-sort-indicator data-direction={sortDirection || undefined}><ChevronSortDown /></span> : null}
-                      </span>}
+                      </span>}<TableColumnResizer preferences={preferences} id={header.id} /></>}
                   </TableColumn>
                 );
               })}
+              <TableColumn id="remaining-space" aria-label={t('行空白区域')} data-table-space="" width={preferences.spaceWidth} minWidth={0} />
             </TableHeader>
             <TableBody>
               {table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id} id={row.id} data-follow-selected={row.getIsSelected() || undefined}>
-                  {row.getAllCells().map((cell) => (
+                  {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
+                  <TableCell data-table-space="" />
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </DataTableFrame>
       ) : (
-        <EmptyState icon={RiRssLine} title={t('还没有订阅源')} shell="plain">
-          {t('在上面按女优名添加，或在人物页点「订阅新作」。')}
+        <EmptyState icon={RiRssLine} title={t('还没有订阅源')} size="compact"
+          actions={!readOnly ? <Button variant="secondary" onClick={onAdd}>{t('添加订阅')}</Button> : undefined}>
+          {t('在「添加关注」按女优名添加，或在人物页点「订阅新作」。')}
         </EmptyState>
       )}
       {sources.length ? (

@@ -88,6 +88,8 @@ class MediaRepairRunTests(unittest.TestCase):
         self.contract.transcode_service = self.transcodes
         config = SimpleNamespace(locations={"115": ("B:" + SEP,), "pikpak": ("A:" + SEP,)},
                                  library_names={"B:" + SEP: "网盘", "A:" + SEP: "PikPak"})
+        from peach.media_libraries import libraries
+        self.library_ids = {row['name']: row['id'] for row in libraries(config)}
         for patch in (
             mock.patch.object(rm_repair, "translate_ledger_path",
                               lambda raw: self.media / PureWindowsPath(str(raw)).name),
@@ -112,7 +114,7 @@ class MediaRepairRunTests(unittest.TestCase):
     def run_once(self, library="网盘", **body) -> dict:
         """跑完一轮再返回状态：后台任务在测试里没有别的事要抢。"""
         with mock.patch.object(rm_repair.mp4recover, "recover", self.recover):
-            started = rm_repair.w_media_repair(self.contract, {"restart": True, "library": library, **body})
+            started = rm_repair.w_media_repair(self.contract, {"restart": True, "library": self.library_ids.get(library, library), **body})
             thread = self.contract.media_repair_job.thread
             if thread is not None:
                 thread.join(timeout=30)
@@ -132,7 +134,7 @@ class MediaRepairRunTests(unittest.TestCase):
         self.assertEqual(self.store.repaired, [2, 1])
         self.assertEqual([name for name, _ in self.recovered], ["cut.mp4"])
         self.assertEqual(state["status"], "complete")
-        self.assertEqual(state["library"], "网盘")
+        self.assertEqual(state["library"], self.library_ids["网盘"])
         self.assertEqual((state["found"], state["repaired"], state["failed"]), (3, 3, 0))
 
     def test_the_most_played_ones_are_repaired_first(self):
@@ -254,7 +256,7 @@ class MediaRepairRunTests(unittest.TestCase):
         self.contract.header_repairs = None
 
         with self.assertRaises(ValueError):
-            rm_repair.w_media_repair(self.contract, {"library": "网盘"})
+            rm_repair.w_media_repair(self.contract, {"library": self.library_ids["网盘"]})
 
     def test_an_idle_instance_reports_idle_instead_of_nothing(self):
         state = rm_repair.q_media_repair(self.contract)

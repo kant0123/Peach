@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -467,6 +469,28 @@ class TunnelManagerTests(unittest.TestCase):
         self.assertTrue(self.processes[0].terminated)
         self.assertTrue(self.processes[0].killed)
 
+    def test_stop_during_the_edge_wait_ends_start_without_an_error_state(self):
+        def silent(command, **kwargs):
+            process = _Process(_Stream())
+            self.processes.append(process)
+            return process
+
+        manager = tunnel.TunnelManager(
+            self.root / "state", self.root / "logs", popen=silent, wait_timeout=30,
+        )
+        result = {}
+        starter = threading.Thread(target=lambda: result.update(snapshot=manager.start(self.plan())))
+        starter.start()
+        deadline = time.monotonic() + 5
+        while manager.snapshot().state != "starting" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        manager.stop()
+        starter.join(timeout=5)
+        self.assertFalse(starter.is_alive())
+        self.assertEqual(result["snapshot"].state, "stopped")
+        self.assertTrue(self.processes[0].terminated)
+        self.assertFalse((self.root / "state" / tunnel.STATE_FILENAME).exists())
+
     def test_snapshot_accepts_a_process_without_a_pid_attribute(self):
         process = SimpleNamespace(poll=lambda: None, stdout=_Stream())
         manager = tunnel.TunnelManager(self.root / "state", self.root / "logs")
@@ -898,6 +922,45 @@ class TunnelStartupTests(unittest.TestCase):
                 TestClient(api.create_app(settings, tunnel_manager=manager)) as client:
             client.get("/healthz")
         manager.start.assert_not_called()
+
+    def test_an_unreachable_edge_does_not_hold_back_local_readiness(self):
+        processes = []
+
+        def silent(command, **kwargs):
+            # 断网时的 cloudflared：进程活着，既不吐入口也不写 pidfile。
+            process = _Process(_Stream())
+            processes.append(process)
+            return process
+
+        manager = tunnel.TunnelManager(
+            self.root / "state", self.root / "logs", popen=silent, wait_timeout=30,
+        )
+        plan = tunnel.TunnelPlan(
+            binary=self.root / "cloudflared.exe",
+            origin=tunnel.TunnelOrigin("http://127.0.0.1:8900"),
+            command=("cloudflared", "tunnel", "--url", "http://127.0.0.1:8900"),
+        )
+        settings = PeachSettings(
+            db_path=self.root / "peach.db", configured=True, token="", tunnel_enabled=True,
+            tunnel_state_root=self.root / "state", tunnel_log_root=self.root / "logs",
+        )
+        began = time.monotonic()
+        with mock.patch.object(api.tunnel, "plan_for_settings", return_value=plan), \
+                TestClient(api.create_app(settings, tunnel_manager=manager)) as client:
+            ready = client.get("/healthz")
+            self.assertLess(time.monotonic() - began, 10)
+            self.assertEqual(ready.status_code, 200)
+            deadline = time.monotonic() + 5
+            state = ready.json()["tunnel"]["state"]
+            while state != "starting" and time.monotonic() < deadline:
+                time.sleep(0.01)
+                state = client.get("/healthz").json()["tunnel"]["state"]
+            self.assertEqual(state, "starting")
+            closing = time.monotonic()
+        # 关服务时 stop 打断还在等边缘的握手，不等满 `wait_timeout`，也不留 error 状态。
+        self.assertLess(time.monotonic() - closing, 10)
+        self.assertTrue(processes[0].terminated)
+        self.assertFalse((self.root / "state" / tunnel.STATE_FILENAME).exists())
 
 
 class LocalClientTests(unittest.TestCase):
