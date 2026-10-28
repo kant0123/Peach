@@ -187,6 +187,15 @@ body[data-surface="/trash"] .peach-react button[data-media-title] {
 }
 .peach-react [data-media-pic] > video { opacity: 0; transition: opacity .2s; }
 .peach-react [data-media-pic] > video[data-playing] { opacity: 1; }
+/* 封面上的透明链接：盖住封面与悬停预览（z-index 1），低于卡上的各个控件（z-index 2 起），
+ * 右键因此得到链接菜单（在新标签页中打开），不是封面「图片」的菜单。 */
+.peach-react [data-media-link] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  -webkit-user-drag: none;
+}
 
 /* 叠层纸边：这张卡代表不止一条（分卷或版次）。叠层往上溢出到行间距里，卡片盒不为它留白，
  * 同一行里叠层卡和普通卡的封面与文字才平齐。纸边与封面是同一种表面，圆角同一档。 */
@@ -235,7 +244,7 @@ body[data-surface="/trash"] .peach-react button[data-media-title] {
   border-radius: var(--badge-radius);
   background: color-mix(in srgb, #000 70%, transparent);
   color: #f2eadf;
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   transition: opacity .15s ease;
@@ -478,7 +487,7 @@ body[data-surface="/trash"] .peach-react button[data-media-title] {
   align-items: center;
   justify-content: center;
   color: var(--muted);
-  font-family: Bahnschrift, "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-family: Bahnschrift, var(--cjk-ui), sans-serif;
   font-size: var(--fs-sm);
 }
 /* 共演头像最多五枚，常态紧叠；指到的一枚抬起并放大，右侧邻座逐枚朝标题方向让开。 */
@@ -550,7 +559,7 @@ body[data-surface="/trash"] .peach-react button[data-media-title] {
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
@@ -739,7 +748,7 @@ body[data-surface="/trash"] .peach-react [data-media-tags] {
 }
 .peach-react [data-shorts-count] {
   color: var(--muted);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }

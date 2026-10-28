@@ -22,6 +22,7 @@ import {
   EMPTY_SLOTS, ROW_AHEAD, ROW_BATCH, ROW_FIRST, type CatalogFilterProps, type CatalogTag, type TierKind,
   type TierPerformer, type TierStudio,
 } from './catalog-filter';
+import { t } from '../../i18n';
 
 /* 上一次写出去的读数。读数那一格每次取数都换成微光再建回来，靠它分清「换了个数」和「刚出现」：
    只有前者按位错峰长出来。跨查询、跨重挂都要记得，所以放在模块里。 */
@@ -83,14 +84,14 @@ function Glass(props: CatalogFilterProps) {
   useLayoutEffect(() => { popBadges(tagRow.current, 'tagbar') }, [tags]);
 
   return (
-    <FilterGlassRows label="筛选与排序" topLabel="视图与标签"
+    <FilterGlassRows label={t('筛选与排序')} topLabel={t('视图与标签')}
       attrs={{ 'data-filter-frame': '', 'data-catalog-frame': '', ...(singleRow ? { 'data-single-row': '' } : {}) }}
       className="mx-4" topClassName="gap-1.5 overflow-visible" bottomClassName={props.trash ? 'hidden' : 'min-h-12'}
       bottomRef={bottomRow} busy={props.count === null || props.refreshing}
       panes={<span ref={pane} data-view-glide="" aria-hidden="true" />}
       top={
         <div ref={scroll} data-catalog-scroll="">
-          <div ref={viewRow} role="group" aria-label="视图" data-catalog-views="" onPointerLeave={glide.leave}>
+          <div ref={viewRow} role="group" aria-label={t('视图')} data-catalog-views="" onPointerLeave={glide.leave}>
             {props.views.map((view) => (
               <a key={view.k} href={view.href} data-catalog-view={view.k} data-entity-press=""
                 aria-pressed={props.state === view.k} onPointerEnter={glide.hover}
@@ -224,7 +225,7 @@ function Head({ count, refreshing, layout, sorts, actions }: CatalogFilterProps)
 function Readout({ count }: { count: CatalogFilterProps['count'] }) {
   const readout = useRef<HTMLSpanElement>(null);
   const skeleton = useRef<HTMLSpanElement>(null);
-  const text = count ? `${count.total.toLocaleString()} 个符合 · 显示 ${count.shown.toLocaleString()}` : '';
+  const text = count ? t('{total} 个符合 · 显示 {shown}', { total: count.total.toLocaleString(), shown: count.shown.toLocaleString() }) : '';
   useLayoutEffect(() => {
     if (count === false) return;
     if (!count) { fitSkeleton(skeleton.current); return }

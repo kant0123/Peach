@@ -80,6 +80,8 @@ $BuildInfo = [ordered]@{
     commit = $BuildCommit
     version = $BuildVersionMatch.Matches[0].Groups[1].Value
     built_at = (Get-Date).ToString('o')
+    # 托盘菜单按它选语言：与前端包的默认语言同一个构建开关，见 ADR-0114。
+    locale = $(if ($env:VITE_DEFAULT_LOCALE -eq 'ja') { 'ja' } else { 'zh-CN' })
 }
 Set-Content -LiteralPath $BuildInfoPath -Value (ConvertTo-Json $BuildInfo) -Encoding utf8
 $SentryConfigPath = Join-Path $BuildPath 'sentry.json'

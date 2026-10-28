@@ -61,11 +61,12 @@ SCOPES: dict[str, tuple[str, ...]] = {
     "media": ("test_external_playback.py", "test_runtime_consistency.py", "test_endcard.py", "test_fastapi_api.py", "test_jobs.py",
               "test_task_runs.py", "test_followups.py", "test_task_center_integration.py",
               "test_frame_capture.py", "test_timeline_sheets.py", "test_processing_control.py",
+              "test_high_speed_previews.py", "test_library_processing_state_save.py",
               "test_web_timeline_thumbnails.py",
               "test_interaction.py", "test_media.py", "test_mp4repair.py",
               "test_mp4recover.py", "test_web_media_repair.py",
               "test_previews.py", "test_preview_transport.py",
-              "test_providers.py", "test_segments.py", "test_streaming.py",
+              "test_providers.py", "test_segments.py", "test_playback_remux.py", "test_streaming.py",
               "test_subtitles.py", "test_transcodes.py", "test_hardware_transcode.py", "test_strm.py",
               "test_guangya_sources.py", "test_media_sources.py"),
     "sync": ("test_sync*.py", "test_platform.py", "test_mount.py", "test_tray*.py", "test_macos_standalone.py", "test_log_retention.py",
@@ -104,7 +105,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
                  "test_resource_identification.py",
                  "test_agency_entity.py", "test_agency_reject.py", "test_label_maker.py",
                  "test_seed_pack.py", "test_seed_followup.py", "test_seed_corrections.py"),
-    "tooling": ("test_scripts.py", "test_trash_junk.py", "test_auth.py", "test_access.py", "test_cli.py", "test_server.py", "test_diagnostics.py", "test_error_reporting.py", "test_remote_reporting.py", "test_library_sharing.py", "test_library_diagnostics.py", "test_script_policy.py",
+    "tooling": ("test_scripts.py", "test_pre_push_hook.py", "test_trash_junk.py", "test_auth.py", "test_access.py", "test_cli.py", "test_server.py", "test_diagnostics.py", "test_error_reporting.py", "test_remote_reporting.py", "test_library_sharing.py", "test_library_diagnostics.py", "test_script_policy.py",
                 "test_scan.py", "test_record_rehome.py", "test_wants.py", "test_push_discovery.py", "test_media_probe.py", "test_subtitles.py", "test_onboarding.py", "test_configuration_sources.py", "test_folder_picker.py", "test_ledger_backups.py", "test_clear_camera_filename_codes.py",
                 "test_agent_worktree.py", "test_test_evidence.py", "test_test_environment.py", "test_dependency_policy.py",
                 "test_version_bump.py", "test_changelog.py", "test_release_due.py",
@@ -131,7 +132,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
     # 后面七个文件的主体不在这一层，但各有一段断言读 `web/` 或 `frontend/` 的源码，
     # 所以本域也要登记它们：改了 `web/app.js` 却漏跑读它的测试，`test_test_planning.py`
     # 的域映射门槛会在本地就红。
-    "web": ("test_frontend_build.py", "test_web_ui.py", "test_web_js.py", "test_web_e2e.py",
+    "web": ("test_frontend_build.py", "test_web_ui.py", "test_web_js.py", "test_web_e2e.py", "test_cjk_font_stack.py",
             "test_subtitle_search.py",
             "test_legacy_shell_routes.py",
             "test_web_perf.py", "test_copy_final_state.py",
@@ -167,6 +168,7 @@ SCOPE_TEST_IDS: dict[str, tuple[str, ...]] = {
 # 一个文件可以落到多个域：读它的测试登记在哪个域，改它就得跑到哪个域。
 # `tests/test_test_planning.py` 按测试源码里真实读到的路径反查这两张表，漏一条本地就红。
 AUTO_SCOPE_FILES: dict[str, tuple[str, ...]] = {
+    "scripts/cjk_font_stack.py": ("tooling", "web"),
     "scripts/fetch_ffmpeg_sources.py": ("tooling", "packaging"),
     "scripts/ffmpeg-sources.json": ("tooling", "packaging"),
     "scripts/build_ffmpeg_windows.sh": ("tooling", "packaging"),
@@ -207,6 +209,7 @@ AUTO_SCOPE_FILES: dict[str, tuple[str, ...]] = {
     "src/peach/library_processing.py": ("metadata", "web"),
     "src/peach/local_poster.py": ("metadata", "web"),
     "src/peach/processing_control.py": ("media", "metadata", "web"),
+    "src/peach/storage_profile.py": ("media", "metadata"),
     # 刮削后继：主体测试 `test_followups.py` 与 `test_studio_followup.py`，按名字推不出来。
     "src/peach/avatar_followup.py": ("catalog", "media", "tooling"),
     "src/peach/avatar_offsite_cover_face.py": ("catalog", "media", "tooling"),

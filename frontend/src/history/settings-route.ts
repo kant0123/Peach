@@ -1,9 +1,10 @@
+import { t } from '../i18n';
 export const PREFERENCE_SECTIONS = {
-  appearance: '外观与导航', playback: '浏览与播放', jav: 'JAV 与新作', search: '搜索与推荐', content: '内容显示',
+  appearance: t('外观与导航'), playback: t('浏览与播放'), jav: t('JAV 与新作'), search: t('搜索与推荐'), content: t('内容显示'),
 } as const;
 export const CONFIGURATION_SECTIONS = {
-  library: '媒体库与入库', subscriptions: '来源与订阅', downloads: '下载渠道', network: '网络与访问', maintenance: '应用与维护',
-  diagnostics: '系统诊断',
+  library: t('媒体库与入库'), subscriptions: t('来源与订阅'), downloads: t('下载渠道'), network: t('网络与访问'), maintenance: t('应用与维护'),
+  diagnostics: t('系统诊断'),
 } as const;
 export type ConfigurationPath = `/settings/${keyof typeof CONFIGURATION_SECTIONS}`;
 export function configurationSection(path: string): string {

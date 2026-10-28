@@ -94,7 +94,7 @@
 .peach-react [data-photo-group] > b {
   flex: none;
   color: var(--ink);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
 }

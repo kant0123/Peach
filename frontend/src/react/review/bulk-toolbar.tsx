@@ -10,6 +10,7 @@ import { Select, SelectItem } from '@/components/base/select/select';
 import { SelectionDock } from '../components/selection-dock';
 import type { DecisionStatus, ReviewGroup, ReviewGrouping, ReviewRow } from './review';
 import { commonReviewSources } from './review';
+import { t } from '../../i18n';
 
 export interface BulkToolbarProps {
   groupOptions: [ReviewGrouping, string][];
@@ -42,7 +43,7 @@ export function BulkToolbar(props: BulkToolbarProps) {
   const allShown = shown.length > 0 && shown.length === pageKeys.length;
   const sources = commonReviewSources(selectedRows);
   const needsSource = metadata && selectedRows.some((row) => (row.candidates?.length || 0) > 1);
-  const sourceLabel = sources.length ? '统一选择来源' : '所选项目无共同来源';
+  const sourceLabel = sources.length ? t('统一选择来源') : t('所选项目无共同来源');
 
   const toggleAll = () => {
     const next = new Set(selected);
@@ -52,18 +53,18 @@ export function BulkToolbar(props: BulkToolbarProps) {
 
   return (
     <>
-      <div role="group" aria-label="复核筛选" data-review-filter data-glass-pane=""
+      <div role="group" aria-label={t('复核筛选')} data-review-filter data-glass-pane=""
         className="sticky top-topbar z-10 flex flex-wrap items-center gap-2 p-3">
-        <Select aria-label="筛选分组方式" size="sm" selectedKey={groupBy}
+        <Select aria-label={t('筛选分组方式')} size="sm" selectedKey={groupBy}
           onSelectionChange={(key) => { if (key !== null) onGroupBy(String(key) as ReviewGrouping) }}>
           {groupOptions.map(([key, name]) => <SelectItem key={key} id={key}>{name}</SelectItem>)}
         </Select>
         {/* 只有一组时没什么可筛的：一个「全部分类」的下拉读起来像坏了。 */}
         {groups.length > 1 ? (
-          <Select aria-label={groupBy === 'field' ? '筛选字段分类' : '筛选当前分类'} size="sm"
+          <Select aria-label={groupBy === 'field' ? t('筛选字段分类') : t('筛选当前分类')} size="sm"
             selectedKey={filter || '*'}
             onSelectionChange={(key) => { if (key !== null) onFilter(String(key) === '*' ? '' : String(key)) }}>
-            <SelectItem id="*">全部分类</SelectItem>
+            <SelectItem id="*">{t('全部分类')}</SelectItem>
             {groups.map((group) => (
               <SelectItem key={group.key} id={group.key}>
                 {`${group.title} · ${group.rows.length}`}
@@ -73,13 +74,13 @@ export function BulkToolbar(props: BulkToolbarProps) {
         ) : null}
         <Button variant="secondary" size="small" leadingIcon={RiCheckDoubleLine}
           aria-pressed={allShown} disabled={busy || !pageKeys.length} onClick={toggleAll}>
-          {allShown ? '清空当前选择' : filter ? '全选当前分类' : '全选本页'}
+          {allShown ? t('清空当前选择') : filter ? t('全选当前分类') : t('全选本页')}
         </Button>
       </div>
 
-        <SelectionDock label="复核所选项目" visible={selected.size > 0} count={`已选 ${selected.size} 项`}>
+        <SelectionDock label={t('复核所选项目')} visible={selected.size > 0} count={t('已选 {size} 项', { size: selected.size })}>
           {needsSource ? (
-            <Select aria-label="统一选择来源" size="sm" selectedKey=""
+            <Select aria-label={t('统一选择来源')} size="sm" selectedKey=""
               isDisabled={busy || !sources.length}
               onSelectionChange={(key) => { if (key !== null && key !== '') onUnifySource(String(key)) }}>
               <SelectItem id="">{sourceLabel}</SelectItem>
@@ -87,11 +88,11 @@ export function BulkToolbar(props: BulkToolbarProps) {
             </Select>
           ) : null}
           <Button variant="primary" size="small" disabled={busy || !selected.size || !approvable}
-            onClick={() => onRun('approved')}>通过所选</Button>
+            onClick={() => onRun('approved')}>{t('通过所选')}</Button>
           <Button variant="danger" size="small" disabled={busy || !selected.size}
-            onClick={() => onRun('rejected')}>拒绝所选</Button>
+            onClick={() => onRun('rejected')}>{t('拒绝所选')}</Button>
           <Button variant="ghost" size="small" disabled={busy}
-            onClick={() => onSelected(new Set())}>取消选择</Button>
+            onClick={() => onSelected(new Set())}>{t('取消选择')}</Button>
           {feedback
             ? <p role="status" className="w-full text-body-2-regular text-text-secondary">{feedback}</p>
             : null}

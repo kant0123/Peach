@@ -29,6 +29,7 @@ import { isReviewCategory } from '../../review/review';
 import { javLibraryPath, javTab } from '../../jav/jav';
 import { ShellActionsContext, useOpenEpoch } from '../router';
 import type { ManagedOpenProps, ManagedPath, ShellActions } from '../shell-actions';
+import { t } from '../../../i18n';
 
 /** 一次打开的存活状态：元素卸掉就不再画、不再滚动、不再写地址。 */
 interface Run {
@@ -75,7 +76,7 @@ function readRuntime(run: Run): Promise<Runtime | null> {
 function writerProps(runtime: Runtime | null, path: string) {
   return {
     readOnly: !!runtime?.ledger_read_only,
-    readOnlyMessage: runtime?.ledger_read_only_message || '本机当前只能浏览',
+    readOnlyMessage: runtime?.ledger_read_only_message || t('本机当前只能浏览'),
     writerUrl: runtime?.ledger_writer_origin ? new URL(path, runtime.ledger_writer_origin).href : '',
   };
 }
@@ -94,7 +95,7 @@ async function openProps(path: ManagedPath, run: Run): Promise<object | null> {
     return { onboarding } satisfies ManagedOpenProps['/taste'];
   }
   if (path.startsWith('/settings/')) {
-    if (window.location.hash === '#peachProxy') writeShell({ configurationRequestedSection: '网络与访问' });
+    if (window.location.hash === '#peachProxy') writeShell({ configurationRequestedSection: t('网络与访问') });
     const section = search().get('section') || configurationRequestedSection || configurationSection(path);
     return (section ? { section } : {}) satisfies ManagedOpenProps['/settings/library'];
   }

@@ -4,6 +4,7 @@
  * queryKey。首屏由 `prefetchTasks` 写进 Query 缓存，组件挂上去读的就是它。 */
 import { apiGet } from '../../api';
 import { queryClient } from '../query';
+import { localizeServer, t } from '../../i18n';
 
 export const TASKS_URL = '/api/tasks';
 /** 整页共用这一个键：三段是同一次响应的三个字段。 */
@@ -82,12 +83,12 @@ export async function prefetchTasks(signal: AbortSignal): Promise<void> {
 }
 
 export const TRIGGER_LABELS: Record<string, string> = {
-  manual: '手动', scheduled: '定时', startup: '启动', cli: '命令行',
+  manual: t('手动'), scheduled: t('定时'), startup: t('启动'), cli: t('命令行'),
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: '排队中', running: '进行中', succeeded: '已完成',
-  failed: '失败', cancelled: '已取消', interrupted: '被打断',
+  pending: t('排队中'), running: t('进行中'), succeeded: t('已完成'),
+  failed: t('失败'), cancelled: t('已取消'), interrupted: t('被打断'),
 };
 
 /** 状态的中文名。表里的状态集是封闭的，认不出来只可能是表先改了，那就原样显示。 */
@@ -96,13 +97,16 @@ export const statusLabel = (status: string): string => STATUS_LABELS[status] || 
 /* 摘要里的键来自各域自己的状态字典，是英文标识；能认出来的翻成中文，认不出的原样
    显示——瞎猜一个中文名比留着英文键更难查。 */
 const SUMMARY_LABELS: Record<string, string> = {
-  checked: '已检查', total: '总数', scanned: '已扫描', identified: '已识别',
-  candidates: '资料结果', covers: '封面', changed: '已改动', operation: '操作',
-  ok: '取得', miss: '未取得', kept: '保留', planned: '计划', done: '已处理', added: '新增',
-  written: '已写入', removed: '已移除', exit_code: '退出码', issue_count: '问题',
-  followups: '派出后继', followups_duplicate: '已在排队', followups_truncated: '超上限未派',
-  followups_depth_exceeded: '超深度未派', outcome: '结果', name: '档案名称',
-  matched: '图库命中', size: '尺寸', source: '来源', cover_network: '封面连不上图片主机',
+  checked: t('已检查'), total: t('总数'), scanned: t('已扫描'), identified: t('已识别'),
+  candidates: t('资料结果'), covers: t('封面'), changed: t('已改动'), operation: t('操作'),
+  ok: t('取得'), miss: t('未取得'), kept: t('保留'), planned: t('计划'), done: t('已处理'), added: t('新增'),
+  written: t('已写入'), removed: t('已移除'), exit_code: t('退出码'), issue_count: t('问题'),
+  followups: t('派出后继'), followups_duplicate: t('已在排队'), followups_truncated: t('超上限未派'),
+  followups_depth_exceeded: t('超深度未派'), outcome: t('结果'), name: t('档案名称'),
+  matched: t('图库命中'), size: t('尺寸'), source: t('来源'), cover_network: t('封面连不上图片主机'),
+  stage: t('阶段'), error: t('错误'), previews: t('预览'), probed: t('已探测'),
+  auto_applied: t('自动保存'), auto_rejected: t('自动驳回'), performer_aliases: t('女优别名'),
+  performer_avatars: t('女优头像'), performer_profile_conflicts: t('资料冲突'), performer_profile_failed: t('资料失败'),
 };
 
 /** 把一批任务按 `parent_run_id` 归到各自的父任务下。没有父的那些留在外面。 */
@@ -159,7 +163,7 @@ export function followupDetail(row: TaskRunPayload): string {
   const item = label.startsWith(prefix) ? label.slice(prefix.length) : label === row.task_label ? '' : label;
   const total = row.progress_total || 0;
   const tail = errorHeadline(row.error) || summaryText(row.result_summary)
-    || (isActive(row) && total > 0 ? `${progressText(row.progress_current, total)} 项` : '');
+    || (isActive(row) && total > 0 ? t('{value} 项', { value: progressText(row.progress_current, total) }) : '');
   return [item, tail].filter(Boolean).join(' · ');
 }
 
@@ -167,12 +171,12 @@ export function followupDetail(row: TaskRunPayload): string {
 export function elapsedText(seconds: number | null | undefined): string {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) return '';
   const whole = Math.floor(seconds);
-  if (whole < 60) return `${whole} 秒`;
+  if (whole < 60) return t('{whole} 秒', { whole });
   const minutes = Math.floor(whole / 60);
-  if (minutes < 60) return `${minutes} 分 ${whole % 60} 秒`;
+  if (minutes < 60) return t('{minutes} 分 {value} 秒', { minutes, value: whole % 60 });
   const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours} 小时 ${minutes % 60} 分`;
-  return `${Math.floor(hours / 24).toLocaleString()} 天 ${hours % 24} 小时`;
+  if (hours < 48) return t('{hours} 小时 {value} 分', { hours, value: minutes % 60 });
+  return t('{value} 天 {value2} 小时', { value: Math.floor(hours / 24).toLocaleString(), value2: hours % 24 });
 }
 
 /** 进度读数「已做 / 总数」：服务端偶尔报出超过总数的已做数，按总数封顶。 */
@@ -204,6 +208,9 @@ export function momentText(stamp: string | null | undefined): string {
    英文键和纪元秒。 */
 const SUMMARY_HIDDEN = new Set([
   'blocked_by', 'status', 'run_id', 'request_id', 'started_at', 'completed_at', 'finished_at',
+  // 处理进度的内部簿记：请求的阶段、速度档、剩余时间估算的各项与基准、水位线。进度条与耗时已经说过。
+  'requested_stage', 'speed_mode', 'eta_seconds_min', 'eta_seconds_max', 'eta_kind', 'eta_scope', 'eta_basis',
+  'estimate_file_count', 'estimate_bytes', 'scanned_bytes', 'entity_watermark', 'paused_count',
 ]);
 
 /** 摘要压成一行。只取标量：明细留在各域自己的页面和日志里。 */
@@ -212,6 +219,6 @@ export function summaryText(summary: Record<string, unknown>): string {
     .filter(([key, value]) => !SUMMARY_HIDDEN.has(key)
       && (typeof value === 'number' || typeof value === 'string')
       && String(value) !== '')
-    .map(([key, value]) => `${SUMMARY_LABELS[key] || key} ${typeof value === 'number' ? value.toLocaleString() : value}`)
+    .map(([key, value]) => `${SUMMARY_LABELS[key] || key} ${typeof value === 'number' ? value.toLocaleString() : localizeServer(value)}`)
     .join(' · ');
 }

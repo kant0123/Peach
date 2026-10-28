@@ -16,6 +16,7 @@ import { Select, SelectItem } from '@/components/base/select/select';
 import { ErrorText, Help, SourceMark } from './section';
 import { busyProps } from './busy-props';
 import { CLOUD_LOCATIONS, MEDIA_SOURCE_OPTIONS, type SourceCost } from '../../core/media-sources';
+import { t } from '../../i18n';
 
 /** 「选择文件夹」弹系统对话框去挑，全站用雪碧图的 `folder-search`；`folder-open` 归「打开位置」，
  * Remix Icon 里没有这一枚。 */
@@ -39,18 +40,18 @@ export function MediaReadPolicy({ index, cost, error, onChange }: {
   index: number; cost: SourceCost | ''; error?: string; onChange(cost: SourceCost): void;
 }) {
   return <div data-media-read-policy={index} className="flex w-full flex-col gap-1.5 @lg:w-48">
-    <Select aria-label={`媒体读取策略 ${index + 1}`} placeholder="选择读取策略" isRequired
+    <Select aria-label={t('媒体读取策略 {n}', { n: index + 1 })} placeholder={t('选择读取策略')} isRequired
       validationBehavior="aria" isInvalid={Boolean(error)} selectedKey={cost || null}
       onSelectionChange={(key) => { if (key === 'free' || key === 'metered') onChange(key); }}>
-      <SelectItem id="free">正常读取</SelectItem>
-      <SelectItem id="metered">代理流量保护</SelectItem>
+      <SelectItem id="free">{t('正常读取')}</SelectItem>
+      <SelectItem id="metered">{t('代理流量保护')}</SelectItem>
     </Select>
     {error ? <ErrorText>{error}</ErrorText> : null}
   </div>;
 }
 
 export function MediaReadPolicyHelp() {
-  return <Help>按挂载工具实际配置选择；代理流量保护会限制自动媒体读取。</Help>;
+  return <Help>{t('按挂载工具实际配置选择；代理流量保护会限制自动媒体读取。')}</Help>;
 }
 
 export interface FolderRowValue { path: string; location: string }
@@ -153,13 +154,13 @@ export function FolderRow({ label, path, onPath, error, inputRef, picking, onPic
   return (
     <div data-folder-row className="@container flex flex-col gap-2 rounded-2lg border border-separator-border bg-background-primary-default p-3">
       <div className="flex items-start gap-2">
-        <Input className="min-w-0 flex-1" aria-label={label} placeholder="媒体目录路径"
+        <Input className="min-w-0 flex-1" aria-label={label} placeholder={t('媒体目录路径')}
           value={path} onChange={onPath} ref={attach}
           onBlur={() => requestAnimationFrame(showTail)}
           validationBehavior="aria" isInvalid={Boolean(error)} hint={error || undefined} />
         {status ? <div className="flex h-9 shrink-0 items-center">{status}</div> : null}
-        <IconButton icon={FolderSearchIcon} aria-label="选择文件夹" onClick={onPick} {...busyProps(picking)} />
-        {onRemove ? <Button variant="danger" iconOnly leadingIcon={RiDeleteBinLine} aria-label="移除这个文件夹" onClick={onRemove} /> : null}
+        <IconButton icon={FolderSearchIcon} aria-label={t('选择文件夹')} onClick={onPick} {...busyProps(picking)} />
+        {onRemove ? <Button variant="danger" iconOnly leadingIcon={RiDeleteBinLine} aria-label={t('移除这个文件夹')} onClick={onRemove} /> : null}
       </div>
       <div className="flex flex-wrap items-end gap-2">
         {children}
@@ -177,7 +178,7 @@ export function SourceSelect({ index, value, onChange, options = MEDIA_SOURCES }
   options?: readonly SourceOption[];
 }) {
   return (
-    <Select className="w-full @lg:w-60" aria-label={`媒体来源 ${index + 1}`} selectedKey={value}
+    <Select className="w-full @lg:w-60" aria-label={t('媒体来源 {n}', { n: index + 1 })} selectedKey={value}
       onSelectionChange={(key) => { if (key !== null) onChange(String(key)); }}>
       {options.map(([kind, name]) => (
         <SelectItem key={kind} id={kind} textValue={name}><SourceMark mark={sourceMark(kind)} />{name}</SelectItem>

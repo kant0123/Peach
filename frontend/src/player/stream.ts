@@ -4,10 +4,12 @@
  * 已经没人看的读取不再占着 115 或本地盘。详情与沉浸模式共用这一套（沉浸模式每格一个会话）。 */
 import { api } from '@peach/legacy/core';
 
+import { randomId } from '../random-id';
+import { playbackCaps } from './capabilities';
 import type { PlayerItem, PlayerSource } from './types';
 
 export function newStreamSession(): string {
-  return globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return randomId();
 }
 
 export function directStreamSource(item: PlayerItem, session: string): PlayerSource {
@@ -30,7 +32,9 @@ export async function playableStreamSource(item: PlayerItem, session: string): P
   const proxied = followStreamSource(item);
   if (proxied) return proxied;
   try {
-    const plan = await api(`/api/stream-plan?id=${item.id}&session=${encodeURIComponent(session)}`) as
+    const caps = await playbackCaps();   // 这台设备直接解得了的编码，服务端据此决定要不要转码
+    const capsQuery = caps ? `&caps=${encodeURIComponent(caps)}` : '';
+    const plan = await api(`/api/stream-plan?id=${item.id}&session=${encodeURIComponent(session)}${capsQuery}`) as
       { protocol?: string; src?: string; mime_type?: string } | null;
     if (plan?.src) return { src: plan.src, type: plan.mime_type || (plan.protocol === 'hls' ? 'application/vnd.apple.mpegurl' : 'video/mp4') };
   } catch { /* 取不到计划就直读 */ }

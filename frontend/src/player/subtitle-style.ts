@@ -1,14 +1,15 @@
+import { t } from '../i18n';
 /* 字幕外观持久化与 TextTrack 时间轴显示。 */
 export const CAPTION_OPTIONS = {
-  font: { label: '字体', values: [['sans', '无衬线'], ['mono', '等宽无衬线'], ['serif', '衬线'], ['mono-serif', '等宽衬线'], ['casual', '休闲'], ['cursive', '手写'], ['small-caps', '小型大写字母']] },
-  size: { label: '字号', values: ['50', '75', '100', '150', '200', '300', '400'].map(value => [value, `${value}%`]) },
-  color: { label: '文字颜色', values: [['white', '白色'], ['yellow', '黄色'], ['green', '绿色'], ['cyan', '青色'], ['blue', '蓝色'], ['magenta', '品红'], ['red', '红色'], ['black', '黑色']] },
-  opacity: { label: '文字不透明度', values: ['25', '50', '75', '100'].map(value => [value, `${value}%`]) },
-  background: { label: '背景颜色', values: [['black', '黑色'], ['white', '白色'], ['red', '红色'], ['green', '绿色'], ['blue', '蓝色'], ['yellow', '黄色'], ['magenta', '品红'], ['cyan', '青色']] },
-  backgroundOpacity: { label: '背景不透明度', values: ['0', '25', '50', '75', '100'].map(value => [value, `${value}%`]) },
-  window: { label: '窗口颜色', values: [['black', '黑色'], ['white', '白色'], ['red', '红色'], ['green', '绿色'], ['blue', '蓝色'], ['yellow', '黄色'], ['magenta', '品红'], ['cyan', '青色']] },
-  windowOpacity: { label: '窗口不透明度', values: ['0', '25', '50', '75', '100'].map(value => [value, `${value}%`]) },
-  edge: { label: '字符边缘样式', values: [['none', '无'], ['raised', '凸起'], ['depressed', '凹陷'], ['outline', '描边'], ['shadow', '阴影']] },
+  font: { label: t('字体'), values: [['sans', t('无衬线')], ['mono', t('等宽无衬线')], ['serif', t('衬线')], ['mono-serif', t('等宽衬线')], ['casual', t('休闲')], ['cursive', t('手写')], ['small-caps', t('小型大写字母')]] },
+  size: { label: t('字号'), values: ['50', '75', '100', '150', '200', '300', '400'].map(value => [value, `${value}%`]) },
+  color: { label: t('文字颜色'), values: [['white', t('白色')], ['yellow', t('黄色')], ['green', t('绿色')], ['cyan', t('青色')], ['blue', t('蓝色')], ['magenta', t('品红')], ['red', t('红色')], ['black', t('黑色')]] },
+  opacity: { label: t('文字不透明度'), values: ['25', '50', '75', '100'].map(value => [value, `${value}%`]) },
+  background: { label: t('背景颜色'), values: [['black', t('黑色')], ['white', t('白色')], ['red', t('红色')], ['green', t('绿色')], ['blue', t('蓝色')], ['yellow', t('黄色')], ['magenta', t('品红')], ['cyan', t('青色')]] },
+  backgroundOpacity: { label: t('背景不透明度'), values: ['0', '25', '50', '75', '100'].map(value => [value, `${value}%`]) },
+  window: { label: t('窗口颜色'), values: [['black', t('黑色')], ['white', t('白色')], ['red', t('红色')], ['green', t('绿色')], ['blue', t('蓝色')], ['yellow', t('黄色')], ['magenta', t('品红')], ['cyan', t('青色')]] },
+  windowOpacity: { label: t('窗口不透明度'), values: ['0', '25', '50', '75', '100'].map(value => [value, `${value}%`]) },
+  edge: { label: t('字符边缘样式'), values: [['none', t('无')], ['raised', t('凸起')], ['depressed', t('凹陷')], ['outline', t('描边')], ['shadow', t('阴影')]] },
 } as const;
 export type CaptionKey = keyof typeof CAPTION_OPTIONS;
 export type CaptionStyle = Record<CaptionKey, string>;

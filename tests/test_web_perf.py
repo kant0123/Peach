@@ -272,6 +272,20 @@ class PageAssetDeliveryTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/")
         self.assertEqual(response.headers["cache-control"], "no-store")
 
+    async def test_every_response_carries_the_security_headers(self):
+        """响应头由 ASGI 中间件补；页面、API 与错误响应都要有，供应商脚本单独长缓存。"""
+        vendor = Path(self.tmp.name).resolve() / "vendor"
+        vendor.mkdir()
+        (vendor / "lib.js").write_text("export const lib = 1;", encoding="utf-8")
+        for path in ("/", "/healthz", "/no-such-page", "/vendor/lib.js"):
+            response = await self.client.get(path)
+            self.assertEqual(response.headers["x-content-type-options"], "nosniff", path)
+            self.assertEqual(response.headers["referrer-policy"], "same-origin", path)
+            self.assertIn("noindex", response.headers["x-robots-tag"], path)
+        vendored = await self.client.get("/vendor/lib.js")
+        self.assertEqual(vendored.headers["cache-control"], "public, max-age=31536000, immutable")
+        self.assertEqual((await self.client.get("/healthz")).headers["cache-control"], "no-store")
+
     async def test_the_real_app_compresses_its_scripts_and_styles(self):
         for path in ("/dist/peach-app.js", "/dist/peach-app.css", "/app.css"):
             response = await self.client.get(path, headers={"accept-encoding": "gzip"})

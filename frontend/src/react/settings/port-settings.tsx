@@ -10,6 +10,7 @@ import { Note } from '../components/note';
 import { RESTART_REDIRECT_MS } from '../restart-redirect';
 import { Footer, Section, Stack } from './section';
 import { busyProps, useAction } from './use-action';
+import { t } from '../../i18n';
 
 export function PortSettings({ data, receipt }: ConfigurationGroupProps) {
   const [port, setPort] = useState(String(data.port));
@@ -28,23 +29,23 @@ export function PortSettings({ data, receipt }: ConfigurationGroupProps) {
       revision: data.revision, media_dirs: data.media_dirs,
       ...(data.media_sources ? { media_sources: data.media_sources } : {}),
       port, scan_now: false,
-    }, 'POST', signal), (result) => { setSaved(result); receipt('已保存配置'); }, (cause) => {
+    }, 'POST', signal), (result) => { setSaved(result); receipt(t('已保存配置')); }, (cause) => {
       const fields = cause instanceof ApiError && cause.status === 400
         ? (cause.body as { errors?: { port?: string } } | null)?.errors : null;
       if (fields?.port) setFieldError(fields.port);
       else action.setError(errorMessage(cause));
     });
   };
-  if (saved) return <Section title="本机访问端口"><Stack>
-    <Note tone="success" title="配置已保存">Peach 正在重新启动。
-      <LinkButton href={saved.url} size="small">进入馆藏</LinkButton>
+  if (saved) return <Section title={t('本机访问端口')}><Stack>
+    <Note tone="success" title={t('配置已保存')}>{t('Peach 正在重新启动。')}
+      <LinkButton href={saved.url} size="small">{t('进入馆藏')}</LinkButton>
     </Note>
   </Stack></Section>;
-  return <Section title="本机访问端口" onSubmit={submit}><Stack>
-    <Input id="configPort" label="端口" inputMode="numeric" value={port} onChange={setPort}
+  return <Section title={t('本机访问端口')} onSubmit={submit}><Stack>
+    <Input id="configPort" label={t('端口')} inputMode="numeric" value={port} onChange={setPort}
       validationBehavior="aria" isInvalid={Boolean(fieldError)} hint={fieldError || undefined} />
-    {action.error ? <Note tone="error" title="没有保存">{action.error}</Note> : null}
-  </Stack><Footer status="保存后 Peach 会重启，并跳转到新地址。">
-    <Button type="submit" {...busyProps(action.busy === 'save')}>保存配置</Button>
+    {action.error ? <Note tone="error" title={t('没有保存')}>{action.error}</Note> : null}
+  </Stack><Footer status={t('保存后 Peach 会重启，并跳转到新地址。')}>
+    <Button type="submit" {...busyProps(action.busy === 'save')}>{t('保存配置')}</Button>
   </Footer></Section>;
 }

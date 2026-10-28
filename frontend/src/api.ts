@@ -8,6 +8,7 @@
 /** 服务端明确回了非 2xx。`status` 留给调用方区分 401／409／404 这类需要不同处置的情况。 */
 import { requestErrorMessage } from './core/request-error';
 import { registerResponseEntities } from './core/entity-links';
+import { localizeServer, t } from './i18n';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -53,10 +54,10 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
     // 失败响应不一定是 JSON（例如 401 的登录页），下面用状态码兜底。
   }
   if (!response.ok) {
-    throw new ApiError(reasonOf(payload) || `请求失败（${response.status}）`, response.status);
+    throw new ApiError(reasonOf(payload) || t('请求失败（{status}）', { status: response.status }), response.status);
   }
   registerResponseEntities(path, payload);
-  return payload as T;
+  return localizeServer(payload) as T;
 }
 
 /** 带 JSON 请求体的写操作。失败时原响应体挂在 `ApiError.body` 上，字段级原因由调用方取。 */
@@ -74,7 +75,7 @@ export async function apiSend<T>(path: string, body: unknown, method = 'POST', s
     // 同上：失败响应不一定是 JSON。
   }
   if (!response.ok) {
-    throw new ApiError(reasonOf(payload) || `请求失败（${response.status}）`, response.status, payload);
+    throw new ApiError(localizeServer(reasonOf(payload)) || t('请求失败（{status}）', { status: response.status }), response.status, payload);
   }
-  return payload as T;
+  return localizeServer(payload) as T;
 }

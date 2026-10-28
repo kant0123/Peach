@@ -189,7 +189,7 @@ body .card:focus-within{background:var(--hover);box-shadow:0 0 0 8px var(--hover
 .mav:hover{box-shadow:0 0 0 2px var(--ink-2)}
 .mav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .mav .ini,.mav [data-source-initial]{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-size:var(--fs-sm);color:var(--muted);font-family:Bahnschrift,"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif}
+  font-size:var(--fs-sm);color:var(--muted);font-family:Bahnschrift,var(--cjk-ui),sans-serif}
 /* 共演头像最多五枚，常态紧叠；上、左、下三边给放大与焦点环留出空间，头像本身仍与单人
    头像站在同一条左对齐线上。 */
 .mavstack{display:flex;flex:none;max-width:calc(100% - 48px);margin:-4px -2px -2px;padding:6px 2px 2px 5px}

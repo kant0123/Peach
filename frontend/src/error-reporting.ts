@@ -1,3 +1,4 @@
+import { t } from './i18n';
 /* 浏览器异常只记录到当前 Peach 主机。失败不再生成新的错误请求。 */
 let installed = false;
 
@@ -28,5 +29,5 @@ export function installErrorReporting(): void {
     }).catch(() => {});
   };
   window.addEventListener('error', event => send('error', event.error, event.message, event));
-  window.addEventListener('unhandledrejection', event => send('unhandledrejection', event.reason, 'Promise 未处理的异常'));
+  window.addEventListener('unhandledrejection', event => send('unhandledrejection', event.reason, t('Promise 未处理的异常')));
 }

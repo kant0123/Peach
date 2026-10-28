@@ -69,7 +69,7 @@
 /* 计数徽标同首页标签药丸上那一枚：平时淡一档，悬停与当前项跟着字一起提亮。 */
 .peach-react [data-junk-filters] [data-count-badge] {
   color: color-mix(in srgb, var(--glass-text) 55%, transparent);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -127,7 +127,7 @@
   gap: 7px;
   min-width: 0;
   color: var(--muted);
-  font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
+  font-family: "Cascadia Mono", Consolas, ui-monospace, var(--cjk-ui), monospace;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }

@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 /* 界面音效：按钮、开关、菜单、弹层和操作回执各配一声轻响。
 
    声音全部由 Web Audio 当场合成，不带音频文件，也不多一个网络请求。配方取自
@@ -126,7 +127,7 @@ export function uiSoundsEnabled():boolean{return enabled}
 /** 响一声；关着、浏览器没有 Web Audio 时什么都不做并返回 false。没有这种音效就抛错。 */
 export function playUiSound(name:string):boolean{
   const recipe=RECIPES[name];
-  if(!recipe)throw new Error(`没有「${name}」这种界面音效`);
+  if(!recipe)throw new Error(t('没有「{name}」这种界面音效', { name }));
   if(!enabled)return false;
   const ctx=context();
   if(!ctx)return false;

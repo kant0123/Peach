@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 import { CHART_CARD, ChartEmpty, ChartHead } from './chart-card';
 import { TIP_SURFACE, TIP_SWATCH, TipRow } from './chart-tip';
 import { dayCalendar, hourGrid, WEEKDAYS, type ActivityCounts, type HeatCell } from './heat';
+import { t } from '../../i18n';
 
 const SIZE = 14;
 const STEP = 17;
@@ -138,7 +139,7 @@ export function ActivityHeat(
     <div className="inline-grid w-full items-start gap-5 lg:grid-cols-2">
       <HeatCard title={title} words={words} tone={tone}
         cells={hours.cells} total={hours.total} columns={24} rows={7} axis={HOUR_AXIS}
-        footer={<><span>星期 × 小时</span><span>{activity?.timezone || 'UTC+08:00'}</span></>} />
+        footer={<><span>{t('星期 × 小时')}</span><span>{activity?.timezone || 'UTC+08:00'}</span></>} />
       <HeatCard title={dailyTitle} words={words} tone={tone}
         cells={days.cells} total={days.total} columns={13} rows={7}
         footer={<><span>{days.start}</span><span>{days.end}</span></>} />

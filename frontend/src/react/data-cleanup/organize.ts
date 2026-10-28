@@ -8,6 +8,7 @@ import { apiGet, apiSend } from '../../api';
 import { queryClient } from '../query';
 /* 模板跟着数据库走（`SYNCED_SETTING_KEYS` 里的 `organizeTemplates`），写的是设置面板同一个端点。 */
 import { SETTINGS_URL } from '../settings-panel/settings-data';
+import { t } from '../../i18n';
 
 export const ORGANIZE_URL = '/api/organize';
 export const ORGANIZE_PREVIEW_URL = '/api/organize/preview';
@@ -99,9 +100,9 @@ const count = (value: number | undefined) => Number(value || 0).toLocaleString()
 export function planSummary(plan: OrganizePlan): string {
   const skipped = Object.entries(plan.reasons || {}).sort((a, b) => b[1] - a[1])
     .map(([reason, value]) => `${reason} ${count(value)}`).join(' · ');
-  if (!Number(plan.counts?.change || 0)) return `没有要改的文件。${skipped ? `跳过：${skipped}。` : ''}`;
-  return `${count(plan.counts.change)} 个文件会改名或移动，${count(plan.counts.unchanged)} 个已经就是目标名字`
-    + `${skipped ? `；跳过 ${skipped}` : ''}。`;
+  if (!Number(plan.counts?.change || 0)) return t('没有要改的文件。{value}', { value: skipped ? t('跳过：{skipped}。', { skipped }) : '' });
+  return t('{value} 个文件会改名或移动，{value2} 个已经就是目标名字', { value: count(plan.counts.change), value2: count(plan.counts.unchanged) })
+    + `${skipped ? t('；跳过 {skipped}', { skipped }) : ''}。`;
 }
 
 /** 跑完的那一趟怎么说。回滚那一趟有 `restored`。 */
@@ -110,7 +111,7 @@ export function organizeOutcome(job: OrganizeJob): { text: string; failed: numbe
   const failed = Number(job.failed || 0);
   const done = Number(rollback ? job.restored : job.moved || 0);
   const text = rollback
-    ? `已退回 ${count(done)} 个文件${failed ? `，${count(failed)} 行未能退回` : ''}。`
-    : `已整理 ${count(done)} 个文件${failed ? `，${count(failed)} 行未能处理` : ''}。`;
+    ? t('已退回 {value} 个文件{value2}。', { value: count(done), value2: failed ? t('，{value} 行未能退回', { value: count(failed) }) : '' })
+    : t('已整理 {value} 个文件{value2}。', { value: count(done), value2: failed ? t('，{value} 行未能处理', { value: count(failed) }) : '' });
   return { text, failed, rollback };
 }

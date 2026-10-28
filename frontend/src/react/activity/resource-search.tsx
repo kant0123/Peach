@@ -12,6 +12,7 @@ import { coverUrl } from '@peach/card-art';
 import type { MediaPage } from '../catalog-grid/types';
 import type { DownloadPrefill } from './cloud-download-dialog';
 import { sameWorkCode } from './work-code';
+import { t } from '../../i18n';
 
 interface Candidate {
   id: string; uri: string; name: string; size: number; seeders: number; origins: string[];
@@ -24,8 +25,8 @@ function SearchSpinner({ className }: { className?: string }) {
 }
 
 function preferredGoal(reason: string | undefined): string {
-  if (['中字', '中文字幕'].includes(reason?.trim() ?? '')) return 'chinese';
-  if (['无码', '无码破解'].includes(reason?.trim() ?? '')) return 'uncensored';
+  if ([t('中字'), t('中文字幕')].includes(reason?.trim() ?? '')) return 'chinese';
+  if ([t('无码'), t('无码破解')].includes(reason?.trim() ?? '')) return 'uncensored';
   return 'quality';
 }
 
@@ -70,39 +71,39 @@ export function ResourceSearch({ initialCode, reason, choose, onSearch, onWork }
     }
   };
   return (
-    <section aria-label="查找资源" aria-busy={Boolean(action.busy)} className="flex min-w-0 flex-col gap-4">
-      {reason ? <Help>版本目标：{reason}。可在下方调整搜索优先项；完整度与水印需要逐条复核。</Help> : null}
-      <Input label="按番号查找资源" value={code} maxLength={80} placeholder="输入番号，按回车搜索" enterKeyHint="search"
+    <section aria-label={t('查找资源')} aria-busy={Boolean(action.busy)} className="flex min-w-0 flex-col gap-4">
+      {reason ? <Help>{t('版本目标：{reason}。可在下方调整搜索优先项；完整度与水印需要逐条复核。', { reason })}</Help> : null}
+      <Input label={t('按番号查找资源')} value={code} maxLength={80} placeholder={t('输入番号，按回车搜索')} enterKeyHint="search"
         leadingIcon={action.busy ? SearchSpinner : RiSearchLine}
         isReadOnly={Boolean(action.busy)} aria-busy={Boolean(action.busy)} onChange={setCode} onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); search() }
         }} />
       <div className="flex flex-col gap-1">
-        <FieldLabel>优先寻找</FieldLabel>
-        <Select aria-label="优先寻找" selectedKey={goal} isDisabled={Boolean(action.busy)}
+        <FieldLabel>{t('优先寻找')}</FieldLabel>
+        <Select aria-label={t('优先寻找')} selectedKey={goal} isDisabled={Boolean(action.busy)}
           onSelectionChange={(key) => { if (key !== null) setGoal(String(key)) }}>
-          <SelectItem id="quality">高清</SelectItem><SelectItem id="chinese">中字</SelectItem>
-          <SelectItem id="uncensored">无码</SelectItem>
+          <SelectItem id="quality">{t('高清')}</SelectItem><SelectItem id="chinese">{t('中字')}</SelectItem>
+          <SelectItem id="uncensored">{t('无码')}</SelectItem>
         </Select>
       </div>
       <div className="flex gap-3 max-sm:flex-col">
-        <Input label="最小体积（GiB）" inputMode="decimal" value={min} onChange={setMin} />
-        <Input label="最大体积（GiB）" inputMode="decimal" value={max} onChange={setMax} />
+        <Input label={t('最小体积（GiB）')} inputMode="decimal" value={min} onChange={setMin} />
+        <Input label={t('最大体积（GiB）')} inputMode="decimal" value={max} onChange={setMax} />
       </div>
-      {action.busy ? <Help role="status">正在搜索资源</Help> : null}
+      {action.busy ? <Help role="status">{t('正在搜索资源')}</Help> : null}
       {action.error ? <ErrorText>{action.error}</ErrorText> : null}
       {result?.error ? <Help role="status">{result.error}</Help> : null}
-      {result?.state === 'ready' && !result.items.length ? <Help role="status">没有符合条件的资源。</Help> : null}
+      {result?.state === 'ready' && !result.items.length ? <Help role="status">{t('没有符合条件的资源。')}</Help> : null}
       {result?.warnings.map((warning) => <Help key={warning}>{warning}</Help>)}
       {result?.items.length ? <ul className="flex min-w-0 flex-col gap-4">
         {result.items.map((item) => <li key={item.id} className="flex min-w-0 flex-col gap-2 border-t border-separator-border pt-4">
           <p className="break-words text-body-2-medium text-text-primary">{item.name}</p>
-          <Help>{[item.size > 0 ? `${(item.size / 1024 ** 3).toFixed(2)} GiB` : '体积未取得', item.seeders >= 0 ? `${item.seeders} 个做种` : '做种未取得',
-            item.resolution ? `${item.resolution}p` : '', item.codec, item.chinese ? '中字' : '',
-            item.uncensored ? '无码' : '', item.origins.join('、')].filter(Boolean).join(' · ')}</Help>
+          <Help>{[item.size > 0 ? `${(item.size / 1024 ** 3).toFixed(2)} GiB` : t('体积未取得'), item.seeders >= 0 ? t('{seeders} 个做种', { seeders: item.seeders }) : t('做种未取得'),
+            item.resolution ? `${item.resolution}p` : '', item.codec, item.chinese ? t('中字') : '',
+            item.uncensored ? t('无码') : '', item.origins.join('、')].filter(Boolean).join(' · ')}</Help>
           <div><Button type="button" variant="secondary" onClick={() => {
             choose(item.uri, searched); setSelected(item.id);
-          }}>{selected === item.id ? '已填入磁力' : '选用此资源'}</Button></div>
+          }}>{selected === item.id ? t('已填入磁力') : t('选用此资源')}</Button></div>
         </li>)}
       </ul> : null}
     </section>

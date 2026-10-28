@@ -6,6 +6,7 @@
 import { apiGet } from '../../api';
 import { queryClient } from '../query';
 import { CUSTOM_SOURCES_KEY, fetchCustomSources } from './custom-source-data';
+import { t } from '../../i18n';
 
 export const SCRAPING_URL = '/api/scraping';
 export const SCRAPING_SETTINGS_URL = '/api/scraping/settings';
@@ -102,9 +103,9 @@ export async function prefetchScraping(signal: AbortSignal): Promise<void> {
  *
  * 结果里的 `label` 是这一跳查的是什么；只有一跳时它就是来源页面本身，句子里不必再说一遍。 */
 export function checkText(check: Check, sourceLabel: string): string {
-  return `${sourceLabel}${check.label === '来源页面' ? '' : ' 高清图片'}`
-    + `：${check.ok ? '可连接' : '不能连接'}`
+  return `${sourceLabel}${check.label === '来源页面' ? '' : ` ${t('高清图片')}`}`
+    + `：${check.ok ? t('可连接') : t('不能连接')}`
     + (check.width ? ` · ${check.width} × ${check.height}` : '')
-    + (check.elapsed_s !== undefined ? ` · ${check.elapsed_s.toFixed(2)} 秒` : '')
+    + (check.elapsed_s !== undefined ? t(' · {value} 秒', { value: check.elapsed_s.toFixed(2) }) : '')
     + (check.message ? `。${check.message}` : '');
 }

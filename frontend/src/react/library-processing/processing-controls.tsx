@@ -9,6 +9,7 @@ import {
   LIBRARY_PROCESSING_KEY, LIBRARY_PROCESSING_URL, processingActive,
   type LibraryProcessingData, type ProcessingControlCommand,
 } from './library-processing';
+import { t } from '../../i18n';
 
 /** 控制只作用于快照里的任务号；状态由服务端确认后交给所有入口。 */
 export function ProcessingControls({ state, disabled = false }: {
@@ -16,7 +17,7 @@ export function ProcessingControls({ state, disabled = false }: {
 }) {
   const action = useAction();
   const active = processingActive(state);
-  const controlLabel = state.status === 'paused' ? '继续' : state.status === 'pausing' ? '正在暂停' : '暂停';
+  const controlLabel = state.status === 'paused' ? t('继续') : state.status === 'pausing' ? t('正在暂停') : t('暂停');
   const change = (command: ProcessingControlCommand) => {
     if (disabled || action.busy) return;
     void action.run(command.action, signal =>
