@@ -445,13 +445,20 @@ class LeftoverProcessTests(_WorktreeCase):
     """找出工作树落点下还活着的进程：谁占着删不掉的目录、机器变卡时谁是自己的残留。"""
 
     def sleeper(self, cwd: Path) -> subprocess.Popen:
+        """在 cwd 里起一个挂在 stdin 上的解释器；`child.worker` 是解释器自己报的 PID。
+
+        uv 的 venv `python.exe` 是启动器：它把自己的当前目录挪到别处，再起真正的解释器
+        当子进程。占着 cwd 的是那个子进程，所以要的是它的 PID，不是 Popen 拿到的启动器。
+        """
         cwd.mkdir(parents=True, exist_ok=True)
-        child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"],
-                                 cwd=cwd, stdin=subprocess.PIPE)
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import os, sys; print(os.getpid(), flush=True); sys.stdin.read()"],
+            cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        child.worker = int(child.stdout.readline())
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             rows = processes_under([cwd])
-            if any(row["pid"] == child.pid for row in rows):
+            if any(row["pid"] == child.worker for row in rows):
                 break
             time.sleep(0.1)
         return child
@@ -466,7 +473,7 @@ class LeftoverProcessTests(_WorktreeCase):
             report = agent_worktree.processes(self.repo)
         finally:
             self.stop(child)
-        row = next(row for row in report["processes"] if row["pid"] == child.pid)
+        row = next(row for row in report["processes"] if row["pid"] == child.worker)
         self.assertFalse(row["orphan"], "父进程（测试本身）还在")
         self.assertFalse(row["caller"])
         self.assertGreaterEqual(row["age_minutes"], 0)
@@ -479,8 +486,8 @@ class LeftoverProcessTests(_WorktreeCase):
             rows = processes_under([self.root / "elsewhere", Path(os.getcwd())])
         finally:
             self.stop(child)
-        self.assertIn(child.pid, [row["pid"] for row in rows])
-        self.assertNotIn(child.pid, [row["pid"] for row in processes_under([self.repo])])
+        self.assertIn(child.worker, [row["pid"] for row in rows])
+        self.assertNotIn(child.worker, [row["pid"] for row in processes_under([self.repo])])
         mine = [row for row in rows if row["pid"] == os.getpid()]
         self.assertEqual([row["caller"] for row in mine], [True], "调用者自己这条链要标出来")
 
@@ -494,7 +501,7 @@ class LeftoverProcessTests(_WorktreeCase):
         finally:
             self.stop(child)
         self.assertEqual([row["path"] for row in report["residue"]], [str(held)])
-        self.assertIn(child.pid, [row["pid"] for row in report["residue"][0]["holders"]])
+        self.assertIn(child.worker, [row["pid"] for row in report["residue"][0]["holders"]])
 
     def test_without_psutil_the_scan_says_it_was_not_obtained(self):
         with mock.patch.dict(sys.modules, {"psutil": None}):
