@@ -43,6 +43,12 @@ export interface LibraryProcessingData {
   scanned_bytes?: number;
   /** 本趟扫描前账本里还没有的文件数。 */
   added?: number;
+  /** 本趟范围：`changed` 只处理有变化的，`full` 全部重新检查。 */
+  scope?: 'changed' | 'full';
+  /** 差分扫描里修改时间没变、没有重新列出的文件夹数。 */
+  unchanged_directories?: number;
+  /** 差分同步里输入没变、跳过的影片数。 */
+  unchanged_videos?: number;
   identified?: number;
   candidates?: number;
   auto_applied?: number;
@@ -74,8 +80,16 @@ export interface LibraryProcessingData {
 
 /** 一次写操作的请求体：指定处理阶段与影片，或者按任务号重试失败项。 */
 export type ProcessingSpeed = 'low' | 'standard' | 'high';
+/** 一趟同步可选的步骤：扫描文件、检查配套文件、媒体属性与预览、外部资料与封面。 */
+export type SyncStep = 'sources' | 'local' | 'media' | 'collect';
 export interface LibraryProcessingCommand {
   stage?: 'scan' | 'collect' | 'previews' | 'metadata';
+  /** 给出时取代 `stage`。 */
+  steps?: SyncStep[];
+  /** `changed` 只处理上次之后有变化的文件夹与影片；缺省为 `full`。 */
+  scope?: 'changed' | 'full';
+  /** 差分范围里是否重试文件没变的上次失败项。 */
+  retry_failed?: boolean;
   asset_ids?: number[];
   job_id?: string;
   retry?: number[];
@@ -174,7 +188,8 @@ export function currentLine(state: LibraryProcessingData): string {
 export function processingLine(state: LibraryProcessingData): string {
   const count = state.total ? `${progressText(state.checked, state.total)} 项`
     : state.current_action === 'scanning_files' || state.stage === '扫描文件'
-      ? `已检查 ${(state.scanned || 0).toLocaleString()} 个文件，新增 ${(state.added || 0).toLocaleString()} 个` : '';
+      ? `已检查 ${(state.scanned || 0).toLocaleString()} 个文件，新增 ${(state.added || 0).toLocaleString()} 个`
+        + (state.unchanged_directories ? `，跳过 ${state.unchanged_directories.toLocaleString()} 个未变化的文件夹` : '') : '';
   return currentLine(state) + (count ? ` · ${count}` : '');
 }
 

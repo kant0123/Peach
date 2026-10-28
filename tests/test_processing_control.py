@@ -518,14 +518,14 @@ class ProcessingControlTests(unittest.TestCase):
         def scan(*_args, **kwargs):
             kwargs['progress'](1, 10, 1)
             kwargs['progress'](2, 30, 1)
-            return SimpleNamespace(files=2, total_bytes=30, new_ids=[7], added=1)
+            return SimpleNamespace(files=2, total_bytes=30, new_ids=[7], added=1, unchanged_directories=0)
         with patch('peach.library_processing.scan_location', side_effect=scan), \
                 patch('peach.library_processing._online_source_root', return_value=self.root), \
                 patch('peach.library_processing._ffprobe_path', return_value=None), \
                 patch('peach.library_processing.probe_unmeasured', return_value=0), \
                 patch('peach.library_processing.reattach_in'):
             result = _scan_sources(config, self.db, locations=config.locations, asset_ids=None,
-                                   stage='scan', guard=Mock(), update=lambda **values: reports.append(values),
+                                   steps={'sources'}, guard=Mock(), update=lambda **values: reports.append(values),
                                    issue=lambda *_args, **_kwargs: None)
         discovering = [row for row in reports if row.get('current_action') == 'scanning_files']
         self.assertEqual([row['scanned'] for row in discovering], [1, 2, 3, 4])

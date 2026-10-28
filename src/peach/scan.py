@@ -54,6 +54,8 @@ ARCHIVE = {".zip", ".rar", ".7z", ".tar", ".gz"}
 
 #: 每攒够这么多行落一次盘，并报一行进度。
 BATCH_SIZE = 2000
+#: 目录之间保存断点的最短间隔（秒）。
+CHECKPOINT_SECONDS = 1.0
 
 #: Kodi／Jellyfin 的影片图片名（单写或挂在片名后面，如 `ABC-123-fanart.jpg`）。
 #: 只在同目录有视频时算附属：没有正片的目录里，`cover.jpg` 是图集自己的封面。
@@ -334,6 +336,8 @@ class ScanResult:
     acquired: int = 0
     #: 本次扫描前账本里还没有的文件数。
     added: int = 0
+    #: 差分扫描时修改时间没变、没有重新列出的目录数。
+    unchanged_directories: int = 0
 
     def summary(self) -> str:
         return (f"✓ {self.location}: {self.files:,} 文件 / "
@@ -342,17 +346,120 @@ class ScanResult:
                 f"字幕 {self.subtitles:,} 条（孤立 {self.orphan_subtitles:,} 条）")
 
 
-def _walk(top: Path, pending: list[str] | None = None):
-    """自顶向下遍历，每个目录给出它里面的非目录条目（`os.DirEntry`）。
+@dataclass(frozen=True)
+class DirectoryMark:
+    """一个目录上次列出时的修改时间、子目录和是否含视频。"""
+    mtime_ns: int
+    subdirectories: tuple[str, ...]
+    has_videos: bool
 
-    与 `os.walk` 的差别只在一处：条目的大小与时间从 `DirEntry.stat()` 拿。Windows 的目录
+
+class DirectoryCache:
+    """按本机目录记住上次列出的结果，差分扫描用目录修改时间判断要不要重新列。
+
+    目录里新增、删除或改名条目都会改它的修改时间；文件原地改写内容不会，那种变化
+    留给完整扫描。缓存是可重建的派生数据，放在状态目录，不进账本。
+    """
+
+    def __init__(self, path: str | os.PathLike[str]):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._connection = sqlite3.connect(self.path, timeout=30)
+        self._connection.execute(
+            "CREATE TABLE IF NOT EXISTS directory(path TEXT PRIMARY KEY, mtime_ns INTEGER NOT NULL,"
+            " subdirectories TEXT NOT NULL, has_videos INTEGER NOT NULL)")
+        self._marks = {path: DirectoryMark(mtime, tuple(json.loads(children)), bool(videos))
+                       for path, mtime, children, videos in self._connection.execute(
+                           "SELECT path,mtime_ns,subdirectories,has_videos FROM directory")}
+        self._dirty: dict[str, DirectoryMark] = {}
+
+    def get(self, directory: str) -> DirectoryMark | None:
+        return self._marks.get(directory)
+
+    def put(self, directory: str, mark: DirectoryMark) -> None:
+        self._marks[directory] = self._dirty[directory] = mark
+
+    def flush(self) -> None:
+        if not self._dirty:
+            return
+        with self._connection:
+            self._connection.executemany(
+                "INSERT INTO directory(path,mtime_ns,subdirectories,has_videos) VALUES(?,?,?,?)"
+                " ON CONFLICT(path) DO UPDATE SET mtime_ns=excluded.mtime_ns,"
+                " subdirectories=excluded.subdirectories, has_videos=excluded.has_videos",
+                [(path, mark.mtime_ns, json.dumps(mark.subdirectories, ensure_ascii=False), int(mark.has_videos))
+                 for path, mark in self._dirty.items()])
+        self._dirty.clear()
+
+    def close(self) -> None:
+        self.flush()
+        self._connection.close()
+
+
+class _NoDirectoryCache:
+    """不记目录的扫描（命令行单根扫描、测试）用的空缓存。"""
+
+    def get(self, directory: str) -> None:
+        return None
+
+    def put(self, directory: str, mark: DirectoryMark) -> None:
+        pass
+
+    def flush(self) -> None:
+        pass
+
+
+_NO_DIRECTORY_CACHE = _NoDirectoryCache()
+
+
+def _finish_scan(connection, location: str, now: str, listed: set[str], *, only_listed: bool):
+    """一轮登记的收尾：本轮新建的行、接回的个人记录、命中的「想要」、文件夹规则与消失数。
+
+    `listed` 是这一轮真正列过的目录。差分扫描（`only_listed`）没列的目录里的行
+    `last_seen` 本来就落后，不算消失；完整扫描按整个来源数。
+    """
+    # 只有 INSERT 那一支写 `first_seen`，等于本次时刻的就是这一轮新建的行。
+    new_ids = tuple(row[0] for row in connection.execute(
+        "SELECT id FROM asset WHERE location=? AND first_seen=? ORDER BY id", (location, now)))
+    reattached = len(record_rehome.reattach(connection, new_ids, now=now))
+    acquired = len(wants.reconcile(connection, new_ids))
+    folder_rules.apply_new(connection, new_ids)
+    connection.commit()
+    if not only_listed:
+        gone = connection.execute(
+            "SELECT COUNT(*) FROM asset WHERE location=? AND last_seen<?", (location, now)).fetchone()[0]
+        return new_ids, reattached, acquired, gone
+    # 账本路径一律是 Windows 形态，按最后一个反斜杠切出父目录，几十万行不必逐个建路径对象。
+    behind = connection.execute("SELECT path FROM asset WHERE location=? AND last_seen<?",
+                                (location, now)) if listed else ()
+    return new_ids, reattached, acquired, sum(path.rpartition('\\')[0] in listed for (path,) in behind)
+
+
+def _walk(top: Path, pending: list[str] | None = None, *, cache: DirectoryCache | None = None,
+          reuse: bool = False):
+    """自顶向下遍历，每个目录给出 `(目录, 条目, 修改时间, 子目录)`。
+
+    条目是非目录的 `os.DirEntry`，大小与时间从 `DirEntry.stat()` 拿。Windows 的目录
     列表自带这两项，不必再对每个文件发一次 `os.stat`——网盘挂载上那一次就是一趟往返，
     几万个文件就是几万趟。读不了的目录跳过；符号链接指向的目录列出但不进入。
+
+    `reuse` 为真时，修改时间与 `cache` 记录一致的目录不再列出：条目给 `None`，子目录
+    沿用记录继续往下走。
     """
     stack = pending if pending is not None else [os.fspath(top)]
     while stack:
         checkpoint('scan')
         directory = stack.pop()
+        try:
+            mtime_ns = os.stat(directory).st_mtime_ns
+        except OSError:
+            continue
+        known = cache.get(directory) if cache is not None and reuse else None
+        if known is not None and known.mtime_ns == mtime_ns:
+            queued = set(stack)
+            stack.extend(path for path in reversed(known.subdirectories) if path not in queued)
+            yield directory, None, mtime_ns, known.subdirectories
+            continue
         try:
             with os.scandir(directory) as scanner:
                 entries = list(scanner)
@@ -374,9 +481,10 @@ def _walk(top: Path, pending: list[str] | None = None):
             else:
                 files.append(entry)
         # 倒着压栈，弹出来就是字典序，进度行读起来和目录里看到的一致。
+        subdirectories.sort()
         queued = set(stack)
-        stack.extend(path for path in sorted(subdirectories, reverse=True) if path not in queued)
-        yield directory, sorted(files, key=lambda entry: entry.name)
+        stack.extend(path for path in reversed(subdirectories) if path not in queued)
+        yield directory, sorted(files, key=lambda entry: entry.name), mtime_ns, tuple(subdirectories)
 
 
 class _ScanProgress:
@@ -440,11 +548,16 @@ def _scan_location(
     progress: Callable[[int, int, int], None] = lambda files, total_bytes, added: None,
     resume_state: dict | None = None,
     save_checkpoint: Callable[[dict], None] = lambda state: None,
+    directory_cache: DirectoryCache | _NoDirectoryCache = _NO_DIRECTORY_CACHE,
+    reuse_unchanged: bool = False,
 ) -> ScanResult:
     """遍历 `root`（数据库中的路径格式）对应的本机目录，把文件元数据 upsert 进 `asset`。
 
     读不了的目录和文件直接跳过，不中断整轮：网盘挂载里零星几个条目读失败很常见，
     一个坏条目不该让几万个好条目白扫。
+
+    给了 `directory_cache` 就记下每个列过的目录；`reuse_unchanged` 为真时修改时间没变的
+    目录不再列出（差分扫描），其中文件的 `last_seen` 保持上次的值，`gone` 只数列过的目录。
     """
     check_scan_target(location, root, declared_roots=declared_roots)
     walk_root = walk_root_for(
@@ -462,9 +575,12 @@ def _scan_location(
     tracks = previous.get('subtitles', 0)
     orphans = previous.get('orphan_subtitles', 0)
     added = previous.get('added', 0)
+    unchanged = previous.get('unchanged_directories', 0)
     video_dirs = set(previous.get('video_dirs', []))
+    listed = set(previous.get('listed', []))
     pending = _pending_directories(previous, walk_root)
     batch: list[tuple] = []
+    saved_at = time.monotonic()
 
     def upsert():
         nonlocal added
@@ -473,21 +589,34 @@ def _scan_location(
         batch.clear()
     # 文件批次提交后保存文件名游标；同目录的配对资料随断点保留。
     def save_directory(directory=None, cursor=None, here=None):
+        nonlocal saved_at
         artwork_parents = {os.path.dirname(value) for value in [*pending, *([directory] if directory else [])]
                            if os.path.basename(value).casefold() in ARTWORK_DIRS}
         video_dirs.intersection_update(artwork_parents)
+        directory_cache.flush()
         save_checkpoint(dict(scan_time=now, pending=list(pending), files=files,
                              total_bytes=total, sidecars=skipped, subtitles=tracks,
-                             orphan_subtitles=orphans, added=added, video_dirs=sorted(video_dirs),
+                             orphan_subtitles=orphans, added=added, unchanged_directories=unchanged,
+                             video_dirs=sorted(video_dirs), listed=sorted(listed),
                              current_directory=directory, cursor=cursor, here=dict(here or {})))
+        saved_at = time.monotonic()
     # 写事务只在每批 upsert 到 commit 之间打开，遍历与 stat 都在两次 commit 之间，不持锁。
     # 忙等时长与 `LedgerDatabase.connect` 一致。
     connection = sqlite3.connect(db_path, timeout=30)
     try:
         connection.execute("PRAGMA journal_mode=WAL")
-        for directory, entries in _walk(walk_root, pending):
+        # 扫描可整轮重放，WAL 下提交不必逐次刷盘；掉电只会丢最后几批，下一轮重新登记。
+        connection.execute("PRAGMA synchronous=NORMAL")
+        for directory, entries, mtime_ns, subdirectories in _walk(
+                walk_root, pending, cache=directory_cache, reuse=reuse_unchanged):
             checkpoint('scan')
+            if entries is None:
+                unchanged += 1
+                if directory_cache.get(directory).has_videos:
+                    video_dirs.add(directory)
+                continue
             relative = Path(directory).relative_to(walk_root).parts
+            listed.add(str(ledger_root.joinpath(*relative)))
             continuing = directory == previous.get('current_directory')
             here = dict(previous.get('here') or {}) if continuing else {}
             cursor = previous.get('cursor') if continuing else None
@@ -532,24 +661,21 @@ def _scan_location(
             connection.commit()
             tracks += directory_tracks
             orphans += directory_orphans
-            save_directory()
+            directory_cache.put(directory, DirectoryMark(mtime_ns, subdirectories, bool(videos)))
+            # 断点按时间节流：每个小目录都整份重写一次状态，几千个目录就是几千次落盘。
+            # 两次保存之间处理过的目录在恢复时重扫一遍，upsert 可重放。
+            if time.monotonic() - saved_at >= CHECKPOINT_SECONDS:
+                save_directory()
         if batch:
             upsert()
         connection.commit()
-        # 只有 INSERT 那一支写 `first_seen`，等于本次时刻的就是这一轮新建的行。
-        new_ids = tuple(row[0] for row in connection.execute(
-            "SELECT id FROM asset WHERE location=? AND first_seen=? ORDER BY id", (location, now)))
-        reattached = len(record_rehome.reattach(connection, new_ids, now=now))
-        acquired = len(wants.reconcile(connection, new_ids))
-        folder_rules.apply_new(connection, new_ids)
-        connection.commit()
-        gone =connection.execute(
-            "SELECT COUNT(*) FROM asset WHERE location=? AND last_seen<?",
-            (location, now)).fetchone()[0]
+        new_ids, reattached, acquired, gone = _finish_scan(
+            connection, location, now, listed, only_listed=reuse_unchanged)
     finally:
         connection.close()
+    directory_cache.flush()
     result = ScanResult(location, root, files, total, time.time() - started, gone,
-                        tracks, orphans, skipped, new_ids, reattached, acquired, added)
+                        tracks, orphans, skipped, new_ids, reattached, acquired, added, unchanged)
     save_checkpoint({'result': asdict(result)})
     progress(files, total, added, force=True)
     report(result.summary())
