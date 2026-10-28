@@ -159,7 +159,7 @@ class UnregisteredWorktreeTests(unittest.TestCase):
     """两个工作树落点里都不许留下未登记的目录。
 
     工作树被回收后目录可能留在原地，成了一份看不出区别的旧副本——在里面跑 git
-    全部作用于主检出的 master。`peach-worktrees/` 是 `create` 的落点，也是智能体被告知
+    全部作用于主检出的 main。`peach-worktrees/` 是 `create` 的落点，也是智能体被告知
     要去干活的地方，所以它和 `.claude/worktrees/` 同一条判据。别的会话此刻可能正合法地
     占着一个工作树，所以判据是「有没有登记」而不是「有没有目录」，登记过的放行，
     本测试也从不删东西。
@@ -667,8 +667,8 @@ class AdrNumberingTests(unittest.TestCase):
 
     编号由新建 ADR 的人自己取「当前最大号加一」，两个并行工作树各取一次就会撞号，
     而没有任何门槛看编号，ready 与 integrate 两边都放行：2026-09-23 两份 ADR-0044
-    就是这样先后合进 master 的。编号是别处引用 ADR 的唯一钥匙，撞号后「见 ADR-0044」
-    指向哪一份说不清。后合入的一方 ready 前必须纳入 master 重跑选测，本门槛就在那一步拦住。
+    就是这样先后合进 main 的。编号是别处引用 ADR 的唯一钥匙，撞号后「见 ADR-0044」
+    指向哪一份说不清。后合入的一方 ready 前必须纳入 main 重跑选测，本门槛就在那一步拦住。
     """
 
     ADR_DIR = DOCS / "adr"

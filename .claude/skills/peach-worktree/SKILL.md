@@ -33,7 +33,7 @@ description: 在用户说并行、工作树、暂存、提交、ready、集成�
    同环境基线按有效内容差异补测；纯注释选 checks。完整批次补齐缺少文件后恢复全量，局部批次不能拼成全量；共享逻辑或未知文件仍跑全量。
    差异补测不延长全量基线有效期；版本号行单独变化归 tooling，包内其他逻辑变化仍按源码判断。
    相同状态复用记录；Windows `-Fresh`、POSIX 第二参数 `--fresh` 强制重跑；显式 `full` 总是实际执行。
-4. `ready` 前将当前 `master` 纳入工作树并运行 `auto`。相同内容可复用记录；目标变化重算影响域。`ready` / `integrate` 拒绝缺记录、范围不足或目标分支未纳入的提交。
+4. `ready` 前将当前 `main` 纳入工作树并运行 `auto`。相同内容可复用记录；目标变化重算影响域。`ready` / `integrate` 拒绝缺记录、范围不足或目标分支未纳入的提交。
 5. 协调者统一运行 `integrate`：锁内复查、合并固定提交。取得成功退出状态并核对主线提交后才重启；锁忙交给入口等待，禁止直接 merge；提示带持锁方的 pid、开始时间与范围，不反复数进程。运行记录写到仓库外的私有上下文；工作者按文件分工，共享文件安排顺序。
    版本号不在这里动，`integrate` 只报当前值：推进与打标签都走 `scripts/release_tag.py`，
    它是唯一入口。`--bump auto --apply` 推版本、定版变更日志并把那一节带在输出里给人确认，
@@ -41,11 +41,11 @@ description: 在用户说并行、工作树、暂存、提交、ready、集成�
    确认后 `--ship --apply` 一次做完提交、推送、等 Test 转绿、打标签（ADR-0012 修订）。
    人只判断措辞，不记流程；停在半路就再跑一次同一条命令。
    「该发一版了」由 `release_due.py` 的 Stop 钩子一家说，收尾那段不要跟着说第二遍：
-   `integrate` 输出里的 `release`（`changelog.due()`）与它同一个判据，而钩子按 master 的 sha
+   `integrate` 输出里的 `release`（`changelog.due()`）与它同一个判据，而钩子按 main 的 sha
    闩住、集成后的干净主检出正好满足它那四道闸，两边都说就是一屏里两条一样的话。判据是
    每周一次、攒够提前、破坏性变化与安全修复不等周期，只数使用者看得见的条目。
    CI 分片、系统覆盖与发布复用见 `docs/TESTING.md`；合并完成不机械追加全量。耗时和慢测试记录在主目录 `build/agent-verification/`。
-   主检出 master 上的直接提交与手工 merge 由 `scripts/githooks/` 拒收，`core.hooksPath`
+   主检出 main 上的直接提交与手工 merge 由 `scripts/githooks/` 拒收，`core.hooksPath`
    由 `create` / `integrate` 自动指过去；只有 `integrate` 与 `release_tag.py` 带放行标记。
    记录、锁和 hook 约束统一入口，不是权限隔离；`--no-verify`、快进合并或篡改记录仍可绕过，
    不能宣称绝对防绕过。
@@ -54,7 +54,7 @@ description: 在用户说并行、工作树、暂存、提交、ready、集成�
 - 分支上每个提交的主题都写成 `type(scope): 中文描述`，如 `fix(web): 补齐图标声明与兜底路径`。
   类型的封闭清单在 `scripts/commit_subject.py` 的 `TYPES`；`feat` / `fix` / `perf` 会进变更日志，
   scope 被 `scripts/changelog.py` 换成区域标签，所以写歪的后果是日志静默漏条，不是报错。
-  `ready` / `integrate` 拒收形状不对、类型不在清单的主题；从 master 合进来的 merge 不算。
+  `ready` / `integrate` 拒收形状不对、类型不在清单的主题；从 main 合进来的 merge 不算。
 
 - 提交前核对 README 影响；交付分支最后提交加 `README-Impact: updated; 说明` 或 `README-Impact: none; 原因`。
   只改一份 README 时另加 `README-Reviewed: 未改文件名; 无需修改的原因`，保留双语核对。
@@ -83,25 +83,25 @@ description: 在用户说并行、工作树、暂存、提交、ready、集成�
 
 - **工作树会惄无声息地失效，目录却还在**。2026-08-26 实例：分支被集成后，
   `.claude/worktrees/<task>` 的注册消失，目录变成主检出里一份旧副本。提示符和文件列表看不出
-  任何差别，但在里面跑的每一条 git 都作用于主检出的 master。后果不是报错而是假结论：
+  任何差别，但在里面跑的每一条 git 都作用于主检出的 main。后果不是报错而是假结论：
   那一轮里智能体一直报告「还没推」，实际上提交已经被另一个智能体的 push 顺带到了 origin。
   判据不看目录名，只看 `git rev-parse --show-toplevel`；等于 `peach-app` 就是在主检出里。
   实测入口：`git worktree list` 里没有你那一行，就是已经没了。
 - Windows 源码改动生效时，禁止用 Computer Use 操作系统托盘。只用与托盘「重启服务」等价的项目命令；入口必须让现有托盘执行重启，或完整重启托盘并重新取得子服务所有权。直接强杀／另启 `.venv\Scripts\peach.exe` 会让 `_owned` 失真，不算等价；仓库缺少安全命令时先补入口，不能退回托盘 UI。
-- 工作者报 `ready` 前必须 rebase 到当前 `master`。落后十天的分支不要指望协调者去 merge：
+- 工作者报 `ready` 前必须 rebase 到当前 `main`。落后十天的分支不要指望协调者去 merge：
   共享文件上你那一侧是旧的，冲突解错就会把已上线的修复回退掉；只移植仍需要的独有改动。
 
 ## 回收与顶层归置
 
-工作树用完要回收：`python scripts/agent_worktree.py prune` 列出分支已并入 master 且工作区
+工作树用完要回收：`python scripts/agent_worktree.py prune` 列出分支已并入 main 且工作区
 干净的工作树，加 `--apply` 才真的删。
 脏的一律拒收并单独列出：分支已合入不等于工作区
-里没东西，实测就有工作树的分支早已并入 master、里面却躺着一份成形的未提交改动。
+里没东西，实测就有工作树的分支早已并入 main、里面却躺着一份成形的未提交改动。
 
 一个工作树失败不影响其它工作树：`residue` 是连脚本也删不掉的目录，分支照样删，`holders` 列出占着它的进程（`orphan` 为真是父进程已退出的残留），
 按 PID 结束自己起的再重跑；`processes` 子命令列出两处落点下的全部活进程。`failed` 是注册还没摘掉，分支保留。未登记的目录归 `swept`：`peach-worktrees/`
 与 `.claude/worktrees/` 两处都扫，只删空的，有文件的进 `kept` 等人确认，因为那种目录和真
-工作树长得一模一样，在里面跑 git 全作用于主检出的 master，门槛在 `tests/test_repo_hygiene.py`。
+工作树长得一模一样，在里面跑 git 全作用于主检出的 main，门槛在 `tests/test_repo_hygiene.py`。
 
 `prune` 保留锁定的活动工作树。不要手动解锁正在编辑的工作树；任务中止时先核对任务归属、
 改动与提交，再决定是否解锁回收。

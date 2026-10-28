@@ -4,7 +4,7 @@ param(
     [string]$Scope = 'auto',
     [switch]$Fresh,
     [string[]]$Focus = @(),
-    [string]$Base = 'master',
+    [string]$Base = 'main',
     [int]$ShardIndex = 0,
     [int]$ShardCount = 1,
     # 本机同时跑几个分片子进程：auto 按核数定；-Jobs 1 退回串行。CI 分片模式下运行器忽略它。

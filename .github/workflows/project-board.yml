@@ -8,7 +8,7 @@ on:
   release:
     types: [published, edited, deleted]
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: master
+          ref: main
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v7

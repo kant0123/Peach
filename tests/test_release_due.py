@@ -61,8 +61,8 @@ class SpeakingTests(ReleaseDueCase):
     def test_the_same_master_is_only_asked_about_once(self):
         """闩住 sha，不是闩住会话。
 
-        每轮回话结束都会触发一次，按会话闩的话，同一个 master 在下一个会话里又会被
-        问一遍；按 sha 闩，master 前进了才再问，那时确实是又攒了新东西。
+        每轮回话结束都会触发一次，按会话闩的话，同一个 main 在下一个会话里又会被
+        问一遍；按 sha 闩，main 前进了才再问，那时确实是又攒了新东西。
         """
         self.pile_up_user_facing_work()
         first = release_due.verdict(self.repo, self.latch)

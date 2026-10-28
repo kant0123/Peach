@@ -100,7 +100,7 @@ def create(repo: Path, agent: str, task: str, root: Path | None = None) -> dict[
     }
 
 
-def ready(repo: Path, target_branch: str = "master") -> dict[str, object]:
+def ready(repo: Path, target_branch: str = "main") -> dict[str, object]:
     branch = _git(repo, "branch", "--show-current").stdout.strip()
     if not branch.startswith("agent/"):
         raise WorkspaceError("ready must run from an agent/* branch")
@@ -146,7 +146,7 @@ def require_verified(worker: Path, target_branch: str, paths: Iterable[str]) -> 
         raise WorkspaceError("验证检查期间工作树改变，请重试")
 
 
-def integrate(repo: Path, worker_branch: str, target_branch: str = "master", *,
+def integrate(repo: Path, worker_branch: str, target_branch: str = "main", *,
               lock_timeout: float = 1800) -> dict[str, object]:
     folder = test_evidence.evidence_dir(repo)
     folder.mkdir(parents=True, exist_ok=True)
@@ -163,7 +163,7 @@ def integrate(repo: Path, worker_branch: str, target_branch: str = "master", *,
 
 
 def _integrate_locked(repo: Path, worker_branch: str,
-                      target_branch: str = "master") -> dict[str, object]:
+                      target_branch: str = "main") -> dict[str, object]:
     """把工作者分支并进 target。
 
     这台机器既是开发机又是生产机：提交先落本地再推 GitHub，本地永远领先。跑着的是哪一份
@@ -356,7 +356,7 @@ def _reclaim(main: Path, path: Path, branch: str) -> tuple[str, dict[str, str]]:
     要靠人反复重跑 prune，跑一次才推进一个。
 
     「注册摘了、目录还在」不该留给人：那个目录在主检出里长得和真工作树一模一样，`git`
-    在里面全作用于主检出的 master。git 删不动就自己删，删完才算回收；真删不掉才进
+    在里面全作用于主检出的 main。git 删不动就自己删，删完才算回收；真删不掉才进
     residue，那时候确实需要人去看是谁占着。
     """
     removal = _git(main, "worktree", "remove", str(path), check=False)
@@ -382,7 +382,7 @@ def _sweep_unregistered(main: Path, here: Path, *, apply: bool
     两个落点都要扫：`create` 建工作树的 `WORKTREE_ROOT`，和 Claude Code 内置的
     `BUILTIN_WORKTREES`。这些目录不在 `git worktree list` 里，上面那轮按登记项遍历的
     回收永远碰不到它们，人却会走进去当工作树用——而在里面跑 git 全作用于主检出的
-    master。漏掉 `create` 那一侧最贵：那里是智能体被告知要去干活的地方。
+    main。漏掉 `create` 那一侧最贵：那里是智能体被告知要去干活的地方。
     2026-09-13 清点：`peach-worktrees/` 下四个未登记目录共 246 MB，两份是带 `.venv`
     的整树副本，其中一份的句柄还被一个跑在 8931 端口的预览服务占着。  # copy-lint-disable-line
 
@@ -415,7 +415,7 @@ def _sweep_unregistered(main: Path, here: Path, *, apply: bool
     return swept, residue, kept
 
 
-def prune(repo: Path, target_branch: str = "master", *,
+def prune(repo: Path, target_branch: str = "main", *,
           apply: bool = False) -> dict[str, object]:
     """回收分支已并入 target、且工作区干净的隔离工作树。
 
@@ -423,7 +423,7 @@ def prune(repo: Path, target_branch: str = "master", *,
     到 3 个，两天后又长回 74 个、占 868 MB——因为那次是一次性动作，不是常设机制。
 
     默认只报告不动手。回收不可逆，而「分支已合入」并不等于「工作区里没有东西」：
-    实测就有工作树的分支早已并入 master，里面却躺着一份成形的未提交改动。所以脏的
+    实测就有工作树的分支早已并入 main，里面却躺着一份成形的未提交改动。所以脏的
     一律拒收并单独列出，交给人看，不给 `--force` 这个口子。
 
     单个工作树回收失败不影响其它工作树：结果分成 reclaimed / swept / residue / failed /
@@ -493,12 +493,12 @@ def main() -> int:
     start.add_argument("--task", required=True)
     start.add_argument("--root", type=Path)
     inspect = sub.add_parser("ready")
-    inspect.add_argument("--target", default="master")
+    inspect.add_argument("--target", default="main")
     merge = sub.add_parser("integrate")
     merge.add_argument("--branch", required=True)
-    merge.add_argument("--target", default="master")
+    merge.add_argument("--target", default="main")
     sweep = sub.add_parser("prune")
-    sweep.add_argument("--target", default="master")
+    sweep.add_argument("--target", default="main")
     sweep.add_argument("--apply", action="store_true",
                        help="真的回收；不给这个参数就只报告")
     sub.add_parser("processes", help="列出两个工作树落点下还活着的进程，只报告不结束")

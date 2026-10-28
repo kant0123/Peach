@@ -183,7 +183,7 @@ class ProjectBoardTests(unittest.TestCase):
             def git(*args):
                 return subprocess.run(["git", *args], cwd=root, check=True, capture_output=True,
                                       text=True, encoding="utf-8").stdout.strip()
-            git("init", "-b", "master")
+            git("init", "-b", "main")
             git("-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "--allow-empty", "-m", "base")
             base = git("rev-parse", "HEAD")
             git("tag", "v1.0")
@@ -4703,7 +4703,7 @@ class ReleaseTagTests(unittest.TestCase):
         cls.release = load_script("release_tag")
 
     def test_latest_matching_master_run_must_finish_successfully(self):
-        success = dict(id=1, head_sha="abc", head_branch="master", event="push",
+        success = dict(id=1, head_sha="abc", head_branch="main", event="push",
                        status="completed", conclusion="success", html_url="test-url")
         self.assertEqual(self.release.require_success([success], "abc"), success)
         for changes in ({"head_sha": "other"}, {"head_branch": "feature"},
@@ -4739,9 +4739,9 @@ class ReleaseTagTests(unittest.TestCase):
                 self.assertRaises(ValueError):
             self.release.verify("owner/repo", "abc")
 
-    #: 干净的 master 检出，HEAD 与远端一致。
+    #: 干净的 main 检出，HEAD 与远端一致。
     CLEAN = {("git", "status", "--porcelain"): "",
-             ("git", "branch", "--show-current"): "master",
+             ("git", "branch", "--show-current"): "main",
              ("git", "rev-parse", "HEAD"): "abc"}
 
     def _shell(self, changes=None):
@@ -4754,7 +4754,7 @@ class ReleaseTagTests(unittest.TestCase):
                               ({("git", "branch", "--show-current"): "feature"}, []),
                               ({}, [{"ref": "refs/tags/v0.7.14"}])):
             with self.subTest(changes=changes, refs=refs), self._shell(changes), \
-                    mock.patch.object(self.release, "api", side_effect=lambda repo, path, refs=refs: {"object": {"sha": "abc"}} if path == "git/ref/heads/master" else refs), \
+                    mock.patch.object(self.release, "api", side_effect=lambda repo, path, refs=refs: {"object": {"sha": "abc"}} if path == "git/ref/heads/main" else refs), \
                     mock.patch.object(self.release.version_bump, "read_version", return_value="0.7.14"), \
                     mock.patch.object(Path, "read_text", return_value="## [0.7.14] - 2026-09-07\n"), \
                     self.assertRaises(ValueError):
@@ -4839,7 +4839,7 @@ class PinnedReleaseTests(unittest.TestCase):
     def _shell(self, changes=None):
         answers = {
             ("git", "status", "--porcelain"): "",
-            ("git", "branch", "--show-current"): "master",
+            ("git", "branch", "--show-current"): "main",
             ("git", "rev-parse", f"{self.SHA}^{{commit}}"): self.SHA,
             ("git", "show", f"{self.SHA}:src/peach/__init__.py"): '__version__ = "0.37.0"',
             ("git", "show", f"{self.SHA}:CHANGELOG.md"): self.NOTES,
@@ -4853,11 +4853,11 @@ class PinnedReleaseTests(unittest.TestCase):
         def answer(_repo, endpoint):
             if endpoint.startswith("git/matching-refs/tags/"):
                 return list(tags)
-            if endpoint == f"compare/master...{self.SHA}":
+            if endpoint == f"compare/main...{self.SHA}":
                 return {"status": status}
             if endpoint.startswith("actions/workflows/test.yml/runs"):
                 return {"workflow_runs": [dict(
-                    id=1, head_sha=self.SHA, head_branch="master", event="push",
+                    id=1, head_sha=self.SHA, head_branch="main", event="push",
                     status="completed", conclusion=conclusion, html_url="selected-test")]}
             raise AssertionError(endpoint)
         return mock.patch.object(self.release, "api", side_effect=answer)
@@ -4875,7 +4875,7 @@ class PinnedReleaseTests(unittest.TestCase):
         self.assertEqual(ShipTests._writes(command), [])
 
     def test_moving_refs_and_abbreviated_shas_are_rejected(self):
-        for sha in ("", "master", "HEAD", "v0.37.0", self.SHA[:8], "z" * 40):
+        for sha in ("", "main", "HEAD", "v0.37.0", self.SHA[:8], "z" * 40):
             with self.subTest(sha=sha), self._shell(), self.assertRaisesRegex(ValueError, "完整"):
                 self.release.plan_commit("owner/repo", sha)
 
@@ -4937,13 +4937,13 @@ class ShipTests(unittest.TestCase):
     def setUpClass(cls):
         cls.release = load_script("release_tag")
 
-    #: 一次干净的起点：在 master 上，工作区正好是那两份定版文件，本地没有这个标签。
-    SHELL = {("git", "branch", "--show-current"): "master",
+    #: 一次干净的起点：在 main 上，工作区正好是那两份定版文件，本地没有这个标签。
+    SHELL = {("git", "branch", "--show-current"): "main",
              ("git", "status", "--porcelain"): " M CHANGELOG.md\n M src/peach/__init__.py",
              ("git", "rev-parse", "HEAD"): "abc",
              ("git", "tag", "--list", "v0.8.0"): ""}
 
-    SUCCESS = dict(id=1, head_sha="abc", head_branch="master", event="push",
+    SUCCESS = dict(id=1, head_sha="abc", head_branch="main", event="push",
                    status="completed", conclusion="success", html_url="test-url")
 
     def _shell(self, changes=None):
@@ -4955,7 +4955,7 @@ class ShipTests(unittest.TestCase):
         def answer(_repo, endpoint):
             if endpoint.startswith("git/matching-refs/tags/"):
                 return list(tags)
-            if endpoint == "git/ref/heads/master":
+            if endpoint == "git/ref/heads/main":
                 return {"object": {"sha": remote}}
             if endpoint.startswith("actions/workflows/test.yml/runs"):
                 return {"workflow_runs": list(runs)}
@@ -5030,7 +5030,7 @@ class ShipTests(unittest.TestCase):
         self.assertEqual(self._writes(command), [
             ("git", "add", "src/peach/__init__.py", "CHANGELOG.md"),
             ("git", "-c", "peach.masterWriter=release", "commit", "-m", "chore(release): 版本 0.8.0"),
-            ("git", "push", "https://github.com/owner/repo.git", "refs/heads/master"),
+            ("git", "push", "https://github.com/owner/repo.git", "refs/heads/main"),
             ("git", "tag", "-a", "v0.8.0", "abc", "-m", "Peach v0.8.0 Windows 测试版"),
             ("git", "push", "https://github.com/owner/repo.git", "refs/tags/v0.8.0"),
         ])
@@ -5065,7 +5065,7 @@ class AwaitTestTests(unittest.TestCase):
     def setUpClass(cls):
         cls.release = load_script("release_tag")
 
-    RUNNING = dict(id=1, head_sha="abc", head_branch="master", event="push",
+    RUNNING = dict(id=1, head_sha="abc", head_branch="main", event="push",
                    status="in_progress", conclusion=None, html_url="test-url")
 
     def _runs(self, *rounds):

@@ -10,9 +10,9 @@ r"""会话收尾时问一次：该发下一版了吗。不该发就一个字都�
 四道门先挡住不该出声的场合，任何一道不成立就静默退出：
 
 1. **不在主检出**：隔离工作树里的工作者不发版，提醒他等于提醒错人。
-2. **不在 master**：发布只从主线走，站在别的分支上收到提醒也动不了手。
+2. **不在 main**：发布只从主线走，站在别的分支上收到提醒也动不了手。
 3. **工作区不干净**：此刻发不了版；等这轮改动落地、下一次收尾时再问。
-4. **这一版已经问过**：闩住 master 的 sha，同一个 sha 只问一次。master 前进了就是
+4. **这一版已经问过**：闩住 main 的 sha，同一个 sha 只问一次。main 前进了就是
    又攒了新东西，那时再问一次是对的。
 
 用法（`--hook-event` 是给 Claude 与 Codex 的 Stop 钩子用的，人手查用不带参数那条）:
@@ -42,14 +42,14 @@ from peach.config import PROJECT_ROOT, STATE_DIR
 from . import changelog
 
 #: 发布只从主线走，`release_tag.py` 也只认这一条。
-MAIN_BRANCH = "master"
+MAIN_BRANCH = "main"
 
-#: 闩：上一次问过的 master sha。落在 `peach-data/state/`，不进 Git——它是这台机器
+#: 闩：上一次问过的 main sha。落在 `peach-data/state/`，不进 Git——它是这台机器
 #: 的记忆，跟进度产物一样每次现写，进了 Git 只会让工作区永远是 modified。
 LATCH = STATE_DIR / "release-due.json"
 
 ADVICE = ("起草：`python scripts/release_tag.py --bump auto --apply`，"
-          "措辞定了再 `--ship --apply`。这次不发就不用管，master 前进后会再问一次。")
+          "措辞定了再 `--ship --apply`。这次不发就不用管，main 前进后会再问一次。")
 
 
 def git(root: Path, *args: str) -> str | None:
