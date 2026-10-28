@@ -453,7 +453,7 @@ class LeftoverProcessTests(_WorktreeCase):
         cwd.mkdir(parents=True, exist_ok=True)
         child = subprocess.Popen(
             [sys.executable, "-c", "import os, sys; print(os.getpid(), flush=True); sys.stdin.read()"],
-            cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8")
         child.worker = int(child.stdout.readline())
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
