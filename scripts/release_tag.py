@@ -29,7 +29,7 @@ from . import changelog, version_bump
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: 主检出的 master 上该落提交的只有本脚本与 `agent_worktree.py integrate`。它们调用 git 时
+#: 主检出的 main 上该落提交的只有本脚本与 `agent_worktree.py integrate`。它们调用 git 时
 #: 带上这个配置，`scripts/githooks/pre-commit` 据此放行，别的提交与手工 merge 一律拒收。
 #: 它住在这里而不是 `agent_worktree`：`--verify-sha` 跟着 Release 工作流跑，那一步只有裸
 #: Python，依赖要到后面的构建步骤才装；反过来引用就把 `test_evidence` 那条链（filelock）拘进来，
@@ -57,9 +57,9 @@ def api(repo: str, endpoint: str):
 
 
 def latest_run(runs: list[dict], sha: str) -> dict | None:
-    """这个提交在 master 上最新的一次 Test；没有记录时是 None。"""
+    """这个提交在 main 上最新的一次 Test；没有记录时是 None。"""
     matching = [run for run in runs if run.get("head_sha") == sha
-                and run.get("head_branch") == "master" and run.get("event") == "push"]
+                and run.get("head_branch") == "main" and run.get("event") == "push"]
     if not matching:
         return None
     return max(matching, key=lambda run: (run["id"], run.get("run_attempt", 1)))
@@ -68,7 +68,7 @@ def latest_run(runs: list[dict], sha: str) -> dict | None:
 def require_success(runs: list[dict], sha: str) -> dict:
     latest = latest_run(runs, sha)
     if latest is None:
-        raise ValueError("此提交没有 master 的 Test 工作流记录")
+        raise ValueError("此提交没有 main 的 Test 工作流记录")
     if latest.get("status") != "completed" or latest.get("conclusion") != "success":
         raise ValueError(f"此提交最新 Test 尚未通过：{latest.get('html_url', '')}")
     return latest
@@ -84,7 +84,7 @@ def await_test(repo: str, sha: str, *, timeout: float = TEST_TIMEOUT, poll: floa
     """等这个提交的 Test 出结果。
 
     跑完了但不是绿的立刻抛，不耗到超时——红的等多久都不会变绿。超时也抛，那时版本
-    提交已经在 master 上，等 CI 自己跑完再跑一次 `--ship --apply` 就接着走。
+    提交已经在 main 上，等 CI 自己跑完再跑一次 `--ship --apply` 就接着走。
     """
     deadline = clock() + timeout
     while True:
@@ -95,14 +95,14 @@ def await_test(repo: str, sha: str, *, timeout: float = TEST_TIMEOUT, poll: floa
         if clock() >= deadline:
             raise ValueError(
                 f"等了 {timeout / 60:.0f} 分钟，{sha[:8]} 的 Test 还没有结果；"
-                "版本提交已在 master 上，等它跑完再跑一次 --ship --apply")
+                "版本提交已在 main 上，等它跑完再跑一次 --ship --apply")
         sleep(poll)
 
 
 def verify(repo: str, sha: str) -> dict:
-    comparison = api(repo, f"compare/master...{sha}")
+    comparison = api(repo, f"compare/main...{sha}")
     if comparison["status"] not in {"identical", "behind"}:
-        raise ValueError("发布提交不属于远端 master 历史")
+        raise ValueError("发布提交不属于远端 main 历史")
     checked = require_success(test_runs(repo, sha), sha)
     return {"sha": sha, "test": checked["html_url"]}
 
@@ -110,8 +110,8 @@ def verify(repo: str, sha: str) -> dict:
 def _require_clean_master() -> None:
     if command("git", "status", "--porcelain"):
         raise ValueError("工作区不干净")
-    if command("git", "branch", "--show-current") != "master":
-        raise ValueError("请从 master 主检出执行")
+    if command("git", "branch", "--show-current") != "main":
+        raise ValueError("请从 main 主检出执行")
 
 
 def _require_free_tag(repo: str, tag: str) -> None:
@@ -148,8 +148,8 @@ def prepare(repo: str, part: str, *, apply: bool) -> dict:
 
 
 def _require_master() -> None:
-    if command("git", "branch", "--show-current") != "master":
-        raise ValueError("请从 master 主检出执行")
+    if command("git", "branch", "--show-current") != "main":
+        raise ValueError("请从 main 主检出执行")
 
 
 def _pending_files() -> list[str]:
@@ -162,7 +162,7 @@ def _pending_files() -> list[str]:
 def _staged_release(repo: str) -> tuple[str, str, list[str]]:
     """定版是否成立：版本号、标签，以及等着提交的文件。
 
-    四道判据一起看：在 master 上、变更日志有这一节、标签本地远端都空着、工作区除了
+    四道判据一起看：在 main 上、变更日志有这一节、标签本地远端都空着、工作区除了
     那两份定版文件没有别的。最后一条是为了不把顺手改的东西夹进发布提交——发布提交
     是标签指向的那一个，夹带什么就等于发出去什么。
     """
@@ -190,7 +190,7 @@ def ship(repo: str, *, apply: bool, timeout: float = TEST_TIMEOUT) -> dict:
     """
     version, tag, pending = _staged_release(repo)
     head = command("git", "rev-parse", "HEAD")
-    remote = api(repo, "git/ref/heads/master")["object"]["sha"]
+    remote = api(repo, "git/ref/heads/main")["object"]["sha"]
     result = {"version": version, "tag": tag, "repo": repo, "applied": apply,
               "commit": bool(pending), "push": bool(pending) or remote != head}
     if not apply:
@@ -200,8 +200,8 @@ def ship(repo: str, *, apply: bool, timeout: float = TEST_TIMEOUT) -> dict:
         command("git", "-c", f"{MASTER_WRITER}=release", "commit",
                 "-m", f"chore(release): 版本 {version}")
     sha = command("git", "rev-parse", "HEAD")
-    if api(repo, "git/ref/heads/master")["object"]["sha"] != sha:
-        command("git", "push", f"https://github.com/{repo}.git", "refs/heads/master")
+    if api(repo, "git/ref/heads/main")["object"]["sha"] != sha:
+        command("git", "push", f"https://github.com/{repo}.git", "refs/heads/main")
     checked = await_test(repo, sha, timeout=timeout)
     command("git", "tag", "-a", tag, sha, "-m", f"Peach {tag} Windows 测试版")
     command("git", "push", f"https://github.com/{repo}.git", f"refs/tags/{tag}")
@@ -212,8 +212,8 @@ def ship(repo: str, *, apply: bool, timeout: float = TEST_TIMEOUT) -> dict:
 def plan(repo: str) -> dict:
     _require_clean_master()
     sha = command("git", "rev-parse", "HEAD")
-    if api(repo, "git/ref/heads/master")["object"]["sha"] != sha:
-        raise ValueError("本地 HEAD 与 GitHub master 不一致，请先完成同步")
+    if api(repo, "git/ref/heads/main")["object"]["sha"] != sha:
+        raise ValueError("本地 HEAD 与 GitHub main 不一致，请先完成同步")
     version = version_bump.read_version(ROOT)
     tag = "v" + version
     document = (ROOT / changelog.CHANGELOG).read_text(encoding="utf-8")
@@ -284,8 +284,8 @@ def main(argv=None) -> int:
             # 固定提交在动手前复核归属、CI、版本说明与标签占用。
             if args.release_sha is not None:
                 result = plan_commit(args.repo, args.release_sha)
-            elif api(args.repo, "git/ref/heads/master")["object"]["sha"] != result["sha"]:
-                raise ValueError("检查期间 master 已更新，请重新执行")
+            elif api(args.repo, "git/ref/heads/main")["object"]["sha"] != result["sha"]:
+                raise ValueError("检查期间 main 已更新，请重新执行")
             command("git", "tag", "-a", result["tag"], result["sha"],
                     "-m", f"Peach {result['tag']} Windows 测试版")
             command("git", "push", f"https://github.com/{args.repo}.git",

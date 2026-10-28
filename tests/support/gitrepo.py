@@ -1,4 +1,4 @@
-"""建一个 master 上已有首个提交的临时 git 仓库，供测试按模板复制。
+"""建一个 main 上已有首个提交的临时 git 仓库，供测试按模板复制。
 
 `git init`、仓库配置、add、commit 一套需要多次子进程，Windows 上每次约 0.05 秒；
 三份工作树与发布脚本的测试每个 `setUp` 都来一遍，一百多个用例就是半分钟。同样内容的
@@ -27,7 +27,7 @@ def _git(repo: Path, *args: str) -> None:
 
 
 def seed_repository(destination: Path, files: dict[str, str | bytes], message: str) -> Path:
-    """在 `destination` 放一个仓库：`master` 上一个提交，内容就是 `files`。
+    """在 `destination` 放一个仓库：`main` 上一个提交，内容就是 `files`。
 
     `destination` 不能已存在，副本整个目录由调用方的临时目录负责回收。同一份
     `files` 与 `message` 复用同一个模板。
@@ -43,7 +43,7 @@ def seed_repository(destination: Path, files: dict[str, str | bytes], message: s
         atexit.register(shutil.rmtree, holder, True)
         template = holder / "repo"
         template.mkdir()
-        subprocess.run(["git", "init", "-q", "-b", "master", str(template)], check=True,
+        subprocess.run(["git", "init", "-q", "-b", "main", str(template)], check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         _git(template, "config", "user.email", "test@example.invalid")
         _git(template, "config", "user.name", "Peach Test")

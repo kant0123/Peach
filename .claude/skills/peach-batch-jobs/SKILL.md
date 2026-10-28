@@ -62,7 +62,7 @@ CloudDrive 的稀疏读取缓存可能占用系统盘，与产物所在盘不同
 ## 真实库批次的预检与验收
 
 - 真实批次只在 ledger writer 上跑（`/healthz` 回 `ledger_sync=writer`、`db=available`）；reader 只做
-  代码验证和副本抽样。起跑前逐项核对，缺一项就不接管写入端：工作区干净且已纳入 master、全量测试
+  代码验证和副本抽样。起跑前逐项核对，缺一项就不接管写入端：工作区干净且已纳入 main、全量测试
   通过、`peach migrate status` 正常、目标网盘盘符能列目录、没有同类 `probe`／`sheets`／
   `traffic_watch` 进程、系统盘余量高于 `--min-free`，并按 `peach-ledger-write` 用 SQLite backup API
   备份账本。队列数字开跑前用 `scripts/job_status.py` 现算，不抄进文档：写死的基线只在生成那一刻成立。

@@ -10,7 +10,7 @@ lucide-static 1.38.0 → 1.40.0 的 PR #4）。`frontend/package.json` 同理，
 `dependabot/**` 推回重算的产物得靠 `pull_request_target` 或一个 PAT，两条都是给 CI 加
 提权面。所以接管在本地做——凭据是你自己的，CI 一行都不用改。
 
-uv 与 github-actions 没有派生产物，也在这里接管：master 在本机集成、通常领先 origin，
+uv 与 github-actions 没有派生产物，也在这里接管：main 在本机集成、通常领先 origin，
 在网页上合并会让两边分叉，回并又被 `scripts/githooks/` 拒收。
 
 每个 PR 做完这些：
@@ -92,8 +92,8 @@ RECIPES = {
 
 #: 推送后关 PR 时的留言，按有没有派生产物分两种说法。
 CLOSE_COMMENT = {
-    True: "派生产物需要本地重算，已在工作树接管进 master",
-    False: "本地 master 领先 origin，网页合并会让两边分叉，已在工作树接管进 master",
+    True: "派生产物需要本地重算，已在工作树接管进 main",
+    False: "本地 main 领先 origin，网页合并会让两边分叉，已在工作树接管进 main",
 }
 
 
@@ -167,8 +167,8 @@ def fetch(branch: str, *, root: Path = ROOT) -> None:
 def branch_changes(branch: str, *, root: Path = ROOT) -> list[str]:
     """那个分支自己改了哪些文件。
 
-    判据是它与 `HEAD` 的合并基，不是 `HEAD` 本身：Dependabot 的分支从几天前的 master
-    分出去，直接 `git diff origin/<branch>` 会把这几天 master 上的每一次改动也算进来，
+    判据是它与 `HEAD` 的合并基，不是 `HEAD` 本身：Dependabot 的分支从几天前的 main
+    分出去，直接 `git diff origin/<branch>` 会把这几天 main 上的每一次改动也算进来，
     于是每个 PR 看上去都动了清单。
     """
     return [line for line in
@@ -181,8 +181,8 @@ def bring_over(branch: str, manifests: tuple[str, ...], *, root: Path = ROOT,
                refresh: bool = True) -> None:
     """取回那个分支，把它对清单的改动套到工作区，不暂存。
 
-    套的是它自合并基以来的 diff，不是整份文件：分支的清单停在几天前的 master 上，
-    整份签出会把这几天 master 往清单里加的依赖一并抹掉（实际发生过：#20 的
+    套的是它自合并基以来的 diff，不是整份文件：分支的清单停在几天前的 main 上，
+    整份签出会把这几天 main 往清单里加的依赖一并抹掉（实际发生过：#20 的
     `frontend/package.json` 没有后来加进来的 `sonner`）。两边改到同一行或相邻行时
     `--3way` 留下冲突，抛 `ConflictError` 报出文件，不替人挑一边。补丁先落成文件再给
     `git apply`：Windows 上文本模式的 stdin 会把 `\\n` 写成 `\\r\\n`，补丁就对不上了。
@@ -237,7 +237,7 @@ def commit_message(key: str, versions: list[str], pr: str | None,
         why = (f"{origin} 只改了 manifest 与 lock。派生产物由 {rebuild} 重算，"
                "它在只读 token 下算不出来，所以接管到本地分支一起提交。")
     else:
-        why = (f"{origin} 没有派生产物。本地 master 领先 origin 时在网页上合并会让两边分叉，"
+        why = (f"{origin} 没有派生产物。本地 main 领先 origin 时在网页上合并会让两边分叉，"
                "所以接管到本地分支。")
     return (f"chore(deps): 接管 {recipe['label']} 的升级\n\n{why}\n\n"
             + ("升级：" + "、".join(versions) + "\n\n" if versions else "")
@@ -345,7 +345,7 @@ def adopt_all(prs: list[dict], *, signature: str, root: Path = ROOT) -> dict:
             return {"ok": False, "error": str(exc), "stopped_at": pr["number"], "done": done}
     next_steps = ["测试：& .\\scripts\\test.ps1 full",
                   "交付：scripts/agent_worktree.py ready，再由协调者 integrate",
-                  "推送 master 之后逐个收尾：",
+                  "推送 main 之后逐个收尾：",
                   *(close_command(item["pr"], item["recipe"]) for item in done)]
     return {"ok": True, "done": done, "next": next_steps if done else []}
 
@@ -400,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
                 plan["next"].insert(0, "改动留在工作区未暂存："
                                        f"`git restore -- {' '.join(item['files'])}` 撤销，加 --apply 提交")
             elif args.pr:
-                plan["next"].append("推送 master 之后收尾：" + close_command(item["pr"], item["recipe"]))
+                plan["next"].append("推送 main 之后收尾：" + close_command(item["pr"], item["recipe"]))
         print(json.dumps(plan, ensure_ascii=False, indent=2))
         return 0 if plan["ok"] else 1
     except ConflictError as exc:

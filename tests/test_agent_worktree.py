@@ -121,9 +121,9 @@ class AgentWorktreeTests(_WorktreeCase):
 
 
 class MasterCommitGuardTests(_WorktreeCase):
-    """主检出的 master 只收 `integrate` 与 `release_tag.py` 的提交。
+    """主检出的 main 只收 `integrate` 与 `release_tag.py` 的提交。
 
-    2026-09 进 master 的五个红提交，四个是在主检出上直接提交，一个是手工 merge，
+    2026-09 进 main 的五个红提交，四个是在主检出上直接提交，一个是手工 merge，
     都没经过 ready / integrate 的检查。这里用仓库里那份 hook 原样装进测试仓库。
     """
 
@@ -263,7 +263,7 @@ if __name__ == "__main__":
 
 
 class PruneTests(_WorktreeCase):
-    """回收已经并入 master 的隔离工作树。
+    """回收已经并入 main 的隔离工作树。
 
     `create` 一直有人用，回收却从来没有入口——2026-08-29 清到 3 个，两天后长回 74 个、
     占 868 MB。一次性清理解决不了这个问题，所以把回收做成命令，并在这里锁住它的边界。
@@ -298,7 +298,7 @@ class PruneTests(_WorktreeCase):
     def test_a_dirty_worktree_is_refused_even_when_its_branch_is_merged(self):
         """分支已合入不等于工作区里没东西。
 
-        实测就有这样的工作树：分支早已并入 master，里面却躺着一份成形的未提交改动
+        实测就有这样的工作树：分支早已并入 main，里面却躺着一份成形的未提交改动
         （按钮等待态改用 aria-busy，还配了对应的测试）。所以脏的一律拒收并单独列出，
         交给人看，不给 --force 这个口子。
         """
@@ -330,7 +330,7 @@ class PruneTests(_WorktreeCase):
         2026-09-01 实测：连跑 5 次 prune --apply 才把 5 个工作树摘完，5 条分支一条没删，
         最后是手工 `git branch -d` 收的尾——因为 remove 一失败就抛错中止了整轮。分支的
         那半边当时补上了，目录这半边还写着「待人工清理」，于是残留目录照样留在原地：
-        长得和真工作树一样，在里面跑 git 全作用于主检出的 master。
+        长得和真工作树一样，在里面跑 git 全作用于主检出的 main。
         """
         worker = self._integrated("stuck-handle")
         with mock.patch.object(agent_worktree, "_git",
@@ -382,7 +382,7 @@ class UnregisteredLeftoverTests(_WorktreeCase):
 
     `create` 的落点和 Claude Code 内置的落点都会留下这种目录：它不在
     `git worktree list` 里，所以按登记项遍历的那轮回收永远碰不到它；人却会走进去当
-    工作树用，而在里面跑 git 全部作用于主检出的 master。两处同一条规则，只盖其中
+    工作树用，而在里面跑 git 全部作用于主检出的 main。两处同一条规则，只盖其中
     一处的话，另一处的残留就只能靠人想起来。
     """
 
@@ -585,7 +585,7 @@ class ReadmeImpactTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name).resolve()
-        git(self.repo, "init", "-b", "master")
+        git(self.repo, "init", "-b", "main")
         git(self.repo, "config", "user.name", "Test")
         git(self.repo, "config", "user.email", "test@example.invalid")
         self.save("README.md", "中文")
@@ -668,7 +668,7 @@ class ReadmeImpactTests(unittest.TestCase):
         self.commit()
         with mock.patch.object(agent_worktree.test_evidence, "key") as key:
             with self.assertRaisesRegex(agent_worktree.WorkspaceError, "README"):
-                agent_worktree.require_verified(self.repo, "master", {"web/app.js"})
+                agent_worktree.require_verified(self.repo, "main", {"web/app.js"})
             key.assert_not_called()
 
 
@@ -682,7 +682,7 @@ class CoAuthorTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name).resolve()
-        git(self.repo, "init", "-b", "master")
+        git(self.repo, "init", "-b", "main")
         git(self.repo, "config", "user.name", "Test")
         git(self.repo, "config", "user.email", "test@example.invalid")
         git(self.repo, "commit", "--allow-empty", "-m", "base")
@@ -690,7 +690,7 @@ class CoAuthorTests(unittest.TestCase):
 
     def signed(self, *trailers):
         git(self.repo, "commit", "--allow-empty", "-m", "测试", "-m", "\n".join(trailers))
-        return co_author.check(self.repo, "master")
+        return co_author.check(self.repo, "main")
 
     def test_an_unsigned_commit_cannot_be_traced_back_to_a_model(self):
         self.assertTrue(self.signed())
@@ -755,13 +755,13 @@ class CoAuthorTests(unittest.TestCase):
 
     def test_merges_from_the_target_branch_are_not_the_worker_s_commits(self):
         """目标分支上的提交由它自己那次交付负责，合进来不等于这个分支重写了一遍。"""
-        git(self.repo, "checkout", "master")
+        git(self.repo, "checkout", "main")
         git(self.repo, "commit", "--allow-empty", "-m", "上游的提交")
         git(self.repo, "checkout", "worker")
         self.signed("Co-Authored-By: Claude Code (Opus 5) <noreply@anthropic.com>")
-        git(self.repo, "merge", "--no-ff", "-m", "Merge branch 'master' into worker",
-            "master")
-        self.assertEqual(co_author.check(self.repo, "master"), [])
+        git(self.repo, "merge", "--no-ff", "-m", "Merge branch 'main' into worker",
+            "main")
+        self.assertEqual(co_author.check(self.repo, "main"), [])
 
     def test_a_commit_already_on_the_remote_master_cannot_be_signed_any_more(self):
         """网页上直接改的那条已经在 `origin/master` 上，分支并回它时改写 hash 只能强推；
@@ -769,9 +769,9 @@ class CoAuthorTests(unittest.TestCase):
         git(self.repo, "commit", "--allow-empty", "-m", "Remove section from README")
         published = git(self.repo, "rev-parse", "HEAD").strip()
         self.signed("Co-Authored-By: Claude Code (Opus 5) <noreply@anthropic.com>")
-        self.assertEqual(len(co_author.check(self.repo, "master")), 1)
+        self.assertEqual(len(co_author.check(self.repo, "main")), 1)
         git(self.repo, "update-ref", "refs/remotes/origin/master", published)
-        self.assertEqual(co_author.check(self.repo, "master"), [])
+        self.assertEqual(co_author.check(self.repo, "main"), [])
 
     def test_the_signature_gate_runs_before_the_test_evidence_is_read(self):
         """署名和 README 影响面在同一处拒收，都不必等到去读测试记录。"""
@@ -781,7 +781,7 @@ class CoAuthorTests(unittest.TestCase):
         git(self.repo, "commit", "-m", "测试")
         with mock.patch.object(agent_worktree.test_evidence, "key") as key:
             with self.assertRaisesRegex(agent_worktree.WorkspaceError, "Co-Authored-By"):
-                agent_worktree.require_verified(self.repo, "master", {"tests/example.py"})
+                agent_worktree.require_verified(self.repo, "main", {"tests/example.py"})
             key.assert_not_called()
 
 
@@ -795,7 +795,7 @@ class CommitSubjectTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name).resolve()
-        git(self.repo, "init", "-b", "master")
+        git(self.repo, "init", "-b", "main")
         git(self.repo, "config", "user.name", "Test")
         git(self.repo, "config", "user.email", "test@example.invalid")
         git(self.repo, "commit", "--allow-empty", "-m", "base")
@@ -804,7 +804,7 @@ class CommitSubjectTests(unittest.TestCase):
     def titled(self, *subjects):
         for subject in subjects:
             git(self.repo, "commit", "--allow-empty", "-m", subject)
-        return commit_subject.check(self.repo, "master")
+        return commit_subject.check(self.repo, "main")
 
     def test_a_conventional_subject_passes_with_or_without_scope(self):
         self.assertEqual(self.titled("fix(web): 补齐图标声明", "docs: 补记四个版本",
@@ -828,19 +828,19 @@ class CommitSubjectTests(unittest.TestCase):
         self.assertIn("补齐 JAV 元数据", problems[0])
 
     def test_merges_from_the_target_branch_are_not_the_worker_s_subjects(self):
-        git(self.repo, "checkout", "master")
+        git(self.repo, "checkout", "main")
         git(self.repo, "commit", "--allow-empty", "-m", "chore(deps-dev): bump vitest")
         git(self.repo, "checkout", "worker")
         git(self.repo, "commit", "--allow-empty", "-m", "fix(web): 自己的提交")
-        git(self.repo, "merge", "--no-ff", "-m", "Merge branch 'master' into worker", "master")
-        self.assertEqual(commit_subject.check(self.repo, "master"), [])
+        git(self.repo, "merge", "--no-ff", "-m", "Merge branch 'main' into worker", "main")
+        self.assertEqual(commit_subject.check(self.repo, "main"), [])
 
     def test_a_subject_already_on_the_remote_master_is_not_the_worker_s_to_fix(self):
         problems = self.titled("Remove section from README", "docs(readme): 并回网页上的改动")
         self.assertEqual(len(problems), 1)
         git(self.repo, "update-ref", "refs/remotes/origin/master",
             git(self.repo, "rev-parse", "HEAD~1").strip())
-        self.assertEqual(commit_subject.check(self.repo, "master"), [])
+        self.assertEqual(commit_subject.check(self.repo, "main"), [])
 
     def test_the_subject_gate_runs_before_the_test_evidence_is_read(self):
         (self.repo / "tests").mkdir()
@@ -850,5 +850,5 @@ class CommitSubjectTests(unittest.TestCase):
             "Co-Authored-By: Claude Code (Opus 5) <noreply@anthropic.com>")
         with mock.patch.object(agent_worktree.test_evidence, "key") as key:
             with self.assertRaisesRegex(agent_worktree.WorkspaceError, "提交主题"):
-                agent_worktree.require_verified(self.repo, "master", {"tests/example.py"})
+                agent_worktree.require_verified(self.repo, "main", {"tests/example.py"})
             key.assert_not_called()

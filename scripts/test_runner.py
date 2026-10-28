@@ -196,7 +196,7 @@ AUTO_SCOPE_FILES: dict[str, tuple[str, ...]] = {
     "src/peach/jav_poster_crop.py": ("metadata", "web"),
     # genre 词表按名字只推得出 metadata。复核队列与 API 那两处的用例拿「词表没收的词」
     # 当素材：词表一收那个词，`test_web_review.py`（catalog）与 `test_fastapi_api.py`
-    # （web）就红，而改词表的人跑不到那两个域——2026-09-21 就是这样把 master 跑红的。
+    # （web）就红，而改词表的人跑不到那两个域——2026-09-21 就是这样把 main 跑红的。
     "src/peach/genre_taxonomy.py": ("metadata", "catalog", "web"),
     # 标签词表是 genre 投影的落点，复核页与目录页也按它筛选。
     "src/peach/catalog_rules.py": ("metadata", "catalog", "web"),
@@ -497,7 +497,7 @@ def scopes_for_changes(paths: Iterable[str], *, contents: dict | None = None,
     return ordered, f"Peach auto scope: {', '.join(ordered)} <- {detail}"
 
 
-def changed_files(root: Path = ROOT, base: str = "master") -> list[str]:
+def changed_files(root: Path = ROOT, base: str = "main") -> list[str]:
     """分支相对 `base` 的提交、工作区已改动的文件和未跟踪文件，三者并集。"""
     commands = (
         ("git", "diff", "--name-only", "-z", f"{base}...HEAD"),
@@ -518,7 +518,7 @@ def resolve_auto_scope() -> tuple[tuple[str, ...], str]:
         paths = changed_files()
     except (OSError, subprocess.CalledProcessError) as error:
         return ("full",), f"Peach auto scope: full <- git 不可用（{error}）"
-    return scopes_for_changes(paths, contents=changed_contents(ROOT, "master", paths))
+    return scopes_for_changes(paths, contents=changed_contents(ROOT, "main", paths))
 
 
 CI_FRONTEND_TESTS = frozenset({
@@ -744,7 +744,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--focus", action="append", default=[], help="定向调试指定 Python/浏览器用例，不签发记录")
     parser.add_argument("--lock-timeout", type=float, default=1800,
                         help="全量锁等待秒数；0 表示锁忙时立即返回")
-    parser.add_argument("--base", default="master", help="CI 选测的已验证 Git 基线")
+    parser.add_argument("--base", default="main", help="CI 选测的已验证 Git 基线")
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--timings", type=Path, default=None,
@@ -772,7 +772,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("auto 不能与别的域同时指定")
     scopes = requested
     if requested == ("auto",):
-        if args.base == "master":
+        if args.base == "main":
             scopes, explanation = resolve_auto_scope()
         else:
             paths = changed_files(ROOT, args.base)

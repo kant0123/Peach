@@ -66,12 +66,12 @@ def takeover_repository(repo: Path) -> None:
 
 
 def dependabot_branch(repo: Path, name: str, files: dict[str, bytes]) -> None:
-    """从当前 master 分出一个只改 `files` 的分支，再回到 master。"""
+    """从当前 main 分出一个只改 `files` 的分支，再回到 main。"""
     git(repo, "checkout", "-q", "-b", name)
     for path, body in files.items():
         (repo / path).write_bytes(body)
     git(repo, "commit", "-q", "-am", f"bump on {name}")
-    git(repo, "checkout", "-q", "master")
+    git(repo, "checkout", "-q", "main")
 
 
 class DependencyPolicyTests(unittest.TestCase):
@@ -274,9 +274,9 @@ class DependencyPolicyTests(unittest.TestCase):
                              ["package.json", "web/vendor/videojs/1.2.3/video.min.js"])
 
     def test_the_takeover_keeps_what_master_added_to_the_manifest_after_the_fork(self):
-        """接管套的是分支自己的改动，分叉后 master 往清单里加的依赖原样留着。
+        """接管套的是分支自己的改动，分叉后 main 往清单里加的依赖原样留着。
 
-        Dependabot 的分支停在几天前的 master 上；整份签出它的清单，就把这几天新加的
+        Dependabot 的分支停在几天前的 main 上；整份签出它的清单，就把这几天新加的
         依赖抹掉了。两边改到同一行时要报出来，不能静默挑一边。
         """
         def manifest(a: str, extra: str = "") -> bytes:
@@ -288,7 +288,7 @@ class DependencyPolicyTests(unittest.TestCase):
             takeover_repository(repo)
             dependabot_branch(repo, "dep", {"package.json": manifest(branch_a)})
             (repo / "package.json").write_bytes(manifest(master_a, master_extra))
-            git(repo, "commit", "-q", "-am", "master moves on")
+            git(repo, "commit", "-q", "-am", "main moves on")
 
         with tempfile.TemporaryDirectory() as holder:
             repo = seed_repository(Path(holder).resolve() / "clean",

@@ -37,14 +37,14 @@ Dependabot 的 PR 一律在本地接管，不在网页上合：
 依赖升级须同时提交派生产物。只改 npm 清单与锁文件时，vendor 版本记录或构建结果可能与 Git 中的文件不一致，相关门槛会拒绝；这本身不代表依赖存在兼容性问题。Test 工作流先完成所选前端检查，通过后才启动 Python、浏览器与 wheel 回归。缺少产物时先本地接管重算，不能跳过一致性检查后直接合并。
 
 - npm 的两份清单各有一层派生产物：根 `package.json` 对应 `web/vendor/**` 与 `web/index.html` 的版本注释，`frontend/package.json` 对应 `web/dist/` 的主界面与独立页面包。Dependabot 算不出这些，它的 workflow 拿到的 token 又是只读的，推不回 `dependabot/**`，所以 `npm run check:vendor` 或前端产物检查会失败。
-- uv 与 github-actions 没有派生产物，但 master 在本机集成、通常领先 origin。在网页上合会让两边分叉，回并要在主检出 master 上 merge，被 `scripts/githooks/` 拒收。
+- uv 与 github-actions 没有派生产物，但 main 在本机集成、通常领先 origin。在网页上合会让两边分叉，回并要在主检出 main 上 merge，被 `scripts/githooks/` 拒收。
 
 每周的升级在一个隔离工作树里一次接完：
 
 1. 运行 `scripts/adopt_dependency_bump.py --all-open --co-author '<工具> (<模型>) <厂商 noreply>'`，看它列出的 PR 与各自的清单。
 2. 加 `--apply`，按编号从小到大一个 PR 一个提交：取回分支，只把它自己对清单的改动三方合并套进来，npm 重算派生产物，uv 跑 `uv lock --check`。
 3. 两个 PR 改到相邻行时脚本停下，报出冲突文件并在 `build/adopt-pr-<编号>.txt` 备好提交说明。按它印出的步骤解冲突、重算、提交，再跑一次 `--all-open --apply`；已接管的 PR 按提交说明跳过。
-4. 跑 `test.ps1 full`，走 ready / integrate，推送 master 后按它印出的 `gh pr close` 逐个关 PR。PR 显示为 Closed 而不是 Merged，因为提交是在本地重做的。
+4. 跑 `test.ps1 full`，走 ready / integrate，推送 main 后按它印出的 `gh pr close` 逐个关 PR。PR 显示为 Closed 而不是 Merged，因为提交是在本地重做的。
 5. 同一轮跑 `scripts/check_reference_updates.py check --cadence weekly --diff`，查 Dependabot 管不到的上游：按 sha 钉住的 amane 是否前移，Peach 代码直接消费或逐字复制的参考来源是否变化。审阅与 `accept` 按 `peach-reference-evidence` 技能；amane 前移单开分支升级。
 
 单个 PR 用 `--pr <编号>`，流程相同。`.github/dependabot.yml` 把每个生态的 minor 与 patch 合成一个 PR，semver-major 照常一个包一个 PR，接管前先读变更说明。需要改代码的大版本在隔离工作树完成迁移和验证；TanStack Table 的大版本也由 Dependabot 检查。

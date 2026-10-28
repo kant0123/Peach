@@ -447,7 +447,7 @@ curl -s --noproxy '*' -o /dev/null -w '%{http_code}\n' https://peach.local/healt
 - 每个包都带构建身份：`build_windows.ps1` 在调用 PyInstaller 前把 `{commit, version, built_at}` 写进 `build/windows/build-info.json`，再用 `--add-data` 放到包根，本机托盘与独立测试包共用。构建机没有 git 或源码不是检出时 `commit` 为 `null`，构建照常。`peach.buildinfo.frozen_build()` 只在 `sys.frozen` 时读它；文件缺失或格式不对返回 `None`，托盘照常启动，只是认为自己身份未取得。
 - PyInstaller 的资源直接在 `sys._MEIPASS` 下，没有源码树的 `src/` 这一层；打包后的 `migrate`、Web 与品牌资源都要从这里解析，不能在 `config.py` 里固定取 `parents[2]`。
 - 本机托盘会自己发现「比检出旧」并重建。判据是构建提交与本地检出的差距，不是与 GitHub 的差距：这台机器的提交先落在本地再推远端，「落后远端」永远不成立。
-  - `VersionManager.build_age()` 用 `rev-list --count <构建提交>..HEAD` 数出落后多少，版本菜单显示成 `master@<HEAD> · 托盘构建 <构建提交>，落后 N 个提交`。数不出来（身份未取得、提交不在本检出历史里）按陈旧处理，重建范围收窄到 `src/peach/`。
+  - `VersionManager.build_age()` 用 `rev-list --count <构建提交>..HEAD` 数出落后多少，版本菜单显示成 `main@<HEAD> · 托盘构建 <构建提交>，落后 N 个提交`。数不出来（身份未取得、提交不在本检出历史里）按陈旧处理，重建范围收窄到 `src/peach/`。
   - 「同步开发进度」在 `ahead`／`current`／`error`／`unconfigured` 下走本地重建；健康轮询另外每 5 分钟读一次本地 HEAD 自动触发，同一个 HEAD 只自动试一次，首次设置没完成时不触发。
   - 重建流程是：完整测试 → 暂存构建 → 检查打包的迁移资源 → 备份 → 替换。任一步失败只发通知，旧托盘和服务继续运行，通知里写明卡在哪一步，日志在 `<Peach 数据目录>/logs/windows-source-sync.log`。
   - 独立测试包和源码运行的托盘不走这条路：测试包用配置页的在线更新，源码入口提示源码已是最新。
@@ -521,14 +521,14 @@ Windows 托盘在取得单实例锁后启动独立监视器。监视器用 Win32
 
 - 版本号只在 `src/peach/__init__.py::__version__` 里定义，采用 pre-1.0 SemVer。Git 提交是构建标识，`vX.Y.Z` 标签是发布点，推到 GitHub 就触发 Release 工作流（见「桌面入口与发布」）。
 - 版本号在发布时才动，一次发布加一格，所以每个 `X.Y.Z` 都有一份能下载的制品。
-- **定版**：在干净的 master 主检出上运行 `python scripts/release_tag.py --bump auto --apply`。它按上一个版本标签到 HEAD 的区间定档（`bump_part_for()`：主题以 `feat` 开头、带破坏性标记 `!`，或 `migrations/` 有新文件时推 minor，其余推 patch；1.0 要手工 `--bump major` 并另立 ADR，见 ADR-0012），写入 `__version__`，并把 `CHANGELOG.md` 的未发布一节定成这个版本号。区间只改了文档、技能和测试时直接拒绝，因为那样打出的包和上一个标签完全相同。`--bump` 只写文件不提交，并打印定版的那一节供人检查；不带 `--apply` 只打印计划。
-- **发布**：确认之后运行 `python scripts/release_tag.py --ship --apply`，一次完成剩下四步：提交 `src/peach/__init__.py` 与 `CHANGELOG.md`（消息 `chore(release): 版本 <新版本>`）、推送 master、每 30 秒查一次这个提交的 Test 工作流、变绿后创建并推送 annotated tag。默认最多等 30 分钟，用 `--timeout` 修改。不带 `--apply` 只打印步骤。
-- `--ship` 在动手前检查：不在 master、变更日志缺这一节、标签已被占用、工作区除了那两份定版文件还有别的改动，任何一条成立就拒绝（标签指向发布提交，夹带什么就等于发布什么）。Test 结束不是绿色就立刻停，这时标签还没打。
+- **定版**：在干净的 main 主检出上运行 `python scripts/release_tag.py --bump auto --apply`。它按上一个版本标签到 HEAD 的区间定档（`bump_part_for()`：主题以 `feat` 开头、带破坏性标记 `!`，或 `migrations/` 有新文件时推 minor，其余推 patch；1.0 要手工 `--bump major` 并另立 ADR，见 ADR-0012），写入 `__version__`，并把 `CHANGELOG.md` 的未发布一节定成这个版本号。区间只改了文档、技能和测试时直接拒绝，因为那样打出的包和上一个标签完全相同。`--bump` 只写文件不提交，并打印定版的那一节供人检查；不带 `--apply` 只打印计划。
+- **发布**：确认之后运行 `python scripts/release_tag.py --ship --apply`，一次完成剩下四步：提交 `src/peach/__init__.py` 与 `CHANGELOG.md`（消息 `chore(release): 版本 <新版本>`）、推送 main、每 30 秒查一次这个提交的 Test 工作流、变绿后创建并推送 annotated tag。默认最多等 30 分钟，用 `--timeout` 修改。不带 `--apply` 只打印步骤。
+- `--ship` 在动手前检查：不在 main、变更日志缺这一节、标签已被占用、工作区除了那两份定版文件还有别的改动，任何一条成立就拒绝（标签指向发布提交，夹带什么就等于发布什么）。Test 结束不是绿色就立刻停，这时标签还没打。
 - 中途停下（断网、CI 还在跑、超时）就再运行一次同一条命令：每一步都先看当前状态，已提交的不重复提交，已推送的不重复推送，Test 没绿绝不打标签。
-- 单独补打标签用 `python scripts/release_tag.py`：默认只检查本地与 GitHub master 一致、这个提交最新的 Test 全绿、`CHANGELOG.md` 有这个版本的一节、标签不存在；加 `--apply` 才创建 annotated tag 并只推送这个标签。适用于发布提交已推送、只差标签的情况。变更日志那一节是硬性要求，缺了先用 `--bump` 起草。版本标签不覆盖，下一版先改 `__version__`。推送失败留下本地标签时，先确认归属再人工处理，不强推。Release 工作流会再检查标签提交在 master 历史里、同一提交的 Test 已通过，然后构建、验收制品、创建预发布。打标签代表公开预发布，不等于替换本机生产入口。
-- 已确认的发布提交推送后，若 master 继续推进，用 `python scripts/release_tag.py --release-sha <完整提交 SHA>` 核对固定提交的发布计划，确认输出后加 `--apply` 补打标签。这个模式从选定提交读取版本与变更日志，并在创建标签前再次核对主线归属、同一提交最新的绿色 Test 和标签占用；只推送标签，保留当前 master。它不能与 `--bump`、`--ship` 或 `--verify-sha` 合用。
+- 单独补打标签用 `python scripts/release_tag.py`：默认只检查本地与 GitHub main 一致、这个提交最新的 Test 全绿、`CHANGELOG.md` 有这个版本的一节、标签不存在；加 `--apply` 才创建 annotated tag 并只推送这个标签。适用于发布提交已推送、只差标签的情况。变更日志那一节是硬性要求，缺了先用 `--bump` 起草。版本标签不覆盖，下一版先改 `__version__`。推送失败留下本地标签时，先确认归属再人工处理，不强推。Release 工作流会再检查标签提交在 main 历史里、同一提交的 Test 已通过，然后构建、验收制品、创建预发布。打标签代表公开预发布，不等于替换本机生产入口。
+- 已确认的发布提交推送后，若 main 继续推进，用 `python scripts/release_tag.py --release-sha <完整提交 SHA>` 核对固定提交的发布计划，确认输出后加 `--apply` 补打标签。这个模式从选定提交读取版本与变更日志，并在创建标签前再次核对主线归属、同一提交最新的绿色 Test 和标签占用；只推送标签，保留当前 main。它不能与 `--bump`、`--ship` 或 `--verify-sha` 合用。
 - **什么时候该发**：`scripts/agent_worktree.py integrate` 不改版本号，只报当前值，并输出 `release` 字段（`scripts/changelog.py` 的 `due()`）。`due` 为真时提出发布，理由在 `why`。节奏是每周一次、条目攒够提前、破坏性变化和安全修复不等周期（`DUE_DAYS = 7`、`DUE_ENTRIES = 10`）。只数使用者看得见的变更条目，不数提交。`DUE_ENTRIES` 是没有样本时的保守起点，`due()` 每次都报出实际条目数与分组，积累几次真实发布后再校准。
-- **会话收尾提醒**：`scripts/release_due.py --hook-event` 挂在 Claude 的 `.claude/settings.json` 与 Codex 的 `.codex/hooks.json` 的 `Stop` 钩子上（两边约定一致：stdin 收 JSON、stdout 回 `systemMessage`、退出码 0）。只有在主检出、在 master、工作区干净、这个 master sha 还没问过，并且 `due` 为真时才输出一句，其余情况什么都不打印。已问记录在 `<Peach 数据目录>/state/release-due.json`，master 前进后才会再问。手工查看用不带参数的 `python scripts/release_due.py`，它只读，不改记录。
+- **会话收尾提醒**：`scripts/release_due.py --hook-event` 挂在 Claude 的 `.claude/settings.json` 与 Codex 的 `.codex/hooks.json` 的 `Stop` 钩子上（两边约定一致：stdin 收 JSON、stdout 回 `systemMessage`、退出码 0）。只有在主检出、在 main、工作区干净、这个 main sha 还没问过，并且 `due` 为真时才输出一句，其余情况什么都不打印。已问记录在 `<Peach 数据目录>/state/release-due.json`，main 前进后才会再问。手工查看用不带参数的 `python scripts/release_due.py`，它只读，不改记录。
 - 钩子用 `uv run --no-project` 找解释器，同一条命令在两个平台都能用。`--no-project` 不能省：`release_due.py` 只用标准库；如果让 uv 识别项目，它会在一个有 `pyproject.toml` 但还没建 venv 的检出里建一个空 venv，`scripts/test.ps1` 随后会优先选中它，测试连 `filelock` 都导入不了。`tests/test_release_due.py` 会把配置里的命令原样执行一遍，并检查工作目录没有多出 `.venv`。需要 `uv` 在 PATH 上，推荐 `winget install --id astral-sh.uv`，不要把远端脚本直接管道进 shell。
 - 「检查更新」只 fetch 和比较；「同步开发进度」只做 `merge --ff-only`，不 stash、不 rebase、不 `--force`：并行工作树和主检出共用同一个对象库与 reflog，任何改写历史的操作都会波及其他分支。工作区有改动或两边分叉时，原样报告交给人处理。本地不落后远端或连不上远端时，按构建身份判断打包托盘要不要重建（见「桌面入口与发布」）；这条路径不拦有改动的工作区，因为构建用的就是检出里的代码。
 - 快进涉及 `tray.py`／`menubar.py`／`versioning.py`／`certs.py`／`netwatch.py`／`config.py`／`pyproject.toml` 时，只重启子服务不够，托盘要用 `launchctl kickstart -k` 重启自己：先 `stop_owned()` 再 kickstart，前提是 launchd 报的 pid 等于自己的 pid。
