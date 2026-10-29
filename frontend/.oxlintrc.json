@@ -4,6 +4,7 @@
     "correctness": "error"
   },
   "plugins": ["typescript", "oxc"],
+  "env": { "browser": true, "es2022": true, "node": true },
   "jsPlugins": ["@shadcn/lint"],
   "ignorePatterns": ["src/react/boardui/**", "src/react/evilcharts/**"],
   "settings": {
@@ -13,6 +14,7 @@
     }
   },
   "rules": {
+    "no-undef": "error",
     "eqeqeq": ["error", "always", { "null": "ignore" }],
     "oxc/no-accumulating-spread": "error"
   },
