@@ -60,8 +60,14 @@ export async function verifyTablePreferences(page: Page, table: Locator, label: 
   const width = async () => header.evaluate(node => node.getBoundingClientRect().width);
   const initial = await width();
   const handle = header.getByRole('slider');
-  await handle.focus(); await handle.press('Enter');
-  await header.locator('.react-aria-ColumnResizer[data-resizing]').waitFor();
+  /* 表格在数据到位后还会重排一次，抢在重排前的 Enter 会落空；没进入调整状态就重新聚焦再按，
+     已进入的不会再按（再按一次 Enter 会结束调整）。 */
+  const resizing = header.locator('.react-aria-ColumnResizer[data-resizing]');
+  for (let attempt = 0; ; attempt++) {
+    await handle.focus(); await handle.press('Enter');
+    try { await resizing.waitFor({ timeout: 3000 }); break }
+    catch (error) { if (attempt >= 4) throw error }
+  }
   await handle.press('ArrowRight'); await handle.press('ArrowRight');
   await page.waitForFunction(({ node, initial }) => node && node.getBoundingClientRect().width > initial,
     { node: await header.elementHandle(), initial }, { timeout: 5000 });
