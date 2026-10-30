@@ -66,7 +66,12 @@ BATCH_LABELS = {
     "dispose": "批量移入回收站", "restore": "批量还原", "delete": "批量永久删除",
     "dismiss-junk": "批量确认不是垃圾", "reconsider-junk": "批量重新判定垃圾",
     "region": "批量判定产地",
+    "keep-duplicates": "批量确认全部保留", "reconsider-duplicates": "批量重新判定重复",
 }
+
+#: 用户在重复文件页点「全部保留」后，每个文件记一行。一组里的文件全部有这一行才不再列出；
+#: 之后有新副本加入，这一组会重新出现。
+DUPLICATE_KEEP = "duplicate_keep"
 
 #: 垃圾评分读到的账本表（`junk.scored_candidates`）：资产本身与用户确认不是垃圾的决定。
 JUNK_TABLES = ("asset", "review_decision")
@@ -490,6 +495,8 @@ def _reject_ineligible_targets(operation: str, rows) -> None:
             row["location"] not in SCANNABLE_LOCATIONS
             or row["disposal"] is not None for row in rows):
         raise ValueError("junk decisions are only allowed for active physical assets")
+    if operation == "keep-duplicates" and any(row["disposal"] is not None for row in rows):
+        raise ValueError("duplicate decisions are only allowed for active assets")
 
 
 def _batch_disposal_reason(body):
@@ -534,6 +541,7 @@ def w_batch(contract: WebContract, body):
     if operation not in {
         "like", "seen", "later", "dispose", "restore", "delete",
         "dismiss-junk", "reconsider-junk", "region",
+        "keep-duplicates", "reconsider-duplicates",
     }:
         raise ValueError("unsupported batch operation")
     # 产地的取值在这里就要认出来，别等到写库那一步才发现拼错了。
@@ -578,6 +586,20 @@ def w_batch(contract: WebContract, body):
             elif operation == "reconsider-junk":
                 connection.executemany(
                     "DELETE FROM review_decision WHERE category='junk_file' AND item_key=?",
+                    [(str(asset_id),) for asset_id in valid_ids],
+                )
+            elif operation == "keep-duplicates":
+                connection.executemany(
+                    "INSERT INTO review_decision(category,item_key,status,note,updated_at) "
+                    f"VALUES('{DUPLICATE_KEEP}',?,'rejected','用户确认全部保留',?) "
+                    "ON CONFLICT(category,item_key) DO UPDATE SET "
+                    "status='rejected',note=excluded.note,updated_at=excluded.updated_at",
+                    [(str(asset_id), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)))
+                     for asset_id in valid_ids],
+                )
+            elif operation == "reconsider-duplicates":
+                connection.executemany(
+                    f"DELETE FROM review_decision WHERE category='{DUPLICATE_KEEP}' AND item_key=?",
                     [(str(asset_id),) for asset_id in valid_ids],
                 )
             elif operation == "region":
@@ -637,8 +659,8 @@ def _add_large_short_copy_cluster(items: list[dict], clusters: list[list[dict]])
     return cluster
 
 
-def _duplicate_groups(grouped: dict[str, list[dict]]):
-    """把已按番号归组的资产整理成重复项 API 结果。"""
+def _duplicate_groups(grouped: dict[str, list[dict]], kept: frozenset[int] = frozenset()):
+    """把已按番号归组的资产整理成重复项 API 结果；用户已确认全部保留的组不列出。"""
     groups = []
     for code, items in grouped.items():
         if len(items) < 2:
@@ -646,6 +668,8 @@ def _duplicate_groups(grouped: dict[str, list[dict]]):
         clusters = [cluster for cluster in duration_clusters(items) if len(cluster) >= 2]
         short_copy_cluster = _add_large_short_copy_cluster(items, clusters)
         for cluster in clusters:
+            if all(item["id"] in kept for item in cluster):
+                continue
             largest = max(cluster, key=lambda x: x.get("size") or 0)
             longest = max(cluster, key=lambda x: x.get("duration") or 0)
             hashes_present = [x["hash"] for x in cluster if x["hash"]]
@@ -682,6 +706,10 @@ def q_duplicates(contract: WebContract, args):
             "FROM asset WHERE medium='video' AND code IS NOT NULL AND code<>'' "
             "AND disposal IS NULL"
         ).fetchall()
+        kept = frozenset(int(row[0]) for row in connection.execute(
+            "SELECT item_key FROM review_decision WHERE category=? AND status='rejected'",
+            (DUPLICATE_KEEP,),
+        ) if str(row[0]).isdigit())
 
     grouped: dict[str, list[dict]] = {}
     for row in rows:
@@ -692,7 +720,7 @@ def q_duplicates(contract: WebContract, args):
         item["drive"] = str(item.get("path") or "")[:2].upper()
         grouped.setdefault(normalise_code_key(row["code"]), []).append(item)
 
-    groups = _duplicate_groups(grouped)
+    groups = _duplicate_groups(grouped, kept)
     groups.sort(key=lambda g: -g["reclaimable"])
     window = groups[offset:offset + limit]
     return {

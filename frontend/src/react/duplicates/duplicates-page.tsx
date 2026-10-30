@@ -1,7 +1,8 @@
 /* 重复文件页：同番号、时长相近、分卷标记一致的几份文件归成一组，每组挑一个留下。
  *
  * 顶上一块汇总、一条批量保留的玻璃条，下面每组一张卡：组头说明判据与可回收多少，行里是
- * 每一份文件。留谁由人点；其余的走 `/api/batch` 的 `dispose` 进回收站，回执上带撤销。 */
+ * 每一份文件。留谁由人点；其余的走 `/api/batch` 的 `dispose` 进回收站，回执上带撤销。
+ * 组头另有「全部保留」：这一组都要，记下决定后不再列出，不删任何文件。 */
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { confirmModal, MEDIA_SOURCE_ICONS } from '@peach/legacy/ui';
@@ -118,6 +119,25 @@ export function DuplicatesPage({ openItem, toast, failure }: DuplicatesProps) {
     onSettled: () => setPending(''),
   });
 
+  const keepAll = useMutation({
+    mutationFn: (ids: readonly number[]) => batchOperate(ids, 'keep-duplicates'),
+    onSuccess: (_result, ids) => {
+      refresh();
+      toast(t('已确认 {count} 个文件全部保留', { count: ids.length }), {
+        undo: async () => {
+          try {
+            await batchOperate(ids, 'reconsider-duplicates');
+          } catch (cause) {
+            failure(t('撤销全部保留'), cause);
+          } finally {
+            refresh();
+          }
+        },
+      });
+    },
+    onSettled: () => setPending(''),
+  });
+
   const data = duplicates.data;
   if (!data) {
     return (
@@ -141,7 +161,12 @@ export function DuplicatesPage({ openItem, toast, failure }: DuplicatesProps) {
       onConfirm: () => { setPending(key); return dispose.mutateAsync(ids) },
     });
   };
-  const busy = (key: string) => busyProps(pending === key && dispose.isPending);
+  const busy = (key: string) => busyProps(pending === key && (dispose.isPending || keepAll.isPending));
+  const keepEverything = (group: DuplicateGroup, key: string) => {
+    if (dispose.isPending || keepAll.isPending) return;
+    setPending(key);
+    keepAll.mutate(group.files.map((file) => file.id));
+  };
 
   return (
     <div className="mx-auto w-full max-w-board pb-10.5">
@@ -165,6 +190,9 @@ export function DuplicatesPage({ openItem, toast, failure }: DuplicatesProps) {
         : null}
       {dispose.isError
         ? <div className="mb-5"><Note tone="error" title={t('移入回收站失败')}>{errorMessage(dispose.error)}</Note></div>
+        : null}
+      {keepAll.isError
+        ? <div className="mb-5"><Note tone="error" title={t('全部保留失败')}>{errorMessage(keepAll.error)}</Note></div>
         : null}
       {groups.length
         ? groups.map((group, index) => {
@@ -193,8 +221,10 @@ export function DuplicatesPage({ openItem, toast, failure }: DuplicatesProps) {
                         <SourceLabel source={location} label={t('留 {location}', { location: LOC[location] || location })} />
                       </Button>
                     ))}
+                    <Button variant="secondary" size="small" {...busy(key('keep'))}
+                      onClick={() => keepEverything(group, key('keep'))}>{t('全部保留')}</Button>
                     <Button variant="danger" size="small" {...busy(key('all'))}
-                      onClick={() => run({ groups: one, keep: 'all', key: key('all') })}>{t('整组回收')}</Button>
+                      onClick={() => run({ groups: one, keep: 'all', key: key('all') })}>{t('整组删除')}</Button>
                   </span>
                 </div>
                 <div>{group.files.map((file) => <FileRow key={file.id} file={file} prefix={prefix} openItem={openItem} />)}</div>

@@ -1,7 +1,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "1fe2006d-e5ef-43ed-8f2c-f69f29a0cda7", e._sentryDebugIdIdentifier = "sentry-dbid-1fe2006d-e5ef-43ed-8f2c-f69f29a0cda7");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "353d9940-7eaf-4098-be1f-7c75574f6dfb", e._sentryDebugIdIdentifier = "sentry-dbid-353d9940-7eaf-4098-be1f-7c75574f6dfb");
 	} catch {}
 })();
 import { Button as e, CollectionSummary as t, DUPLICATES_KEY as n, EmptyState as r, FilterGlass as i, GlassPill as a, KEEP_LABELS as o, LOC as s, MEDIA_SOURCES_KEY as c, MEDIA_SOURCE_ICONS as l, Note as u, SourceLabel as d, SourceMark as f, TRASH_KEY as p, __toESM as m, batchOperate as h, bulkCloudPreferences as g, busyProps as _, cardClass as v, cloudLocations as y, confirmModal as b, distinctName as x, duplicateVictims as S, errorMessage as C, fetchDuplicates as w, fetchMediaSources as T, fmtDur as E, fmtSize as D, mixedCloudPreferences as O, queryClient as k, require_jsx_runtime as A, require_react as j, sharedNamePrefix as M, spriteGlyph as N, t as P, useMutation as F, useQuery as I, victimBytes as L } from "./peach-app.js";
@@ -114,8 +114,22 @@ function Y({ openItem: l, toast: f, failure: p }) {
 			} });
 		},
 		onSettled: () => E("")
-	}), A = m.data;
-	if (!A) return /* @__PURE__ */ (0, z.jsx)("div", {
+	}), A = F({
+		mutationFn: (e) => h(e, "keep-duplicates"),
+		onSuccess: (e, t) => {
+			K(), f(P("已确认 {count} 个文件全部保留", { count: t.length }), { undo: async () => {
+				try {
+					await h(t, "reconsider-duplicates");
+				} catch (e) {
+					p(P("撤销全部保留"), e);
+				} finally {
+					K();
+				}
+			} });
+		},
+		onSettled: () => E("")
+	}), j = m.data;
+	if (!j) return /* @__PURE__ */ (0, z.jsx)("div", {
 		className: "mx-auto w-full max-w-board",
 		children: /* @__PURE__ */ (0, z.jsx)(u, {
 			tone: "error",
@@ -123,7 +137,7 @@ function Y({ openItem: l, toast: f, failure: p }) {
 			children: m.error ? C(m.error) : P("未取得重复文件列表，请刷新页面重试。")
 		})
 	});
-	let j = A.groups ?? [], N = y(v.data), B = ({ groups: e, keep: t, key: n }) => {
+	let N = j.groups ?? [], B = y(v.data), U = ({ groups: e, keep: t, key: n }) => {
 		if (k.isPending) return;
 		let r = S(e, t);
 		r.length && b({
@@ -135,25 +149,27 @@ function Y({ openItem: l, toast: f, failure: p }) {
 			confirmLabel: P("移入回收站"),
 			onConfirm: () => (E(n), k.mutateAsync(r))
 		});
-	}, U = (e) => _(x === e && k.isPending);
+	}, G = (e) => _(x === e && (k.isPending || A.isPending)), Y = (e, t) => {
+		k.isPending || A.isPending || (E(t), A.mutate(e.files.map((e) => e.id)));
+	};
 	return /* @__PURE__ */ (0, z.jsxs)("div", {
 		className: "mx-auto w-full max-w-board pb-10.5",
 		children: [
 			/* @__PURE__ */ (0, z.jsx)(t, {
 				label: P("重复内容"),
-				figure: P("{value} 组", { value: Number(A.total || 0).toLocaleString() }),
+				figure: P("{value} 组", { value: Number(j.total || 0).toLocaleString() }),
 				detail: P("{value} 个文件 · 可回收 {value2}", {
-					value: Number(A.files || 0).toLocaleString(),
-					value2: D(A.reclaimable)
+					value: Number(j.files || 0).toLocaleString(),
+					value2: D(j.reclaimable)
 				})
 			}),
-			j.length ? /* @__PURE__ */ (0, z.jsxs)(i, {
+			N.length ? /* @__PURE__ */ (0, z.jsxs)(i, {
 				title: P("批量保留"),
 				children: [
 					/* @__PURE__ */ (0, z.jsx)(a, {
 						busy: x === "all:largest",
-						onPress: () => B({
-							groups: j,
+						onPress: () => U({
+							groups: N,
 							keep: "largest",
 							key: "all:largest"
 						}),
@@ -161,17 +177,17 @@ function Y({ openItem: l, toast: f, failure: p }) {
 					}),
 					/* @__PURE__ */ (0, z.jsx)(a, {
 						busy: x === "all:longest",
-						onPress: () => B({
-							groups: j,
+						onPress: () => U({
+							groups: N,
 							keep: "longest",
 							key: "all:longest"
 						}),
 						children: P("全部保留最长")
 					}),
-					g(j, N).map((e) => /* @__PURE__ */ (0, z.jsx)(a, {
+					g(N, B).map((e) => /* @__PURE__ */ (0, z.jsx)(a, {
 						busy: x === `all:${e}`,
-						onPress: () => B({
-							groups: j,
+						onPress: () => U({
+							groups: N,
 							keep: e,
 							key: `all:${e}`
 						}),
@@ -190,7 +206,15 @@ function Y({ openItem: l, toast: f, failure: p }) {
 					children: C(k.error)
 				})
 			}) : null,
-			j.length ? j.map((t, n) => {
+			A.isError ? /* @__PURE__ */ (0, z.jsx)("div", {
+				className: "mb-5",
+				children: /* @__PURE__ */ (0, z.jsx)(u, {
+					tone: "error",
+					title: P("全部保留失败"),
+					children: C(A.error)
+				})
+			}) : null,
+			N.length ? N.map((t, n) => {
 				let r = [t], i = M(t.files.map((e) => e.name)), a = (e) => `${n}:${e}`;
 				return /* @__PURE__ */ (0, z.jsxs)("section", {
 					"aria-label": t.code,
@@ -220,8 +244,8 @@ function Y({ openItem: l, toast: f, failure: p }) {
 									/* @__PURE__ */ (0, z.jsx)(e, {
 										variant: "secondary",
 										size: "small",
-										...U(a("largest")),
-										onClick: () => B({
+										...G(a("largest")),
+										onClick: () => U({
 											groups: r,
 											keep: "largest",
 											key: a("largest")
@@ -231,19 +255,19 @@ function Y({ openItem: l, toast: f, failure: p }) {
 									/* @__PURE__ */ (0, z.jsx)(e, {
 										variant: "secondary",
 										size: "small",
-										...U(a("longest")),
-										onClick: () => B({
+										...G(a("longest")),
+										onClick: () => U({
 											groups: r,
 											keep: "longest",
 											key: a("longest")
 										}),
 										children: P("留最长")
 									}),
-									O(t.files, N).map((t) => /* @__PURE__ */ (0, z.jsx)(e, {
+									O(t.files, B).map((t) => /* @__PURE__ */ (0, z.jsx)(e, {
 										variant: "secondary",
 										size: "small",
-										...U(a(t)),
-										onClick: () => B({
+										...G(a(t)),
+										onClick: () => U({
 											groups: r,
 											keep: t,
 											key: a(t)
@@ -254,15 +278,22 @@ function Y({ openItem: l, toast: f, failure: p }) {
 										})
 									}, t)),
 									/* @__PURE__ */ (0, z.jsx)(e, {
+										variant: "secondary",
+										size: "small",
+										...G(a("keep")),
+										onClick: () => Y(t, a("keep")),
+										children: P("全部保留")
+									}),
+									/* @__PURE__ */ (0, z.jsx)(e, {
 										variant: "danger",
 										size: "small",
-										...U(a("all")),
-										onClick: () => B({
+										...G(a("all")),
+										onClick: () => U({
 											groups: r,
 											keep: "all",
 											key: a("all")
 										}),
-										children: P("整组回收")
+										children: P("整组删除")
 									})
 								]
 							})
@@ -278,11 +309,11 @@ function Y({ openItem: l, toast: f, failure: p }) {
 				title: P("没有找到重复文件"),
 				children: P("所有来源之间没有检测到内容相同的文件。扫描新来源后，这里会自动更新。")
 			}),
-			j.length > 0 && A.total > j.length ? /* @__PURE__ */ (0, z.jsx)("p", {
+			N.length > 0 && j.total > N.length ? /* @__PURE__ */ (0, z.jsx)("p", {
 				className: "text-center text-caption-1-regular text-text-secondary",
 				children: P("显示可回收最多的前 {value} 组，共 {value2} 组；处理掉这些后，其余的会补上来。", {
-					value: j.length.toLocaleString(),
-					value2: Number(A.total).toLocaleString()
+					value: N.length.toLocaleString(),
+					value2: Number(j.total).toLocaleString()
 				})
 			}) : null
 		]
@@ -290,4 +321,4 @@ function Y({ openItem: l, toast: f, failure: p }) {
 }
 export { Y as DuplicatesPage };
 
-//# debugId=1fe2006d-e5ef-43ed-8f2c-f69f29a0cda7
+//# debugId=353d9940-7eaf-4098-be1f-7c75574f6dfb

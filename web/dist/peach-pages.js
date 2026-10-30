@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "06891ccc-785c-455e-aa48-c2fd67ee82dc", e._sentryDebugIdIdentifier = "sentry-dbid-06891ccc-785c-455e-aa48-c2fd67ee82dc");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "64468517-9f1a-49a5-a4bf-097ec406c0cb", e._sentryDebugIdIdentifier = "sentry-dbid-64468517-9f1a-49a5-a4bf-097ec406c0cb");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -1695,7 +1695,11 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	整理文件: "ファイルを整理",
 	整理结果: "整理結果",
 	整理配置读取失败: "整理の設定を読み込めませんでした",
-	整组回收: "グループごと回収",
+	整组删除: "グループごと削除",
+	全部保留: "すべて残す",
+	全部保留失败: "「すべて残す」の設定に失敗しました",
+	"已确认 {count} 个文件全部保留": "{count} 件をすべて残す設定にしました",
+	撤销全部保留: "「すべて残す」の取り消し",
 	文件位置: "ファイルの場所",
 	"文件共 {value}，记录可从回收站还原。": "ファイルは合計 {value}。記録はゴミ箱から元に戻せます。",
 	文件名: "ファイル名",
@@ -26930,4 +26934,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=06891ccc-785c-455e-aa48-c2fd67ee82dc
+//# debugId=64468517-9f1a-49a5-a4bf-097ec406c0cb

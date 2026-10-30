@@ -3524,6 +3524,32 @@ class DuplicateDetectionTests(unittest.TestCase):
         self.assertEqual(files["A:"]["path"], r"A:\1.mp4")
         self.assertEqual(files["B:"]["path"], r"B:\2.mp4")
 
+    def test_keeping_every_copy_hides_the_group_until_a_new_copy_joins_or_it_is_undone(self):
+        first = self.add("SSIS-057", 7200, 5_000_000_000)
+        second = self.add("SSIS-057", 7200, 4_000_000_000)
+        self.assertEqual(self.groups()["total"], 1)
+        receipt = rm_web.w_batch(self.contract, {"ids": [first, second], "operation": "keep-duplicates"})
+        self.assertEqual(receipt["changed"], 2)
+        self.assertEqual(self.groups()["total"], 0)
+        # 只记决定：两份文件都还在库里，没有进回收站。
+        self.assertEqual(self.con.execute(
+            "SELECT count(*) FROM asset WHERE disposal IS NOT NULL").fetchone()[0], 0)
+        third = self.add("SSIS-057", 7200, 3_000_000_000)
+        group = self.groups()["groups"][0]
+        self.assertEqual(sorted(file["id"] for file in group["files"]), [first, second, third])
+        self.con.execute("DELETE FROM asset WHERE id=?", (third,))
+        self.con.commit()
+        self.assertEqual(self.groups()["total"], 0)
+        rm_web.w_batch(self.contract, {"ids": [first, second], "operation": "reconsider-duplicates"})
+        self.assertEqual(self.groups()["total"], 1)
+
+    def test_keeping_every_copy_rejects_assets_already_in_the_recycle_bin(self):
+        first = self.add("SSIS-057", 7200, 5_000_000_000)
+        second = self.add("SSIS-057", 7200, 4_000_000_000)
+        rm_web.w_batch(self.contract, {"ids": [second], "operation": "dispose"})
+        with self.assertRaises(ValueError):
+            rm_web.w_batch(self.contract, {"ids": [first, second], "operation": "keep-duplicates"})
+
     def test_reclaimable_keeps_the_largest_of_each_cluster(self):
         self.add("WAAA-415", 7200, 5_000_000_000)
         self.add("WAAA-415", 7200, 3_000_000_000)

@@ -2,7 +2,8 @@
  *
  * 判据是「同番号 + 时长相近 + 分卷标记一致」，不是同番号即重复——合集、分卷和混入的广告
  * 都会共用一个 code，只按番号做「保留最大」会删掉内容。服务端已经按这条判完，前端只挑
- * 每组留谁。批量一律走 `dispose` 进回收站，可逆；永久删除仍只能从回收站单独执行。
+ * 每组留谁。删除一律走 `dispose` 进回收站，可逆；永久删除仍只能从回收站单独执行。
+ * 「全部保留」走 `keep-duplicates`，不动文件，只让这一组不再被当成重复。
  *
  * 数据管理页那张「重复文件」卡片读的是同一份真相的 `total`／`files`／`reclaimable`，
  * 所以它接下面这个 `DUPLICATES_KEY`，不另发一次 `?limit=1`：服务端两种 limit 都要把整张
@@ -144,8 +145,11 @@ export function victimBytes(groups: readonly DuplicateGroup[], ids: readonly num
     (sum, file) => sum + (victims.has(file.id) ? file.size || 0 : 0), 0), 0);
 }
 
+/** 「全部保留」只记决定不动文件：在账本里给每个文件记一行，一组全记了就不再列出，撤销是删掉这些行。 */
+export type BatchOperation = 'dispose' | 'restore' | 'keep-duplicates' | 'reconsider-duplicates';
+
 /** 批量改判。一次最多 200 条，分批串行发：并发发出去只是让服务端自己排队。 */
-export async function batchOperate(ids: readonly number[], operation: 'dispose' | 'restore'): Promise<void> {
+export async function batchOperate(ids: readonly number[], operation: BatchOperation): Promise<void> {
   for (let offset = 0; offset < ids.length; offset += BATCH_LIMIT) {
     await apiSend(BATCH_URL, { ids: ids.slice(offset, offset + BATCH_LIMIT), operation,
       ...(operation === 'dispose' ? { disposal_reason: 'duplicate' } : {}) });

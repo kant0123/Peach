@@ -80,7 +80,7 @@ export function duplicatesSkeleton(): string {
   const group = `<section class="mb-6 overflow-hidden rounded-surface bg-background-secondary-default dark:bg-background-primary-default" data-duplicate-group>
     <div class="flex flex-wrap items-center gap-3 bg-background-tertiary-default p-5 max-compact:p-4 dark:bg-background-secondary-default">
       <b class="text-title-2-medium">${text('5em')}</b><span class="font-mono text-caption-1-regular leading-5">${text('8em')}</span>
-      <span class="ml-auto flex flex-wrap gap-2 max-compact:ml-0 max-compact:w-full">${[t('留最大'), t('留最长'), t('整组回收')].map(label => islandButton({ variant: 'secondary', size: 'small', label, attrs: wait })).join('')}</span>
+      <span class="ml-auto flex flex-wrap gap-2 max-compact:ml-0 max-compact:w-full">${[t('留最大'), t('留最长'), t('全部保留'), t('整组删除')].map(label => islandButton({ variant: 'secondary', size: 'small', label, attrs: wait })).join('')}</span>
     </div>${row.repeat(2)}</section>`;
   return `<div class="peach-react"><div class="mx-auto w-full max-w-board pb-10.5">
     <div data-collection-summary class="mb-5 flex items-end justify-between gap-4 rounded-surface bg-background-secondary-default px-6 py-5 max-compact:flex-col max-compact:items-start max-compact:gap-3 max-compact:p-4 dark:bg-background-primary-default">

@@ -84,7 +84,7 @@ describe('网盘保留选项', () => {
 });
 
 describe('每组留谁', () => {
-  it('留最大、留最长按服务端标的那一个；指名网盘时那里没有就退回全组最大；整组回收一个不留', () => {
+  it('留最大、留最长按服务端标的那一个；指名网盘时那里没有就退回全组最大；整组删除一个不留', () => {
     expect(duplicateVictims(groups, 'largest')).toEqual([2, 4]);
     expect(duplicateVictims(groups, 'longest')).toEqual([1, 4]);
     expect(duplicateVictims(groups, '115')).toEqual([2, 3]);
@@ -165,9 +165,26 @@ it('取消确认就什么都不发', async () => {
   const fetcher = fetchMock(200, { ok: true });
   vi.stubGlobal('fetch', fetcher);
   const { host } = await open();
-  await click(buttonNamed('整组回收', card(host, 'ABC-001')));
+  await click(buttonNamed('整组删除', card(host, 'ABC-001')));
   await settle();
   expect(fetcher.mock.calls.some((call) => call[0] === '/api/batch')).toBe(false);
+});
+
+it('「全部保留」不弹确认也不删文件：只记下这一组的决定，回执带撤销', async () => {
+  const seen = confirmEverything();
+  const fetcher = fetchMock(200, { ok: true });
+  vi.stubGlobal('fetch', fetcher);
+  const { host, toast } = await open();
+  await click(buttonNamed('全部保留', card(host, 'ABC-002')));
+  await settle();
+  expect(seen).toHaveLength(0);
+  const batch = fetcher.mock.calls.findIndex((call) => call[0] === '/api/batch');
+  expect(sentBody(fetcher, batch)).toEqual({ ids: [3, 4], operation: 'keep-duplicates' });
+  expect(toast).toHaveBeenCalledWith('已确认 2 个文件全部保留', expect.objectContaining({ undo: expect.any(Function) }));
+  const { undo } = toast.mock.calls[0]![1] as { undo(): Promise<void> };
+  await undo();
+  const batches = fetcher.mock.calls.flatMap((call, index) => (call[0] === '/api/batch' ? [index] : []));
+  expect(sentBody(fetcher, batches.at(-1))).toEqual({ ids: [3, 4], operation: 'reconsider-duplicates' });
 });
 
 it('点封面或文件名打开那一项', async () => {
