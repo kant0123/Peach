@@ -312,9 +312,15 @@ def stages_for_code(code: str | None, *hints: str | None,
     return stages_for_chain(route_for_code(code, *hints, overrides=overrides))
 
 
-def stage_name(source: str) -> str:
+def stage_name(source: str, chain: Sequence[str] = ()) -> str:
     """这个来源在采集任务里属于哪一档。合档的四组见 `FC2_STAGE`、`COMMUNITY_STAGE`、
-    `AMANE_OFFICIAL_STAGE`、`AMANE_STAGE`。"""
+    `AMANE_OFFICIAL_STAGE`、`AMANE_STAGE`。
+
+    `javarchive` 只在用户/补全任务把整条链覆盖进来时出现；FC2 链上它属于 `fc2` 档
+    （同一次 `fc2()` 里问），别的链上它是自己一档，避免被派到 FC2 的入口。
+    """
+    if source == "javarchive" and "fc2" not in chain:
+        return "javarchive"
     if source in FC2_STAGE:
         return "fc2"
     if source in COMMUNITY_STAGE:
@@ -330,7 +336,7 @@ def stages_for_chain(chain: Sequence[str]):
     """任意一条有序来源链按档摊开，顺序同链。`scrape_codes --sources` 点名的链也走这里。"""
     stages: list[str] = []
     for source in chain:
-        name = stage_name(source)
+        name = stage_name(source, chain)
         if name not in stages:
             stages.append(name)
     return tuple(stages)
@@ -338,7 +344,7 @@ def stages_for_chain(chain: Sequence[str]):
 
 def stage_members(stage: str, chain: Sequence[str]):
     """这一档在链上对应哪几个来源名。缓存与证据文件都按来源名存，不按档名。"""
-    return tuple(source for source in chain if stage_name(source) == stage)
+    return tuple(source for source in chain if stage_name(source, chain) == stage)
 
 
 def official_route(code: str | None, *hints: str | None,

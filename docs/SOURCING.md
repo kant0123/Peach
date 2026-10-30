@@ -183,6 +183,27 @@ Wiki 与视频作品资料无关。
 - 唯一例外：FALENO、DAHLIA 官网不给类别，缺标签的行在片商站答完标量后再问一次 r18.dev；下一档是综合索引
   就照样停。r18.dev 答了就不再为标签问 dmm，两家是同一份目录。
 
+### 既有未取得条目的文件名补全
+
+常规链按番号取数。没有番号、或链上全灭的行通常就此结束。`peach.iv_completion` 在
+`process_library` 结束**之后**单独跑第二趟，只把这些行按文件名再拾一遍（ADR-0132）。
+
+- 对象是常规处理里既没拿到资料、也没拿到封面的行（`iv_pending_ids`）。新路径不混进常规链，
+  既有补全的查询顺序和短路规则不变。
+- 线索来自 `peach.filename_metadata`：`[出演者] 标题`、`[出演者／出演者] 标题` 的方括号、
+  末尾或方括号内的番号、以及父目录名。`[----]`、`[中文字幕]`、`[4K]` 这类分类与画质标签
+  不当出演者。读出的值只作为候选；只有番号按 `auto:iv-completion-<批次>` 的归属写入，
+  同一批次可整批撤回。
+- 没有番号的行用 JavArchive 按标题和出演者搜索（`JavArchiveSource.search_records`）。搜索结果
+  的侧栏与热门栏不含查询词，会被过滤掉。标题的包含或高相似、出演者一致两项同时成立，
+  且**同一番号只有一件**时才采用；有歧义就什么都不写。
+- 番号确定后，对该行重跑一次现有的 `process_library`，在内容类型链的末尾追加 `javarchive`。
+  候选合并、自动落库与封面都走既有判定。JavArchive 是转载来源，需要两家一致的字段仍照旧
+  留在复核队列。
+- 每趟最多拾 30 部（`BATCH_LIMIT`）。不一次扫完全部，下一趟常规处理结束后再接着拾。
+- DUGA 是 JS 的 loading 页（HTTP 503），Getchu 是年龄确认页，现有 HTTP 取页到不了正文；
+  这两站没有接入。本次取得范围是 JavArchive 的 IV 页与关键词搜索。
+
 ### DMM / FANZA 目录
 
 有码链上 r18.dev 之后的 dmm 是 DMM／FANZA 自己的 GraphQL 目录（`sources/dmm.py`，ADR-0059），补 r18.dev
@@ -275,14 +296,14 @@ Wiki 与视频作品资料无关。
 | fc2club、freejavbt、airav、avsox | 已套契约（经桥） | `metadata_amane.py` | amane 的十六档 reason 经 `AMANE_REASONS` 一对一翻成契约细档，先套进 `SiteRecord` 再投影；`SITE_CONFIGS` 只持有站名、界面名与档位，主域与 Cookie 由 amane 管 |
 | makers、prestige、faleno、dahlia、mgstage | 已套契约（经桥） | `metadata_amane.py` | 档位 `official`（`OFFICIAL_SITES`）；`http_error` 带 401/403 经 `contract_reason` 归 `auth_required`；prestige 的 `release` 进 `extra['delivery_date']` |
 | AVBase | 已套契约 | `sources/avbase.py` | 搜索页一跳，从 `__NEXT_DATA__` 里挑出本作与它自己的商品条目；搜索无命中归 `not_found`，Cloudflare 验证页归 `cloudflare_challenge`，别的结构对不上归 `parse_error`；不给时长，`runtime` 留空 |
-| r18.dev | 已套契约 | `sources/r18dev.py` | 作品 JSON 与 combined 页两跳，日文写法、女优头像模板与 genre 取日文原词都在这一站里；`content_id` 对不上归 `parse_error`；档位 `official_mirror`，页面上限 2 MiB |
+| r18.dev | 已套契约 | `sources/r18dev.py` | 作品 JSON 与 combined 页两跳，日文写法、女优头像模板与 genre 取日文原词都在这一站里；IV 的 `combined.actors` 与 `actresses` 合并读，`jacket_image` 取 `large2` 的真地址；`content_id` 对不上归 `parse_error`；档位 `official_mirror`，页面上限 2 MiB |
 | DMM / FANZA | 已套契约 | `sources/dmm.py` | GraphQL 接口经 `Session.post` 一到三跳（猜 cid → 搜索 → 详情）；`ppvContent` 为 null 与搜索无命中归 `not_found`，回的不是 JSON 或接口拒绝查询（只有 `errors`）归 `parse_error`；档位 `official`，页面上限 1 MiB |
 | 一本道 | 已套契约 | `sources/onepondo.py` | 作品 JSON 一跳；认不出作品号、404 与 `MovieID` 对不上归 `not_found`，回的不是 JSON 归 `parse_error`；档位 `official`，页面上限 1 MiB |
 | FC2 | 已套契约 | `sources/fc2.py` | 商品页一跳，下架页与 `sku` 对不上归 `not_found`；番号、时长、原件地址与占位件判定是三站共用的函数，也在这里；页面上限 2 MiB |
 | fc2cmadb | 已套契约 | `sources/fc2cmadb.py` | 作品页之后在 `query()` 里带握手头点名 `actresses` 再问一跳，那一跳失败按没有女优交回；评论区的演员、等价与合集解析也在这里，`scripts/fetch_fc2_metadata.py` 从这里取 |
 | FC2PPV-DB | 已套契约 | `sources/fc2ppvdb.py` | 作品页一跳 `/ja/videos/<id>`；`<h1>` 里认不出番号（含站方 200 的 404 页）归 `not_found`，Cloudflare 验证页归 `cloudflare_challenge`；女优只在出演女優块里取，「流出」标记进 `extra['leaked']`，不交封面（缩略图 360×360） |
 | JAVten | 已套契约 | `sources/javten.py` | `/search?kw=<id>` 一跳，单命中时站方直接跳作品页，落到译文页再取日文原页；`h1.fc2-id` 对不上归 `not_found`，`og:url` 带语言前缀归 `parse_error`（中文是机翻，只收日文原页）；封面是 `og:image` 与 fancybox 那两处的 FC2 存储原件地址 |
-| JavArchive | 已套契约 | `sources/javarchive.py` | 搜索页加作品页两跳；`records()` 把搜索命中的每一条转存各交一份记录，某一条 404 或对不上就跳过 |
+| JavArchive | 已套契约 | `sources/javarchive.py` | 搜索页加作品页两跳；`records()` 把搜索命中的每一条转存各交一份记录，某一条 404 或对不上就跳过；非 FC2 番号按 IV 页的 `ジャンル`／`発　売`／`出　演`／`メーカー` 解析，并支持关键词搜索 |
 | Seesaa 的三个 Wiki | 已套契约 | `sources/seesaa.py` | 只由 `scrape_codes --profile seesaa` 或 `--sources sougouwiki,av_neme,av_name` 点名；两个认人 Wiki 共用 `NameWikiSource`；`rows()` 把一页作品表每行各读成一份记录；传输是 `WikiPages`（页缓存、本批限额、撞墙停网），不在 `scraping_access.SOURCES` 里；失败沿用 `budget`、`blocked`、`ambiguous`、`incomplete_search` 等分档，落进批处理的错误表与健康表，`budget` 与 403/429 决定本批停网 |
 
 FC2 五站依次问、资料取齐即停、封面问到底的流程在 `LibraryMetadataProvider.fc2`，按
@@ -361,11 +382,17 @@ minnano-av 也在 Cloudflare 后面，但对 HTTP 客户端是间歇拦截：202
 
 ### JavArchive
 
-- 作品地址里夹着站内文章号和标题（`/926949-FC2-PPV-4137487-…-pn.html`），拼不出来，所以先问
-  `/search?q=<番号>` 再取作品页。商品号按数字边界比，`4137487` 不能命中 `41374870`。
+- 作品地址里夹着站内文章号和标题（`/926949-FC2-PPV-4137487-…-pn.html`、`/105865-imbd-214-…-pn.html`），
+  拼不出来，所以先问 `/search?q=<番号>` 再取作品页。商品号按数字边界比，`4137487` 不能命中 `41374870`；
+  IV 番号按字母段与数字一起比，`IMBD-214` 不能命中 `IMBD-2140`。
 - 搜索结果只有标题和一张缩略图，标签、发行日、时长和封面位只在作品页，所以这一跳省不得。
-- 这一档给标题、封面，以及转存者在正文资料里填了的标签、発行日与时长。填不填由转存者决定，抽查多数整块空着。
+- FC2 转存页给标题、封面，以及转存者在正文资料里填了的标签、発行日与时长。填不填由转存者决定，抽查多数整块空着。
   卖家、商品说明和演员栏站上没有；正文余下几段是转载来的网盘链接，一概不取。
+- IV 页同一块正文写 `商品番号`、`ジャンル`、`発　売`、`出　演`、`メーカー`，对应标题、标签、发行日、出演者与厂牌；
+  `出　演` 一行可以有多人，`／` 与 `、` 都切开。DMM 的 GraphQL 目录只收 PPV，`IMBD-214`、`JSSJ-077` 这类
+  IV 在它上面零结果；r18.dev 只收其中一部分，这一站补剩下的。
+- 关键词搜索也用于既存未取得的行：`search_records()` 先按查询词过滤搜索结果，再逐条取作品页；侧栏热门与
+  归档菜单不带查询词，不会混进候选。
 - 同一个商品站上常有好几条，由不同转存者各发一次，文章号、番号写法、标题和图都不同，先后没有质量含义。
   搜索命中的每一条都取，第一条那张未必还在。地址里的标题有的已编码、有的是原字，拼之前统一编一遍。
 - `robots.txt` 全站放行。
@@ -627,6 +654,11 @@ Instagram 的独立用户登录会话未取得，自动适配器不进正式依�
 - 画质前缀（`HD`／`FHD`／`4K`／`1080P`）和版本后缀（`-C`／`-CH`／`-UC`／`-SUB`）不是番号的一部分，提取器先剥
   这两层再匹配。界面把版本语义投影成「中字」「无码」「无码破解」，原始 `name`／`code` 留给文件操作。缺连字符
   的紧凑 code 只有同时具备片商、发行日或 performer／studio／series 实体证据才恢复。
+- 番号不在开头也能认：`[icao.me]佐々木桃華 IMBD-214`、`[JSSJ-077] 純粋少女`、
+  `Konoha57_1219-ICDV-30159` 的番号在末尾或方括号里。`release_code_from_filename_suffix` 只认 4～8 个
+  字母、带分隔符、序号 2～5 位的写法，并要求落在末尾或方括号里；创作者自编号 `rei_mk01`、`himesaki01`
+  与片名里的「Berry 15」不算。番号仍读不出时，`_local_release_code` 再看父目录名，文件名与目录都
+  读不出才留空。
 - 推广域名会出现在番号的头、尾和方括号里（`www.98t.la@ABW-358-U`、`ABP-762-fuckbe.com`、`[xxx.cc]ABC-123`）。
   番号提取与目录判重共用 `strip_promo_markers` 这一层；各剥一半，叠了两层的 `[98t.tv][98t.tv]ABW-251` 就会在
   其中一处漏网。

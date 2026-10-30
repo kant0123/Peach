@@ -23,7 +23,8 @@ from filelock import FileLock, Timeout
 from PIL import Image
 
 from .catalog_rules import (compile_code_patterns, is_jav_code, is_local_extra, normalise_code_key,
-                            release_code_from_filename, same_release_code, scrapes_as_jav)
+                            release_code_from_filename, release_code_from_filename_suffix,
+                            same_release_code, scrapes_as_jav)
 from .field_owners import SCAN_FILENAME, write_owned_fields
 from .profiles import read_settings
 from .images import measure_image_file
@@ -654,6 +655,25 @@ class LibraryMetadataProvider:
         GraphQL（`sources/dmm.py`，ADR-0059）。"""
         return self.site(source, code, deadline=deadline)
 
+    def _javarchive_work(self, code, chain, snapshots, absent, deadline):
+        """第二趟把 JavArchive 加进链时，封面这一步的补充图源。
+
+        返回 `(works, problem)`；problem 是没问成的那一格 `(文字, 是否冷却)`。
+        """
+        from .sources.javarchive import catalog_code
+        from .jav_cover_fetch import Unavailable
+        from .scraping_access import SourcePaused
+        archive = [(name, payload) for name, payload in snapshots if name == 'javarchive']
+        if ('javarchive' not in chain or 'fc2' in chain or not catalog_code(code)
+                or archive or 'javarchive' in absent):
+            return archive, None
+        try:
+            return [('javarchive', self.query(code, 'javarchive', deadline=deadline))], None
+        except NotFound:
+            return [], None
+        except (Unavailable, SourcePaused) as error:
+            return [], (describe_failure(error), source_paused(error))
+
     def cover(self, code, cover_root, *, deadline=None, evidence=(), snapshots=(), absent=()):
         """官方大图优先；没有就用社区来源里两个图源对得上的那张；再没有就用官方小图。
 
@@ -690,11 +710,23 @@ class LibraryMetadataProvider:
             problems.append((describe_failure(error), source_paused(error)))
         chosen = official
         if official is None or official[1][0] < MIN_WIDTH:
+            chain = metadata_routes.route_for_code(code, *evidence)
+            archive, archive_problem = self._javarchive_work(
+                code, chain, snapshots, absent, _extended(deadline, self.excused - mark))
+            if archive_problem:
+                problems.append(archive_problem)
             try:
                 answers = self.community(code, deadline=_extended(deadline, self.excused - mark), absent=absent,
                                          known=[(name, payload) for name, payload in snapshots
                                                 if name in metadata_routes.COMMUNITY_STAGE])
-                *picked, verified_by = verified_cover(self.transport, code, answers,
+            except NotFound:
+                answers = []
+            except (Unavailable, SourcePaused) as error:
+                answers = []
+                problems.append((describe_failure(error), source_paused(error)))
+            works = [*answers, *archive]
+            try:
+                *picked, verified_by = verified_cover(self.transport, code, works,
                                                       reference=official, siblings=siblings if official else (),
                                                       deadline=_extended(deadline, self.excused - mark))
                 chosen = tuple(picked)
@@ -1257,6 +1289,22 @@ def _asks_cover(code, *evidence):
     return bool(code) and metadata_routes.classify(code, *evidence) not in ('kmib', 'other')
 
 
+def _iv_pending_row(row, code, found, covers, missing, cover_root):
+    """这一行要不要交给后段的文件名补全：资料或封面有一边没取到。"""
+    if found or covers:
+        return False
+    if missing:
+        return True
+    return (_asks_cover(code, *_studio_evidence(row))
+            and not cover_settled(cover_root / (code + '.jpg')))
+
+
+def _pending_ids(seen, cover_root):
+    """这一趟没取到资料或封面的资产，交给后段文件名补全。"""
+    return sorted({int(row['id']) for row, code, found, covers, missing in seen
+                   if _iv_pending_row(row, code, found, covers, missing, cover_root)})
+
+
 def _scrapes_as_jav(row, code):
     """把账本行摊成 `catalog_rules.scrapes_as_jav` 要的那几样发行证据。
 
@@ -1633,7 +1681,7 @@ class _RemoteSession:
             return [(source, query(config, code, deadline=deadline,
                                    secrets_root=self._config.directory('secrets')).payload())] if config else []
         provider = self.provider()
-        if source in ('r18dev', 'dmm'):
+        if source in ('r18dev', 'dmm', 'javarchive'):
             return [(source, provider.query(code, source, deadline=deadline))]
         if source == 'fc2':
             answered = {name for name, _, _ in cached}
@@ -2459,6 +2507,24 @@ def _candidate_baseline(database, row, code, verify_existing):
     return {**row, **{COLUMN_OF.get(value['field'], value['field']): value['current_value'] for value in values}}
 
 
+def _local_release_code(row, patterns=()):
+    """文件名与所在目录里的番号：先按完整文件名，再按末尾／方括号写法，最后看父目录。
+
+    IV 的发行目录常把番号放在标题后面（`[icao.me]佐々木桃華 IMBD-214`）或父目录
+    （`ICDV-30159/`），只解析文件名的第一个词元会漏掉。父目录只在文件名没有给出
+    番号时才用，并且仍要过同一套番号判据。
+    """
+    code = _provider_code(row['code']) or release_code_from_filename(row['name'], patterns=patterns)
+    if code:
+        return code
+    video = translate_ledger_path(row['path'])
+    for value in (video.stem, video.parent.name):
+        code = release_code_from_filename_suffix(value)
+        if code:
+            return code
+    return release_code_from_filename(video.parent.name, patterns=patterns)
+
+
 def _read_local_metadata(config, db_path, row, cover_root, listing, state, update, issue, poster_jobs,
                          code_patterns=()):
     """读取一部影片的本地证据，返回可独立发布的资料与在线核查范围。
@@ -2475,7 +2541,7 @@ def _read_local_metadata(config, db_path, row, cover_root, listing, state, updat
     if video.name.casefold() not in files:
         issue(row, '媒体文件不可访问', action='reading_local', retryable=True)
         return None
-    code = _provider_code(row['code']) or release_code_from_filename(row['name'], patterns=code_patterns)
+    code = _local_release_code(row, code_patterns)
     payload = None
     entries = []
     nfo, posters = listing.sidecars(video)
@@ -2872,6 +2938,7 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
 
             prepared = []
             poster_jobs = []
+            iv_seen = []
             local_rows = list(checkpoints.remaining_metadata(rows))
             completed_count = len(rows) - len(local_rows)
             for index, (_, row) in enumerate(local_rows):
@@ -2948,6 +3015,7 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
                     received=lambda entries, row=row, code=code, fields=local_fields, verify=verify_existing:
                         publish(row, code, fields, verify, entries),
                     succeeded=lambda before=issues_before: state['issue_count'] == before)
+                iv_seen.append((row, code, found, covers, missing))
                 state['covers'] += covers
                 update(stage='保存待确认资料', current_action='writing_candidates',
                        current_started_at=time.time(), current_deadline_at=None)
@@ -2965,6 +3033,8 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
                 active=active, update=update, issue=issue, watermark=entity_watermark, covered=covered,
                 people=_people_allowed(config))
             finish_step('collect')
+            # 这一趟没取到的行留给后段文件名补全；空表时下游不会启动。
+            state['iv_pending_ids'] = _pending_ids(iv_seen, cover_root)
             _settle_collection_state(state, summary, rows, update)
         except Exception:
             state.update(status='failed', outcome='interrupted', error='处理被中断。核对媒体目录后重试。', completed_at=time.time())
