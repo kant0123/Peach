@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""用经维护的中日姓名映射本地化番号体系女优名称，并把残留的日本字形归一为简体。
+r"""用经维护的中日姓名映射审计番号体系女优的中文译名，并把残留的日本字形归一为简体，只产出 CSV。
+
+女优规范名用日文名（ADR-0131），本脚本不写 ledger；已换成中文的规范名由
+`restore_japanese_performer_names.py` 恢复。审计结果供核对中文写法，译名在别处只作别名。
 
 译名只处理带发行来源或明确 JAV 目录身份的实体，包括 Javinizer 的发行来源；账号型 performer 不翻译。
 匹配按精确证据分层：既有人工复核日文名、当前日文名、既有别名，再到复核表里的旧名。
-一条名字命中多个映射时不猜。多个 ledger 实体落到同一映射条目时，按同一人的旧名合并。
+一条名字命中多个映射时不猜。多个 ledger 实体落到同一映射条目时，按同一人的旧名合并成一组。
 
 字形归一是独立的最后一道，不看发行来源也不需要映射：`涼` 和 `凉` 是同一个字，
-把 `高山涼音` 写成 `高山凉音` 不涉及任何译名判断。映射只覆盖已收录的艺人，剩下的名字
+`高山涼音` 与 `高山凉音` 不涉及任何译名判断。映射只覆盖已收录的艺人，剩下的名字
 就一直卡在日本字形上，看着像中文名又不是中文名——这一道专治那个。
 
-映射 XML 是外部复核来源，不随 Peach 分发，可以不给：不给就只跑字形归一。默认只产出
-全库 CSV；`--apply` 写真实 ledger 时必须同时提供 `--backup`。旧规范名、日文名、假名与
-繁体名都保留为别名。
+映射 XML 是外部复核来源，不随 Peach 分发，可以不给：不给就只跑字形归一。
 """
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sqlite3
 import xml.etree.ElementTree as ET
@@ -25,7 +25,6 @@ import sys
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -33,25 +32,18 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from peach import javdb
-from peach.config import DATA_ROOT, GENERATED_DIR
-from peach.entities import merge_entity, normalize_entity_name
+from peach.config import DATA_ROOT, DATABASE_PATH, GENERATED_DIR
+from peach.entities import normalize_entity_name
 from peach.entry_links import JAV_DIRECTORIES
 from peach.kanji import JP_KANJI_TO_SIMPLIFIED, simplify_kanji   # noqa: F401 - 供测试与脚本共用
 from peach.review_csv import read_rows, write_rows
-from peach.scripting import add_ledger_write_args, counts_of, open_for_write, verify_after_write
+from peach.scripting import open_readonly
 
 
 RELEASE_SOURCES = frozenset({
     "r18:performer", "javbus:performer",
     "javinizer:r18dev:performer", "javinizer:javbus:performer", "javinizer:javdb:performer",
 })
-ALIAS_SOURCE_PREFIX = "avdb-actor-mapping"
-#: javdb 资料页那一份。两份映射的别名来源必须分得开：回溯「这个中文名是谁写的」
-#: 时，来源前缀是唯一留着这个区别的地方。字面量在 `peach.javdb`，别名写入不止这一处。
-JAVDB_ALIAS_SOURCE = javdb.ALIAS_SOURCE
-MERGE_ALIAS_SOURCE = "merge:performer-localization"
-KANJI_ALIAS_SOURCE = "kanji-simplification"
 KANJI_ONLY_REVISION = "kanji-only"
 
 # 上游译名偶尔夹带零宽字符（`\u200c斋藤亚美里`）。页面上和普通名字看不出差别，
@@ -400,52 +392,6 @@ def collect(
     return rows
 
 
-def _insert_aliases(
-    connection: sqlite3.Connection, entity_id: int, names: set[str], source: str,
-) -> int:
-    written = 0
-    canonical = connection.execute(
-        "SELECT normalized_name FROM entity WHERE id=?", (entity_id,)
-    ).fetchone()[0]
-    for name in sorted(names, key=str.casefold):
-        normalized = normalize_entity_name(name)
-        if not normalized or normalized == canonical:
-            continue
-        if connection.execute(
-            "SELECT 1 FROM entity_alias WHERE entity_id=? AND normalized_alias=? LIMIT 1",
-            (entity_id, normalized),
-        ).fetchone():
-            continue
-        connection.execute(
-            "INSERT INTO entity_alias(entity_id,alias,normalized_alias,source,confidence) "
-            "VALUES(?,?,?,?,1.0)", (entity_id, name, normalized, source))
-        written += connection.execute("SELECT changes()").fetchone()[0]
-    return written
-
-
-def _rewrite_actor_tags(
-    connection: sqlite3.Connection, entity_id: int, old_names: set[str], target: str,
-) -> int:
-    rewritten = 0
-    asset_ids = [int(row[0]) for row in connection.execute(
-        "SELECT DISTINCT asset_id FROM asset_entity WHERE entity_id=?", (entity_id,))]
-    target_tag = f"演员:{target}"
-    for asset_id in asset_ids:
-        for old_name in old_names:
-            old_tag = f"演员:{old_name}"
-            if old_tag == target_tag:
-                continue
-            connection.execute(
-                "INSERT OR IGNORE INTO asset_tag(asset_id,tag,confidence,source) "
-                "SELECT asset_id,?,confidence,source FROM asset_tag "
-                "WHERE asset_id=? AND tag=?", (target_tag, asset_id, old_tag))
-            connection.execute(
-                "DELETE FROM asset_tag WHERE asset_id=? AND tag=?", (asset_id, old_tag))
-            if connection.execute("SELECT changes()").fetchone()[0]:
-                rewritten += 1
-    return rewritten
-
-
 def report_conflicts(rows: list[dict[str, object]]) -> int:
     """逐条打出重名冲突：它们靠被人看见来解决，不靠把整批改名扣在门外。"""
     stuck = [row for row in rows if row["action"] == "conflict"]
@@ -453,80 +399,6 @@ def report_conflicts(rows: list[dict[str, object]]) -> int:
         print(f"  重名待裁决：{row['entity_id']} {row['current_name']} -> "
               f"{row['target_name']}（{row['resolution']}）")
     return len(stuck)
-
-
-def apply_rows(
-    connection: sqlite3.Connection, rows: list[dict[str, object]], revision: str,
-    prefix: str = ALIAS_SOURCE_PREFIX,
-) -> dict[str, int]:
-    counts = Counter()
-    # 重名冲突只挡住它自己那一行：下面的写入循环本来就跳过 conflict，整批拒绝扣住的
-    # 是另外九十条毫无关系的改名——一个等人授权的同人合并不该冻住整轮本地化。跳过的
-    # 行照样计数、照样让退出码非零，不会悄悄消失。
-    counts["conflicts_skipped"] = sum(1 for row in rows if row["action"] == "conflict")
-    source = f"{prefix}@{revision[:12]}"
-    by_id = {int(row["entity_id"]): row for row in rows}
-
-    for row in rows:
-        if row["action"] != "merge-drop":
-            continue
-        source_id = int(row["entity_id"])
-        target_id = int(row["merge_target_id"])
-        moved = merge_entity(
-            connection, target_id=target_id, source_id=source_id,
-            source_name=str(row["current_name"]), alias_source=MERGE_ALIAS_SOURCE,
-        )
-        counts["merged"] += 1
-        counts["relations_moved"] += moved["assets"]
-        counts["dropped_refs"] += moved["dropped_refs"]
-        by_id[target_id]["_aliases"].update(row["_aliases"])
-        by_id[target_id]["_aliases"].add(str(row["current_name"]))
-
-    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    for row in rows:
-        if row["action"] not in {
-            "localize", "merge-and-localize", "localize-jp-fallback", "keep-localized",
-            "localize-kanji",
-        }:
-            continue
-        entity_id = int(row["entity_id"])
-        target = str(row["target_name"])
-        old_names = set(row["_aliases"])
-        old_names.add(str(row["current_name"]))
-        # 字形归一不来自那份映射，别名来源不能冒充它的修订号。
-        alias_source = (
-            KANJI_ALIAS_SOURCE if row["action"] == "localize-kanji" else source)
-        connection.execute(
-            "UPDATE entity SET canonical_name=?,normalized_name=?,updated_at=? WHERE id=?",
-            (target, normalize_entity_name(target), stamp, entity_id),
-        )
-        if target != row["current_name"]:
-            counts["renamed"] += connection.execute("SELECT changes()").fetchone()[0]
-        counts["aliases"] += _insert_aliases(connection, entity_id, old_names, alias_source)
-        counts["actor_tags_rewritten"] += _rewrite_actor_tags(
-            connection, entity_id, old_names, target)
-
-        if row["mapping_key"]:
-            raw = connection.execute(
-                "SELECT metadata_json FROM entity WHERE id=?", (entity_id,)
-            ).fetchone()[0]
-            try:
-                metadata = json.loads(raw or "{}")
-            except (TypeError, ValueError):
-                metadata = {}
-            metadata["name_localization"] = {
-                "source": prefix,
-                "revision": revision,
-                "mapping_key": row["mapping_key"],
-                "jp": row["mapping_jp"],
-                "zh_cn": target,
-            }
-            connection.execute(
-                "UPDATE entity SET metadata_json=? WHERE id=?",
-                (json.dumps(metadata, ensure_ascii=False, separators=(",", ":")), entity_id),
-            )
-            counts["provenance"] += 1
-    return dict(counts)
 
 
 FIELDS = (
@@ -547,16 +419,14 @@ EXTRA_COUNTS = {
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="用中日映射本地化番号体系女优姓名")
-    add_ledger_write_args(parser)
+    parser = argparse.ArgumentParser(description="用中日映射审计番号体系女优的中文译名，只产出 CSV")
+    parser.add_argument("--db", type=Path, default=DATABASE_PATH, help="账本路径")
     # 映射 XML 不在仓库里，也可能已经不在这台机器上。不给就只跑字形归一，
     # 那一道不需要外部来源，缺了 XML 也不该把整个脚本变成跑不起来。
     parser.add_argument("--mapping-xml", type=Path)
     # javdb 资料页取回的映射（`harvest_javdb_cn_names.py`）。它覆盖的是假名规范名，
     # XML 那份覆盖的是已收录艺人，两份不冲突也不必同时给。
     parser.add_argument("--mapping-csv", type=Path)
-    parser.add_argument("--mapping-source", default="",
-                        help="CSV 的复核来源前缀；留空表示 javdb:performer-cn")
     parser.add_argument("--only", type=int, action="append", default=[],
                         help="只处理指定 entity id，可重复；同一映射合并组必须完整点名")
     # 站上已经改了名的要不要跟着改，是人的决定，所以判定要在命令行里点名。
@@ -575,15 +445,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(args: argparse.Namespace) -> int:
     mappings: list[ActorMapping] = []
-    prefix = ALIAS_SOURCE_PREFIX
     if args.mapping_xml:
         mappings = read_mapping(args.mapping_xml)
     elif args.mapping_csv:
         accept = [part.strip() for part in str(args.accept).split(",") if part.strip()]
         mappings = read_mapping_csv(args.mapping_csv, accept)
-        prefix = args.mapping_source.strip() or JAVDB_ALIAS_SOURCE
     identity_review = read_identity_review(args.identity_review)
-    connection = open_for_write(args)
+    connection = open_readonly(args.db)
     try:
         rows = collect(connection, mappings, identity_review, args.mapping_revision)
         if args.only:
@@ -600,22 +468,8 @@ def run(args: argparse.Namespace) -> int:
         write_csv(args.review_csv, rows)
         print(f"已审计 performer {len(rows)} 位；复核 CSV：{args.review_csv}")
         print("  动作分布：", dict(Counter(str(row["action"]) for row in rows)))
-        if not args.apply:
-            print("  未写 ledger（加 --apply --backup 才写）")
-            return 1 if report_conflicts(rows) else 0
-
-        print(f"  已备份到 {args.backup}")
-        before = counts_of(connection, EXTRA_COUNTS)
-        with connection:
-            changed = apply_rows(connection, rows, args.mapping_revision, prefix)
-        after = counts_of(connection, EXTRA_COUNTS)
-        integrity, foreign_keys = verify_after_write(connection)
-        print("  写入结果：", changed)
-        for key in before:
-            print(f"    {key}: {before[key]} -> {after[key]}")
-        print(f"  integrity_check={integrity}；foreign_key_check={foreign_keys}")
-        stuck = report_conflicts(rows)
-        return 1 if integrity != "ok" or foreign_keys or stuck else 0
+        print("  未写 ledger")
+        return 1 if report_conflicts(rows) else 0
     finally:
         connection.close()
 
@@ -625,8 +479,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.mapping_xml and args.mapping_csv:
         parser.error("两份映射只能给一份：混着跑的话，别名来源记的是哪一份就说不清了")
-    if args.mapping_source and not args.mapping_csv:
-        parser.error("--mapping-source 必须和 --mapping-csv 一起使用")
     if (args.mapping_xml or args.mapping_csv) and not args.mapping_revision:
         parser.error("给了映射就必须给 --mapping-revision，别名要记得住来源")
     args.mapping_revision = args.mapping_revision or KANJI_ONLY_REVISION

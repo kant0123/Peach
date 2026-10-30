@@ -540,7 +540,8 @@ Instagram 的独立用户登录会话未取得，自动适配器不进正式依�
 
 ### 规范名与别名
 
-- 规范名优先用有出处的简体中文通行名，暂无可靠中译时保留日文。旧艺名、罗马字、假名和繁体名降为别名。
+- 规范名用来源给出的日文名，不换成中文译名或简体字形（ADR-0131）。中文译名、旧艺名、罗马字、假名和繁体名降为别名。
+  已被换成中文的旧账本用 `restore_japanese_performer_names.py` 恢复，只采用账本里已留存的日文写法。
   `no_avatar` 只表示没取得合格图片，不阻止已核实的姓名落库。
 - 「这一页只有一位女优」不构成证据：库里大量番号是 BEST 合集，搜索无结果的页面也会渲染推荐文章。精确回配
   命中优先于任何「唯一」推断，「唯一」要两个番号同证才作数。
@@ -881,7 +882,7 @@ Instagram 的独立用户登录会话未取得，自动适配器不进正式依�
     「另有归属」，留给人判。`--apply` 只补空着的那一位。
 - 事务所会拆、会改名。移籍走 `scripts/resync_performer_agency.py`：按 `--agency` 选整家或 `--only` 点名，重问女优页的「所属事務所」，
   只覆盖 `entity.metadata_json.agency`；实体和归属仍由 `install_agencies.py` 的 REPLACE 落地，免得两边各拆一次名字得出两种结论。
-  - 检索必须走 `name_chain`：账本规范名是简体中文，站点只认日文写法，只拿规范名去问大多会「未取得」。
+  - 检索必须走 `name_chain`：旧账本的规范名可能是简体中文，站点只认日文写法，只拿规范名去问大多会「未取得」。
   - 站上那格是空的记「站上没有事务所」，不清账本：解约和站点当天不显示这格，在页面上分不开。
 - 「所属事務所」只记现在签在谁名下。退役后转进个人经纪公司的人，那格写的是她自己的公司（三上悠亜 → 株式会社Miss），不是 AV
   事务所。这种由 `scripts/reject_agency.py` 按复核 CSV 驳回：驳回记进她的 `metadata.agency_rejected` 并撤掉归属，那家没人了就删
@@ -904,8 +905,8 @@ jae.tokyo（Japan Adult Expo）是人工指定的第三个目录来源，同一�
 ### javdb 演员页
 
 - **javdb.com 是按名字进的来源，不是能翻的名录。** 站上没有可枚举的女优列表，入口是账本里的名字：逐个写法搜
-  `search?f=actor&q=`，结果卡片的 `title` 一栏就是这个人在站上的全部写法，不点进去就能判身份。名字链要整条搜完再放弃：账本
-  规范名多是简体，`name_key()` 不做简繁转换，只搜规范名常常一个都搜不到（`harvest_directory_links.collect_javdb`）。
+  `search?f=actor&q=`，结果卡片的 `title` 一栏就是这个人在站上的全部写法，不点进去就能判身份。名字链要整条搜完再放弃：别名里的
+  中文写法多是简体或繁体，`name_key()` 不做简繁转换，只搜规范名常常一个都搜不到（`harvest_directory_links.collect_javdb`）。
 - **演员 id 在作品详情页就拿得到，不必另走一趟资料页。** 演員一栏每个名字都挂着 `/actors/<id>`，`sources.javdb.actresses` 顺手
   带出；名字精确匹配到这条资产已关联的人物实体，才登记成 `entity_external_ref(provider='javdb', external_kind='performer')`，人物页
   的 JavDB 入口靠它拼（`peach.entry_links`）。历史数据走 `scripts/backfill_performer_entry_ids.py`：javdb 页面缓存与

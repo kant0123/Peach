@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import sqlite3
-import time
 from pathlib import Path
 
 from . import seed_pack, seed_corrections, seed_validation
@@ -23,7 +22,7 @@ REVIEW_FILE = "seed-landing.csv"
 FIELDS = ("kind", "entity", "field", "ours", "source", "theirs", "detail", "batch", "withdrawal_id", "evidence")
 #: 活动页摘要里的计数键与它们的中文名，按这个顺序拼结论。
 SUMMARY_LABELS = (("aliases", "别名"), ("refs", "编号"), ("links", "链接"), ("profiles", "资料"),
-                  ("memberships", "归属"), ("makers", "片商"), ("refreshed", "换新"), ("withdrawn", "撤销"), ("names", "中文名"))
+                  ("memberships", "归属"), ("makers", "片商"), ("refreshed", "换新"), ("withdrawn", "撤销"))
 
 
 def followup_key(version: str, content_hash: str = "") -> str:
@@ -107,13 +106,6 @@ def run(contract, key: str, handle) -> dict:
         raise ValueError("种子内容与排队任务的摘要不一致，请重新派发")
     if handle is not None:
         handle.progress(label=f"{TASK_LABEL}：{pack['version']}", throttle=0)
-    with contract.database.read_connection() as connection:
-        rename = bool(seed_pack.plan(connection, pack).get("names"))
-    if rename:
-        from .migrations import sqlite_backup
-        db_path = Path(contract.database.db_path)
-        backup = db_path.with_name(f"ledger.pre-seed-names-{time.time_ns()}.db")
-        sqlite_backup(db_path, backup)
     with contract.database.write_transaction() as connection:
         report = seed_pack.land(connection, pack)
     if seed_pack.written(report):

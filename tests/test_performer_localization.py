@@ -1,6 +1,7 @@
 """番号体系女优中译：来源匹配、同人合并、日本字形归一与兼容标签同步。"""
+import contextlib
 import csv
-import json
+import io
 import sqlite3
 import tempfile
 import unittest
@@ -12,7 +13,7 @@ from peach.migrations import upgrade
 from peach import entry_links
 from scripts.audit_performer_entry_names import collect as audit_entries
 from scripts.localize_performer_names import (
-    JP_KANJI_TO_SIMPLIFIED, KANJI_ALIAS_SOURCE, apply_rows, collect, main,
+    JP_KANJI_TO_SIMPLIFIED, collect, main,
     read_identity_review, read_mapping, report_conflicts, simplify_kanji,
     strip_zero_width,
 )
@@ -140,28 +141,6 @@ class PerformerLocalizationTests(unittest.TestCase):
                 self.assertEqual(rows[10]["action"], "localize")
                 self.assertEqual(rows[14]["action"], "keep-non-release")
 
-    def test_apply_preserves_aliases_and_rewrites_actor_tags(self):
-        counts = apply_rows(self.con, self.plan(), "abc123")
-        self.con.commit()
-        names = dict(self.con.execute("SELECT id,canonical_name FROM entity WHERE kind='performer'"))
-        self.assertEqual(names[10], "释爱丽丝")
-        self.assertEqual(names[11], "吉川莲")
-        self.assertNotIn(12, names)
-        self.assertEqual(names[13], "未収録花子")
-        self.assertEqual(names[14], "account_01")
-        self.assertEqual(names[15], "星谷瞳")
-        aliases = {row[0] for row in self.con.execute(
-            "SELECT alias FROM entity_alias WHERE entity_id=10")}
-        self.assertTrue({"Alice Shaku", "釈アリス", "しゃくありす", "釋愛麗絲"} <= aliases)
-        tags = dict(self.con.execute("SELECT asset_id,tag FROM asset_tag ORDER BY asset_id"))
-        self.assertEqual(tags[1], "演员:释爱丽丝")
-        self.assertEqual(tags[2], "演员:吉川莲")
-        self.assertEqual(tags[3], "演员:吉川莲")
-        self.assertEqual(tags[4], "演员:未収録花子")
-        self.assertEqual(tags[5], "演员:星谷瞳")
-        self.assertEqual(counts["merged"], 1)
-        self.assertEqual(self.con.execute("PRAGMA foreign_key_check").fetchall(), [])
-
     def test_kanji_simplification_only_touches_names_it_can_finish(self):
         """字形归一只处理纯汉字名；假名和罗马字要的是译名，不是逐字换。"""
         self.assertEqual(simplify_kanji("高山涼音"), "高山凉音")
@@ -209,22 +188,6 @@ class PerformerLocalizationTests(unittest.TestCase):
         self.assertEqual(rows[22]["target_name"], "斋藤未来")
         self.assertEqual(rows[22]["action"], "keep-unresolved")
 
-    def test_apply_records_kanji_rows_under_their_own_alias_source(self):
-        plan = collect(self.con, [], read_identity_review(self.review), "kanji-only")
-        apply_rows(self.con, plan, "kanji-only")
-        self.con.commit()
-        names = dict(self.con.execute("SELECT id,canonical_name FROM entity"))
-        self.assertEqual(names[16], "斋藤满里奈")
-        self.assertEqual(names[17], "野野宫兰")
-        self.assertEqual(names[18], "飯岡かなこ")
-        aliases = dict(self.con.execute(
-            "SELECT alias,source FROM entity_alias WHERE entity_id=16"))
-        # 旧字形留成别名，否则来源那边再抓一次就又建一个新实体。
-        self.assertEqual(aliases["斎藤満里奈"], KANJI_ALIAS_SOURCE)
-        tags = dict(self.con.execute("SELECT asset_id,tag FROM asset_tag ORDER BY asset_id"))
-        self.assertEqual(tags[6], "演员:斋藤满里奈")
-        self.assertEqual(tags[7], "演员:野野宫兰")
-
     def test_simplified_name_colliding_with_an_existing_entity_is_a_conflict(self):
         """换完字形撞上库里已有的同名实体时不猜，交给人合并。"""
         self.con.execute(
@@ -235,13 +198,8 @@ class PerformerLocalizationTests(unittest.TestCase):
             self.con, [], read_identity_review(self.review), "kanji-only")}
         self.assertEqual(rows[16]["action"], "conflict")
         self.assertIn("target-name-conflict", rows[16]["resolution"])
-        # 待裁决的那一行只挡住自己：同一批里其它人的字形照样归一，
-        # 否则库里一处未合并的同人就能无限期冻住全部改名。
-        counts = apply_rows(self.con, list(rows.values()), "kanji-only")
-        self.assertEqual(counts["conflicts_skipped"], 1)
-        names = dict(self.con.execute("SELECT id,canonical_name FROM entity"))
-        self.assertEqual(names[16], "斎藤満里奈")
-        self.assertEqual(names[17], "野野宫兰")
+        # 待裁决的那一行只挡住自己：同一批里其它人的字形照样出现在计划里。
+        self.assertEqual(rows[17]["target_name"], "野野宫兰")
         self.assertEqual(report_conflicts(list(rows.values())), 1)
 
     def test_mapping_xml_is_optional_and_its_revision_is_not(self):
@@ -257,7 +215,7 @@ class PerformerLocalizationTests(unittest.TestCase):
             main(["--db", str(self.db), "--mapping-xml", str(self.mapping),
                   "--review-csv", str(out)])
 
-    def test_review_csv_keeps_its_source_and_current_japanese_name(self):
+    def test_review_csv_keeps_the_japanese_name_and_the_plan_without_writing(self):
         root = Path(self.tmp.name).resolve()
         mapping_csv = root / "mapping.csv"
         with mapping_csv.open("w", encoding="utf-8", newline="") as handle:
@@ -269,26 +227,24 @@ class PerformerLocalizationTests(unittest.TestCase):
         self.con.execute("INSERT INTO entity_external_ref(entity_id,provider,external_kind,external_id) "
                          "VALUES(18,'javdb','performer','sample')")
         self.con.commit()
+        plan = root / "plan.csv"
         self.assertEqual(main([
             "--db", str(self.db), "--mapping-csv", str(mapping_csv),
-            "--mapping-source", "review:performer-localization", "--mapping-revision", "review-1",
+            "--mapping-revision", "review-1",
             "--only", "18",
-            "--identity-review", str(root / "absent.csv"), "--review-csv", str(root / "plan.csv"),
-            "--apply", "--backup", str(root / "backup.db"),
+            "--identity-review", str(root / "absent.csv"), "--review-csv", str(plan),
         ]), 0)
-        name, metadata_json = self.con.execute("SELECT canonical_name,metadata_json FROM entity WHERE id=18").fetchone()
-        self.assertEqual(name, "饭冈加奈子")
-        self.assertEqual(self.con.execute("SELECT canonical_name FROM entity WHERE id=16").fetchone()[0],
-                         "斎藤満里奈")
-        self.assertEqual(json.loads(metadata_json)["name_localization"]["source"],
-                         "review:performer-localization")
-        aliases = [{"alias": row[0], "source": row[1]} for row in self.con.execute(
-            "SELECT alias,source FROM entity_alias WHERE entity_id=18")]
-        self.assertEqual(entry_links.japanese_name(name, aliases), "飯岡かなこ")
+        with plan.open(encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual([(row["current_name"], row["target_name"], row["action"]) for row in rows],
+                         [("飯岡かなこ", "饭冈加奈子", "localize")])
+        self.assertEqual(self.con.execute("SELECT canonical_name FROM entity WHERE id=18").fetchone()[0], "飯岡かなこ")
 
-    def test_mapping_source_requires_a_csv(self):
-        with self.assertRaises(SystemExit):
-            main(["--mapping-source", "review:performer-localization"])
+    def test_the_script_no_longer_takes_write_arguments(self):
+        root = Path(self.tmp.name).resolve()
+        for flag in (["--apply"], ["--backup", str(root / "backup.db")], ["--mapping-source", "x"]):
+            with self.subTest(flag=flag), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                main(["--db", str(self.db), *flag])
 
     def test_selected_member_of_a_merge_group_requires_the_whole_group(self):
         root = Path(self.tmp.name).resolve()

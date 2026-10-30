@@ -105,7 +105,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
                  "test_studio_name_localization.py",
                  "test_studio_name_localization_apply.py", "test_studio_icon_variants.py",
                  "test_maker_directory_harvest.py", "test_studio_name_variant_merge.py",
-                 "test_javdb_cn_names.py",
+                 "test_javdb_cn_names.py", "test_restore_japanese_performer_names.py",
                  "test_link_rediscovery.py", "test_link_label_owner.py",
                  "test_link_repair.py",
                  "test_resource_identification.py",
@@ -311,6 +311,7 @@ AUTO_SCOPE_PREFIXES: tuple[tuple[str, str | tuple[str, ...]], ...] = (
     # `test_community_catalog.py`，都在 metadata 域；按包内模块名推不出来。
     ("src/peach/sources/", "metadata"),
     ("scripts/localize_performer_names.py", ("metadata", "tooling")),
+    ("scripts/restore_japanese_performer_names.py", ("metadata", "tooling")),
     ("scripts/localize_series_names.py", ("metadata", "tooling")),
     ("scripts/localize_studio_names.py", ("metadata", "tooling")),
     ("scripts/apply_studio_name_localization.py", ("metadata", "tooling")),
