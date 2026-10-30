@@ -15,7 +15,7 @@ import { indexPath, indexState, onlineAuthorRingHtml, openFollowAuthorFromIndex,
 import { censorOn, loadSourceStatus, preferencesState, wireAllDrag } from './preferences.js';
 import { mountBatchDock, setSelectMode } from './selection.js';
 import { releaseHoverPreviews } from './../card-art/hover';
-import { bootEntry, peachHistory } from './../history/index';
+import { bootEntry, peachHistory, routeMetaOf } from './../history/index';
 import { $ } from '../core';
 import { dropBars } from './../catalog-bars';
 import { isOverlayPath, overlayTarget } from './../history/overlay';
@@ -200,7 +200,10 @@ loadRouter(compositionState.shellActions).catch(error=>console.error(t('客户�
 mountManageHeader();
 mountBatchDock();
 buildManageBar();
-Promise.all([loadSourceStatus(),loadSyncedSettings(),loadingState.entityShapesReady])
+/* 实体形状只有目录、索引与资料页用；管理区与设置页不读它。形状名单在大库上要算好几秒，
+   深链打开这几页时不等它，路由照常开始。 */
+const managementEntry=!!routeMetaOf(decodeURIComponent(location.pathname))?.section||location.pathname.startsWith('/settings');
+Promise.all([loadSourceStatus(),loadSyncedSettings(),managementEntry?null:loadingState.entityShapesReady])
   .then(()=>{
     if(!effects.isActive)return;
     /* 顶部两排与筛选栏的两个聚合自带骨架、取回后自己落位，页面打开不等它们：作品列表与它们同时去取。 */

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from peach import taste_history, taste_preferences, web_follow, web_state, web_stats
+from peach import taste_history, taste_preferences, web_batch, web_follow, web_state, web_stats
 from peach.follow_sources import FollowCandidate, SourceFetch
 from peach.follow_store import FollowStore
 from peach.previews import entity_image_key, logo_key
@@ -376,6 +376,7 @@ class DeclaredTablesTests(unittest.TestCase):
             self._get("/api/index", kind=kind)
         self._get("/api/stats")
         self._get("/api/folders")
+        self._get("/api/ads", limit="1")
         with closing(sqlite3.connect(self.db_path)) as connection:
             source_id, item_id = (str(connection.execute(f"SELECT min(id) FROM {table}").fetchone()[0])
                                   for table in ("follow_source", "follow_item"))
@@ -399,7 +400,8 @@ class DeclaredTablesTests(unittest.TestCase):
             "STATS_TABLES": web_stats.STATS_TABLES,
             "FOLLOW_GROUP_TABLES": web_follow.FOLLOW_GROUP_TABLES,
             "TASTE_TABLES": web_stats.TASTE_TABLES,
-            "PROFILE_TABLES": taste_preferences.PROFILE_TABLES}
+            "PROFILE_TABLES": taste_preferences.PROFILE_TABLES,
+            "JUNK_TABLES": web_batch.JUNK_TABLES}
         names = {tuple(tables): name for name, tables in declarations.items()}
         leaks: dict[str, set[str]] = {}
         for label, declared, reads in self.reads.frames:

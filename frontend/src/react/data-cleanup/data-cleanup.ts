@@ -96,6 +96,7 @@ export function junkBreakdown(summary: JunkSummary | undefined): string {
 const LAZY_QUERIES: [QueryKey, (context: { signal: AbortSignal }) => Promise<unknown>][] = [
   [REVIEW_COUNTS_KEY, ({ signal }) => fetchReviewCounts(signal)],
   [QUALITY_GOALS_KEY, ({ signal }) => fetchQualityGoals(signal)],
+  [JUNK_KEY, ({ signal }) => fetchJunkSummary(signal)],
   [TRASH_KEY, ({ signal }) => fetchTrashSummary(signal)],
   [LINKS_KEY, ({ signal }) => fetchLinkStats(signal)],
   [LINK_CHECK_KEY, ({ signal }) => fetchLinkCheck(signal)],
@@ -106,7 +107,8 @@ const LAZY_QUERIES: [QueryKey, (context: { signal: AbortSignal }) => Promise<unk
 /** 首屏：顶上那排读数、这次会扫哪几个来源，以及两张后台任务卡、整理卡与资源同步。
  *
  *  等的是画出第一屏必需的那几份：遗留壳已经铺了骨架，页面自己再转一次圈就是同一次进入里
- *  两段等待态。复核与高清版那两个数和链接统计各读各的，慢的时候不该拖住整页，所以不等。
+ *  两段等待态。复核、高清版与垃圾文件那三个数和链接统计各读各的，慢的时候不该拖住整页，
+ *  所以不等。垃圾文件那个数要给全库评分，大库上要十几秒。
  *
  *  不等的那几份在缓存里已经有一版时（又一次进这一页）要重取：共用的 `queryClient` 挂载时
  *  不重取已缓存的键，不在这里推一把，读数就停在上一次进来时的样子。第一次进来时它们还
@@ -122,7 +124,6 @@ export async function prefetchDataCleanup(signal: AbortSignal): Promise<void> {
   });
   await Promise.all([
     ...lazy,
-    queryClient.fetchQuery({ queryKey: JUNK_KEY, queryFn: () => fetchJunkSummary(signal) }),
     queryClient.fetchQuery({ queryKey: DUPLICATES_KEY, queryFn: () => fetchDuplicates(signal) }),
     prefetchMediaSources(signal).then(() => prefetchResourceSync(signal)),
     prefetchLibraryProcessing(signal),
