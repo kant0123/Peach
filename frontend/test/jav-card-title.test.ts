@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { javTitleHtml } from '../src/core/jav-title';
 import { textLang } from '../src/core/text-lang';
 
@@ -27,3 +27,19 @@ it('含假名的标题标日文、纯拉丁字母标英文，纯汉字分不出�
   host.innerHTML = javTitleHtml({ is_jav: true, code: 'EXM-001', catalog_title: '示例作品' });
   expect(host.querySelector('.ui-javtitle')?.hasAttribute('lang')).toBe(false);
 });
+
+it('日语界面里版本徽章显示译文，样式类仍按原词', async () => {
+  vi.resetModules();
+  localStorage.setItem('peach.locale', 'ja');
+  const { javTitleHtml: render, javDisplayName } = await import('../src/core/jav-title');
+  const item = { is_jav: true, code: 'EXM-001', catalog_title: '示例作品', edition_badges: ['中字', '无码', '无码破解'] };
+  const host = document.createElement('div');
+  host.innerHTML = render(item);
+  expect([...host.querySelectorAll('.javedition')].map(node => node.textContent))
+    .toEqual(['中国語字幕付き', '無修正', '無修正（解除版）']);
+  expect([...host.querySelectorAll('.javedition')].map(node => node.className))
+    .toEqual(['javedition subtitle', 'javedition uncensored', 'javedition cracked']);
+  expect(javDisplayName(item)).toContain('EXM-001 中国語字幕付き 無修正 無修正（解除版）');
+});
+
+afterEach(() => localStorage.clear());
