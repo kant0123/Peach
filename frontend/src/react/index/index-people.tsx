@@ -7,6 +7,8 @@
  * 格底、头像框、首字与读数的配色在同目录的 `index-people.css`。 */
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Chip } from '@/components/base/badges/chip';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 
 import { cardClass } from '../components/card';
 import { spriteGlyph } from '../components/sprite-glyph';
@@ -65,6 +67,7 @@ export function PeopleGrid(
   },
 ) {
   const company = isCompany(kind) || kind === 'series';
+  useEntityNames();
   const big = layout === 'big';
   return (
     <div data-index-grid="" data-layout={layout} data-cells={company ? 'company' : 'people'}
@@ -73,7 +76,7 @@ export function PeopleGrid(
         const entityKind = item.entity_kind || ENTITY_KINDS[kind];
         const avatar = props.personAvatar(item, entityKind, big);
         return (
-          <Cell key={`${entityKind}:${item.entity_id || item.k}`} data-k={item.k} data-kind={entityKind} name={item.k} readout={`${personReadout(kind, item)}${item.identity_labels?.length ? ' · ' + item.identity_labels.join(' / ') : ''}`}
+          <Cell key={`${entityKind}:${item.entity_id || item.k}`} data-k={item.k} data-kind={entityKind} name={entityDisplayName(entityKind, item.k, item.entity_id)} readout={`${personReadout(kind, item)}${item.identity_labels?.length ? ' · ' + item.identity_labels.join(' / ') : ''}`}
             big={big} following={item.following} onPress={() => props.openEntity(entityKind, item.k)}>
             <Ring html={avatar.html} face={avatar.face} company={company} big={big} />
           </Cell>
@@ -89,11 +92,12 @@ export function PeopleGrid(
 export function OnlineAuthors(
   { items, layout, props }: { items: OnlineAuthor[]; layout: PeopleLayout; props: IndexProps },
 ) {
+  useEntityNames();
   const big = layout === 'big';
   return (
     <div data-index-grid="" data-layout={layout} data-cells="people" className="index-grid-person gap-3">
       {items.map((author) => (
-        <Cell key={author.key} data-follow-author={author.key} data-kind="performer" name={author.k}
+        <Cell key={author.key} data-follow-author={author.key} data-kind="performer" name={entityDisplayName('creator', author.k, author.entity_id)}
           readout={t('{count} 项更新', { count: author.n.toLocaleString() }) + (author.held_by ? t(' · 待确认') : '')} big={big}
           onPress={() => {
             if (author.entity_id) props.openEntity('creator', author.k);

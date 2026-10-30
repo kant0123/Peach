@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
 import json
 from pathlib import Path
 import re
@@ -106,6 +108,10 @@ class DockerBuildContextTests(unittest.TestCase):
 
 
 class NpmAuditTests(unittest.TestCase):
+    def setUp(self):
+        self.output = io.StringIO()
+        self.enterContext(contextlib.redirect_stdout(self.output))
+
     def test_docker_dependency_updates_have_a_takeover_recipe(self):
         for manifest in ('Dockerfile', '.github/actions/actionlint/Dockerfile'):
             self.assertEqual(adopt.recipe_for([manifest])[0], 'docker')
@@ -119,6 +125,7 @@ class NpmAuditTests(unittest.TestCase):
                     {'metadata': {'vulnerabilities': counts}}), '')
                 run, sleep = mock.Mock(return_value=response), mock.Mock()
                 self.assertEqual(npm_audit.audit(ROOT, runner=run, sleep=sleep), 1)
+                self.assertEqual(json.loads(self.output.getvalue().splitlines()[-1])['decision'], 'vulnerable')
                 self.assertEqual(run.call_count, 1)
                 sleep.assert_not_called()
 

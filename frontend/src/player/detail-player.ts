@@ -256,13 +256,18 @@ export async function mountDetailPlayer(
 
 const AMBIENT_CANVAS = '<canvas data-ambient-canvas="" width="32" height="18"></canvas>';
 
-/** 媒体框里氛围光画布与三块读数的占位：画布是框的第一个子节点，读数插在 `before` 前面（不给就
- *  放到最后）。已经有了就不再插。 */
+/** 氛围光放在媒体框首部；作品详情的统计键与速率挂到 React 留出的工具栏插槽，统计面板留在框内。
+ *  关注详情没有工具栏，读数插在 `before` 前面。已有读数时保留当前节点与事件。 */
 export function preparePlayerFrame(frame: HTMLElement, before: Element | null = null): void {
   if (!frame.querySelector(':scope > [data-ambient-canvas]')) frame.insertAdjacentHTML('afterbegin', AMBIENT_CANVAS);
-  if (frame.querySelector(':scope > #playerStatsBtn')) return;
+  if (frame.querySelector('#playerStatsBtn')) return;
   const overlay = document.createElement('template');
   overlay.innerHTML = playerStatsOverlayHtml();
+  const toolbar = frame.querySelector(':scope > [data-player-toolbar]');
+  if (toolbar) {
+    toolbar.querySelector('[data-player-stats-slot]')!.append(overlay.content.querySelector('#playerStatsBtn')!);
+    toolbar.querySelector('[data-player-net-slot]')!.append(overlay.content.querySelector('#playerNet')!);
+  }
   frame.insertBefore(overlay.content, before);
 }
 
@@ -271,7 +276,7 @@ export function preparePlayerFrame(frame: HTMLElement, before: Element | null = 
 export function attachPlayerChrome(player: VjsPlayer, frame: HTMLElement): () => void {
   const session = sessions.get(player);
   if (!session || player.isDisposed()) return () => {};
-  const find = (id: string) => frame.querySelector<HTMLElement>(`:scope > #${id}`);
+  const find = (id: string) => frame.querySelector<HTMLElement>(`#${id}`);
   const chrome: PlayerChrome = { statsButton: find('playerStatsBtn'), statsPanel: find('playerStats'), netBadge: find('playerNet') };
   session.chrome = chrome;
   const { statsButton, statsPanel } = chrome;

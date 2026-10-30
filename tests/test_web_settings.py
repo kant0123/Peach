@@ -98,7 +98,7 @@ class SettingsRoundTripTests(unittest.TestCase):
                           "organizeTemplates": {}, "codePatterns": [],
                           "feedHideGroupCompilations": True,
                           "feedHideSoloCompilations": False, "feedHideExcerpts": True,
-                          "searchHistoryLimit": None})
+                          "searchHistoryLimit": None, "performerNameLanguage": "zh-CN"})
 
     def test_code_patterns_are_checked_when_saved(self):
         """写错的规则在保存那一刻报出来；存下的规则去掉空行，读回来是同一份。"""
@@ -110,6 +110,24 @@ class SettingsRoundTripTests(unittest.TestCase):
             with self.assertRaises(ValueError, msg=repr(broken)[:40]):
                 w_settings(self.contract, {"codePatterns": broken})
         self.assertEqual(self._stored_json()["codePatterns"], saved)
+
+    def test_name_language_is_shared_and_preserves_other_profile_settings(self):
+        self.assertEqual(q_settings(self.contract)['performerNameLanguage'], 'zh-CN')
+        self.assertEqual(self._stored_json(), {})
+        order = ['tags', '']
+        w_settings(self.contract, {'sidebarOrder': order, 'performerNameLanguage': 'ja'})
+        other_device = WebContract(self.db.resolve())
+        self.assertEqual(q_settings(other_device)['performerNameLanguage'], 'ja')
+        w_settings(other_device, {'performerNameLanguage': 'zh-CN'})
+        self.assertEqual(q_settings(self.contract)['performerNameLanguage'], 'zh-CN')
+        self.assertEqual(self._stored_json(), {'sidebarOrder': order, 'performerNameLanguage': 'zh-CN'})
+
+    def test_invalid_name_languages_leave_the_stored_preference_unchanged(self):
+        w_settings(self.contract, {'performerNameLanguage': 'ja'})
+        for value in ('en', 'ja ', None, True, 1, [], {}):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                w_settings(self.contract, {'performerNameLanguage': value})
+            self.assertEqual(self._stored_json(), {'performerNameLanguage': 'ja'})
 
     def test_a_hand_broken_rule_reads_as_unset(self):
         con = sqlite3.connect(self.db)
@@ -157,7 +175,7 @@ class SettingsRoundTripTests(unittest.TestCase):
                           "organizeTemplates": {}, "codePatterns": [],
                           "feedHideGroupCompilations": True,
                           "feedHideSoloCompilations": False, "feedHideExcerpts": True,
-                          "searchHistoryLimit": None})
+                          "searchHistoryLimit": None, "performerNameLanguage": "zh-CN"})
         self.assertEqual(q_settings(self.contract)["sidebarOrder"], order)
         self.assertEqual(self._stored_json()["sidebarOrder"], order)
 

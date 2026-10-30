@@ -5,6 +5,7 @@
  * 加载后往图上写内联样式与类名。React 看不见这些改动：节点归它管，重画一次就冲掉取景，
  * 被兜底链摘掉的节点再交给它更新还会报错。 */
 import { esc, firstGrapheme } from '@peach/legacy/core';
+import { entityDisplayName } from '../core/entity-names';
 
 import { javImageKind } from '../jav-artwork';
 import { imageFallbackAttrs } from './image-fallback';
@@ -164,7 +165,7 @@ export function avatarInner(name: string, ref: FaceRef | null | undefined, repId
   const sourceFace = !ref?.has_image && !logoName && ref?.source_avatar_url
     ? `<img src="${esc(ref.source_avatar_url)}" width="128" height="128" alt="" loading="lazy" decoding="async" ${
       imageFallbackAttrs({ fallbacks: ref.source_avatar_fallbacks || [] })}>` : '';
-  return `<span class="ini">${esc(firstGrapheme(name))}</span>`
+  return `<span class="ini">${esc(firstGrapheme(entityDisplayName(kind, name, ref?.id)))}</span>`
     + (sourceFace || entityFaceImg({
       kind, id: ref && ref.id, hasImage: !!(ref && ref.has_image), version: ref && ref.image_version,
       rep: ref?.has_avatar && ref.rep ? ref.rep : repId, mark: markId,
@@ -384,6 +385,8 @@ export function queueAvatarHtml(item: IdentityItem): string {
 /** Mix 的署名：番号作品先认女优，其余先认创作者。 */
 export function mixLabel(item: IdentityItem, tagLabel: (tag: string) => string): string {
   const performer = (item.performers || [])[0];
-  return (item.is_jav && performer ? performer : item.creator) || performer || item.studio || item.code
+  if (item.is_jav && performer) return entityDisplayName('performer', performer);
+  if (item.creator) return entityDisplayName('creator', item.creator);
+  return (performer ? entityDisplayName('performer', performer) : '') || item.studio || item.code
     || tagLabel((item.tags || [])[0] || '') || t('为你推荐');
 }

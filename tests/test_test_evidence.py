@@ -952,6 +952,9 @@ class VerificationTests(unittest.TestCase):
     def setUp(self):
         # 这组用例模拟本机验收，运行它的 CI job 身份不属于临时仓库。
         self.enterContext(mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}))
+        self.enterContext(mock.patch.object(coordinator, "require_pull_request", side_effect=
+            lambda worker, branch, target, head: {"url": "https://github.com/example/peach/pull/1",
+                                                  "head": head, "base": target}))
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
@@ -1003,6 +1006,7 @@ class VerificationTests(unittest.TestCase):
             coordinator.ready(worker)
         self.certify(worker, success=False)
         self.assertEqual(self.git("rev-parse", "HEAD"), before)
+        coordinator.require_pull_request.assert_not_called()
         self.certify(worker)
         coordinator.ready(worker)
         result = coordinator.integrate(self.repo, branch)

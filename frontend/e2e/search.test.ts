@@ -7,7 +7,7 @@ import { after, before, describe, it } from 'node:test';
 
 import type { Browser, Page } from 'playwright-core';
 
-import { launch, unmanagedScrollers, VIEWPORTS } from './harness.ts';
+import { launch, unmanagedScrollers, VIEWPORTS, withPageDiagnostics } from './harness.ts';
 import { openItemPage, type ItemVisit } from './item-fixture.ts';
 
 const DESKTOP = VIEWPORTS.find((viewport) => !viewport.mobile)!;
@@ -75,13 +75,32 @@ async function typeQuery(opened: Search, text = SUGGEST.q) {
   const { page } = opened;
   await page.locator('#q').click();
   await page.keyboard.type(text);
-  await page.locator(`${OPTION}[data-search-value="七海の夏"]`).waitFor({ timeout: 5_000 });
+  await withPageDiagnostics(page, () => `搜索建议（请求 ${opened.suggest.map(url => url.search).join('、')}）`,
+    () => page.locator(`${OPTION}[data-search-value="七海の夏"]`).waitFor({ timeout: 5_000 }));
 }
 
 describe('顶栏搜索', () => {
   let browser: Browser;
   before(async () => { browser = await launch(); });
   after(async () => { await browser?.close(); });
+  it('等待失败保留原异常以及输入、焦点和菜单现场，成功时返回原结果', async () => {
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      await page.setContent('<input id="q" value="取证词"><div id="searchMenu">测试建议</div>');
+      await page.locator('#q').focus();
+      const failure = new Error('原始等待失败');
+      await assert.rejects(withPageDiagnostics(page, '诊断夹具', async () => { throw failure }), error => {
+        assert.equal((error as Error).cause, failure);
+        assert.match((error as Error).message, /原始等待失败/);
+        assert.match((error as Error).message, /取证词/);
+        assert.match((error as Error).message, /测试建议/);
+        assert.match((error as Error).message, /focus/);
+        return true;
+      });
+      assert.equal(await withPageDiagnostics(page, '成功夹具', async () => 42), 42);
+    } finally { await context.close(); }
+  });
 
   for (const viewport of VIEWPORTS) {
     it(`${viewport.name} 搜索长列表使用覆盖式滑块并可拖动，关闭重开保留一套轨道`, async () => {

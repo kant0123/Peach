@@ -4,6 +4,8 @@
 
 采用 bbingz 的 [PR #205](https://github.com/peach-mitao/peach/pull/205)，固定来源提交 `bbf5aac8e9562211c324c2019bff35888266df84`，许可证沿用本项目 AGPL-3.0-or-later。作品筛选集合先在独立子查询中求出，创作者、标签和演员按既有关系聚合，保留去重计数与标签可见性。没有选中标签时移除无效 `tag_match`，复用既有修订缓存、同键锁与跨连接写入失效机制，不在线改写 SQLite 统计或增加索引迁移。
 
+顶部人物、厂牌的 `q_tops` 复用同一筛选方式：独立求出可用作品集合，再按实体聚合，保留代表作选择、种子抽样、续页和修订缓存。错误统计回归使用临时账本、冷缓存与新连接，按作品数量限制判定调用量，核对默认、JAV、已看及组合范围的输出等价。运行时不写 ledger，不改 SQLite 统计或索引。
+
 ## 混合媒体根与模型读取
 
 馆藏采集复用 `platform.within_root` 的 SMB 根身份判断，本地路径保留字面归属比较，不逐影片访问挂载目录。STRM 是链接文件，其大小和推广名不作为远端影片的垃圾证据；垃圾队列读取时重新评分，既有人工决定与回收站记录保持原样。
@@ -103,6 +105,8 @@ React 与应用层的 GET 入口共用 `frontend/src/core/library-scope.ts`：�
 派生图复用现有生成锁与原子替换，按规则、来源身份及文件代际记录签名。版本快照复用已有发行版检查与独立包安装状态；页面提示使用 BoardUI 和项目 Banner，文案编辑使用现有源码保存入口。脚本在独立维护源构建后经正式导出器同步，其元数据检查复用脚本管理器 API 和可信发布入口。运行方式与故障恢复见[升级后的自动处理](OPERATIONS.md#升级后的自动处理)，决策见 [ADR-0126](adr/0126-upgrade-effective-repairs.md)。
 
 ## 正式测试记录与中断恢复
+
+交付预检复用已有的提交主题、共同署名与 README 影响检查，不新增规则解释器。合入前的 PR 身份复用 [GitHub CLI 的 `gh pr view`](https://cli.github.com/manual/gh_pr_view)，使用工作树仓库上下文和原生 JSON 字段；Peach 只校验开放状态、精确提交及目标分支，不引入 GitHub SDK 或另一套凭据存储。临时 Git 工作树回归覆盖未取得 PR、旧提交、其他目标、远端查询期间内容变化及成功合并回执。
 
 测试结果继续复用 Python ≥3.14 标准库 `unittest`、`hashlib`、`json` 和项目的内容快照、影响域映射与外部测试结果。互斥复用既有 `filelock 4.2.0`，分片退出后回收其进程树复用开发依赖 `psutil 7.2.2`；版本与许可沿用锁定依赖及第三方许可清单，不新增运行时依赖。Peach 保留输入身份、逐文件覆盖、完成报告、批次来源和 `ready`／`integrate` 验收规则；串行、并行、浏览器与 Vitest 使用同一个恢复模型。
 
@@ -819,13 +823,16 @@ A 盘垃圾隔离使用短名称 `peach-purge-<32 位 UUID>.peach-quarantine`，
 - 远程媒体持久缓存复用 HTTPX 0.28.1 的流式响应、Starlette 1.7.0 的文件 Range、filelock 4.0.12 和 `fsutil.atomic_path`；缓存身份、失败保留与按需取得由 Peach 管理。HLS 清单解析用 [m3u8 6.0.0](https://pypi.org/project/m3u8/)（MIT，Python ≥3.7，纯 Python、24.1 KB wheel、无传递依赖），已读取固定版 `model.py` 并验证嵌套清单、密钥、初始化段和字节范围。Hishel 1.4.0（BSD-3-Clause）已读取 `_sync_cache.py` 与 Range 判据，通用 HTTP 缓存按来源 URL、缓存头和重新验证工作；此处需按稳定条目身份避开签名 URL 更新、永久保留成功媒体，因此复用现有持久文件路径。规则及验收见 [媒体缓存](MEDIA_CACHE.md)。
 - 账本路径在 Windows 只做 `abspath`，不 `resolve()`：PikPak 的 A: 是 WinFsp 网络驱动器，`resolve()` 得到 UNC 形态，之后每个经 `file_for()` 的播放请求都慢几个数量级；115 的 B: 不受影响。
 - 不兼容片源（HEVC、mp3 以外的音轨、非 MP4 容器）按 6 秒片重编码给 HLS，账本没记时长或为负时用 ffprobe 的时长切，探测也拿不到才回 Range。分片与整片共享硬件后端探测及回退链，见[硬件转码后端](#硬件转码后端)，同一分片只起一个 FFmpeg。Range 响应按 1 MiB 读文件，`BufferedFileResponse` 自己盯 `http.disconnect`（uvicorn 断开后 `send()` 静默返回，Starlette `FileResponse` 不监听），否则拖一次进度条就留下一个把整部片拉完的幽灵读者。
-- 有 B 帧却没有 `ctts` 的 MP4 是时间戳错乱，浏览器丢掉倒着走的帧。这类片源不重编码：`mp4repair.py` 重建一份 `moov`（游程编码的 `ctts`、编辑列表补整体平移、`stco`/`co64` 按头长差平移）存成 `transcode_root` 里的 `.mp4hdr` 边车，`/stream` 用「边车的头 + 原文件那段 mdat」按 Range 发。显示顺序取自 `ffprobe -ignore_editlist 1 -show_entries frame=pts`，`pkt_dts` 不能用。边车算出来前走 HLS 转码，同一部片后台只算一次，算不出就跳过。
+- 编辑列表的半帧舍入判据采用 peach-patcher 的 [PR #175](https://github.com/peach-mitao/peach/pull/175)（`4106d30cc740863cd1d44a207f80c5f75291141f`），按最短正帧间距判断已有补偿，保留真实裁切、空编辑和段速率。新版边车标识为 `PEACHMP4` 第 2 版；第 1 版在读取时按偏移游程的加权均值还原整体平移，仅修正重复补偿，不读原片、不展开整片时间轴、不重写边车或媒体。已有无效边车可在所选媒体库的修复任务中重建，其旧失败结论不再遮蔽这项修复；正常边车、正常扫描结论和无产物的既有解码失败继续复用。临时旧边车、批处理和 Range 拼接均有回归；未新增依赖。
+- 有 B 帧却没有 `ctts` 的 MP4 是时间戳错乱，浏览器丢掉倒着走的帧。这类片源不重编码：`mp4repair.py` 重建一份 `moov`（游程编码的 `ctts`、编辑列表补整体平移、`stco`/`co64` 按头长差平移）存成 `transcode_root` 里的 `.mp4hdr` 边车，`/stream` 用「边车的头 + 原文件那段 mdat」按 Range 发。`moov` 位于媒体前后都支持；位于末尾时只读索引尾段，把它放到媒体前，媒体后的其他盒子原样保留。显示顺序取自 `ffprobe -ignore_editlist 1 -show_entries frame=pts`，`pkt_dts` 不能用。边车算出来前走 HLS 转码，同一部片后台只算一次，算不出就跳过。
+- 尾部索引布局采用 simon1561 的 [PR #157](https://github.com/peach-mitao/peach/pull/157)（`e67ead5a35a63fc36aa8153e5d62998a001779db`），补充扩展盒头、单个媒体盒和索引读取边界。非零编辑起点超过重建补偿范围时无法区分预卷与裁剪，保留转码；临时 B 帧视频已验证适用样本 50 帧逐帧一致、歧义样本拒修。扫描缓存第 1 版的失败结论按尾部布局重新诊断，第 2 版保留当前失败结论，不清空正常缓存或自动运行媒体修复。
 - 「只采集在线资料」对齐全的行（番号已落库、字段有着落或已在候选表、封面在位）不碰磁盘；文件在不在看目录列表、同目录只列一次，扫描用目录列表自带的大小与时间、不逐个 stat；候选 CSV 每 5 秒写盘一次，被打断也在收尾写全。
 - 一个控件在两页出现时，选中态也归它：首页、资料页与关注页的「全部／没看过／稍后看／已标记」共用 `use-view-glide.ts` 那块滑动玻璃与 `[data-view-glide]`，填充只由玻璃给，各排自己不铺底。
 - 本地详情与关注详情的「接着看」共用 `RelatedSection`、横滚接线与卡片 `next` 版式，数量读同一设置。空结果复用 `EmptyState`，读取失败复用 `RetryNote`，可原位重试；关闭推荐时不取数。关注推荐复用 `/api/follow` 分页及 TanStack Query 缓存，最多读取三页；优先同创作者和共同标签，排除当前合集、已看、忽略与不同媒体类型。创作者头像链接复用卡片的 hover，下载链接复用舞台操作键几何；未新增依赖，推荐读取不写 ledger。
 - 本地与在线详情标签共用 `components/detail-tags.tsx` 与样式：同一标签外观、最近使用、搜索与新建、改名预览及单条删除入口。写入仍由各自的数据层负责；在线来源标签的单条隐藏保存在用户设置，来源原词保留。关注管理的标签页签复用 `TagManager`，支持集中屏蔽和恢复内容。未新增依赖。
 - 详情底部共用 `DetailContinuation`：分集队列在左、接着看在右，手机上下排列，两区独立横滚并共用底色。封面共用宽度与 16:9 比例；宽屏标题区通过 CSS subgrid 共用行高，摘要与操作键参与排版。`RelatedSection` 给卡片的 8px 悬停面留出滚动内距；分卷与版本的推荐按队列种子缓存。队列头像共用 `cardIdentity`、`avatarInner`，同时读取列表投影与详情 `entity_refs`，保留图片版本及人脸取景。
 - 艺人、卖家名册的 RSS 标记读取 `/api/index` 的 `following`：按实体 ID 汇总已启用的 JAV 新作订阅与关注来源，停用、移除及未确认绑定的同名来源不计入。标记复用 `PeopleGrid`、BoardUI `Chip` 与现有 RSS 字形，不增加取数请求或依赖。
+- 名称语言复用 `profile.settings_json`、女优资料原文及 `kanji.JP_KANJI_TO_SIMPLIFIED`；形状接口下发同一字形表，前端不另存转换词表。纯汉字原始署名可只读换字形，假名与字母名只采用已核对的同艺名对应；日文原文读取来源，不从中文逆推。显示名称与人物身份、查询值、作品署名分开，未取得唯一身份的共享写法不选中其他人。
 - 统计与口味两页按登录态 Vercel Analytics／Speed Insights 的当前页面重做，排行与数据源共用父网格的引导线。
 - 口味页顶部给出结论与可点入口：浏览与 Peach 两侧的共同信号、可探索标签、待补证据的下一步动作。
 - 操作回执复用 Toast（Sonner 的栈，`frontend/src/react/toaster.tsx`；壳里只调 `toast()`／`actionReceipt()`）；按钮以 Spinner 和 `aria-busy` 标明忙态。后台任务显示可恢复进度，断线自动重连。
@@ -1059,7 +1066,7 @@ Python 复用 MIT 许可的 [Ruff](https://docs.astral.sh/ruff/) 0.17.0，版本
 
 `frontend/src/copy-editor-core.js` 是应用、官网与演示站的原位编辑核心，以 classic script 注册 `PeachCopyEditorCore`。核心负责文字命中、原位输入、回车和失焦保存、Esc 取消、连续草稿和 JSON 结果解析；`create` 的 `resolve`／`prepare`／`save`／`onSaved` 保留各端来源定位与保存入口。适配器可用 `element` 与 `nodes` 指定连续行内文字的共同编辑区域，`replaceTextParts` 将纯文字修改映射到原有节点，保留未改动片段的样式，并清理无内容且仅带样式属性的行内元素。空字符串可作为删除结果，无法确认的保存响应保留核对提示。切换控件正常响应点击，Alt 点击进入文字编辑。官网与演示站按应用提交与 SHA256 同步核心，适配器先取得原始文字索引再运行页面脚本。
 
-核心的 `createTools()` 提供工具栏、编辑样式、状态、暂停／继续、导出／退出动作、恢复按钮与来源选择；工具栏和悬停范围跟随模态弹层，避让页面底部选择操作条，`destroy()` 清理节点、监听与未完成选择。应用适配器 `scripts/dev/copy-editor.js` 负责源码候选、草稿、自动生效状态与动作回调。源码模式按顺序加载 `/dev/copy-editor-core.js` 与 `/dev/copy-editor.js`，动态文案保留模板占位符。
+核心的 `createTools()` 提供工具栏、编辑样式、状态、暂停／继续、导出／退出动作、恢复按钮与来源选择。工具条通过原生 Popover 顶层按整个视口定位；打开模态框时保留可交互资格，不受弹窗裁切，也不向设置内容追加占位。`attachToolbarDrag()` 处理非按钮区域的指针拖动、方向键微调与双击或 Esc 复位，位置限制在可见视口内。工具条避让页面底部选择操作条和弹窗底栏，`destroy()` 清理节点、监听与未完成选择。应用适配器 `scripts/dev/copy-editor.js` 负责源码候选、草稿、自动生效状态与动作回调。源码模式按顺序加载 `/dev/copy-editor-core.js` 与 `/dev/copy-editor.js`，动态文案保留模板占位符。
 改字浮条使用多选操作条的 `data-selection-dock`、`data-glass-pane` 与 `data-batch-scope` 样式，几何、玻璃、字体和按钮共享；窄屏状态提示独占一行。
 应用的 React 与动态页面使用源码定位、摘要校验和备份入口；演示站使用浏览器草稿。两者只在 `?edit` 启用，无新增依赖。
 Python 源文件纳入 `src/peach/library_sharing.py` 与 `src/peach/library_processing.py`。动态句子复用标准库 `ast`、`string.Formatter` 定位 f-string 与相邻字符串，编辑时显示命名占位符，保存时校验占位符齐全且各出现一次。求值表达式与格式保留在 AST 中，当前数量只用于显示；其他 Python 文件不属于改字范围。

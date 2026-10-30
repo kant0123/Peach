@@ -3,6 +3,8 @@ import { attachOverlayScrollbar, revealTexts, spinnerHtml, wireHorizontalScrolle
 import { Button, ButtonLink } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
 import { errorMessage } from '../../api';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 import { ModalFrame } from '../components/modal-frame';
 import { Note } from '../components/note';
 import { FilterIconButton } from '../components/filter-glass';
@@ -32,6 +34,7 @@ export function FavoriteButton({ item }: { item: Favorite }) {
 }
 
 function FavoriteChoice({ item }: { item: Favorite }) {
+  useEntityNames();
   const query = useShortcuts(false);
   const initial = useRef(query.data);
   const write = useShortcutWrite();
@@ -40,7 +43,7 @@ function FavoriteChoice({ item }: { item: Favorite }) {
     : item.favorite ?? (query.data ? isFavorite(query.data.favorites || [], item) : false);
   return <span className="inline-flex min-w-0 flex-col gap-1">
     <EntityActionButton data-favorite="" aria-pressed={!!selected}
-      label={`${selected ? t('取消收藏') : t('收藏')}${item.name}`}
+      label={`${selected ? t('取消收藏') : t('收藏')}${entityDisplayName(item.kind, item.name, item.entity_id)}`}
       {...busyProps(write.isPending)} onClick={() => {
         if (!write.isPending) write.mutate({ action: 'favorite', ...item, on: !selected });
       }}>{write.isPending ? <span aria-hidden dangerouslySetInnerHTML={{ __html: spinnerHtml('') }} /> : <Star />}</EntityActionButton>
@@ -62,6 +65,7 @@ export function LibraryShortcuts({ currentHref, kind }: { currentHref?: () => st
 }
 
 function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => string; kind?: string; close(): void }) {
+  useEntityNames();
   const query = useShortcuts();
   const write = useShortcutWrite();
   const [name, setName] = useState('');
@@ -115,8 +119,10 @@ function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => st
     });
   };
   const data = query.data;
+  const searchName = search.trim().toLocaleLowerCase();
   const rows = (data?.favorites || []).filter((row) => (scope === 'all' || row.kind === scope)
-    && row.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+    && (row.name.toLocaleLowerCase().includes(searchName)
+      || entityDisplayName(row.kind, row.name, row.entity_id).toLocaleLowerCase().includes(searchName)));
   return <div data-shortcuts-panel="">
     <div ref={head} data-shortcuts-head="">
       <h2 className="text-title-2-semibold text-text-primary">{label}</h2>
@@ -153,12 +159,12 @@ function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => st
         {search ? t('试试其他名称。') : t('在资料页或标签页收藏常用内容。')}
       </EmptyState> : null}
       <div data-shortcuts-list="">{rows.map((row) => <div key={row.key} data-shortcuts-row="" className="flex min-w-0 items-center justify-between gap-3">
-        <a href={favoriteHref(row)} aria-label={row.name} onClick={close} className="flex min-w-0 flex-1 items-center gap-3 text-body-regular text-text-primary">
+        <a href={favoriteHref(row)} aria-label={entityDisplayName(row.kind, row.name, row.entity_id)} onClick={close} className="flex min-w-0 flex-1 items-center gap-3 text-body-regular text-text-primary">
           <FavoriteAvatar key={row.image_url} item={row} />
-          <span className="flex min-w-0 flex-col gap-1"><span className="truncate">{row.name}</span>
+          <span className="flex min-w-0 flex-col gap-1"><span className="truncate">{entityDisplayName(row.kind, row.name, row.entity_id)}</span>
             <span className="text-caption-1-regular text-text-secondary">{row.scope === 'online' ? t('在线标签') : LABELS[row.kind]}</span></span>
         </a>
-        <Button variant="secondary" size="small" aria-label={t('取消收藏{name}', { name: row.name })} {...busyProps(write.isPending)}
+        <Button variant="secondary" size="small" aria-label={t('取消收藏{name}', { name: entityDisplayName(row.kind, row.name, row.entity_id) })} {...busyProps(write.isPending)}
           onClick={() => { if (!write.isPending) write.mutate({ action: 'favorite', ...row, on: false }) }}>{t('取消收藏')}</Button>
       </div>)}</div>
     </> : <>

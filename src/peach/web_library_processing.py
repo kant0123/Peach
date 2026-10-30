@@ -34,9 +34,17 @@ def public_state(state):
 def _current(contract):
     live = contract.library_processing_job.snapshot()
     thread = getattr(contract.library_processing_job, 'thread', None)
-    if live and live.get('status') == 'cancelled' and thread is not None and thread.is_alive():
+    if live and live.get('status') in ('cancelled', 'failed', 'complete') and thread is not None and thread.is_alive():
         return {**live, 'status':'stopping'}
-    return live if live and live.get('status') in ACTIVE else snapshot(settings_file.active())
+    if live and live.get('status') in ACTIVE:
+        return live
+    stored = snapshot(settings_file.active())
+    if live and live.get('job_id') == stored.get('job_id'):
+        return {**stored, **live}
+    if live and live.get('started_at', 0) > stored.get('started_at', 0):
+        # 抢处理锁之前失败时还未写进度文件，不能再用上一轮终态遮住这次错误。
+        return live
+    return stored
 
 
 def q_library_processing(contract, _args):

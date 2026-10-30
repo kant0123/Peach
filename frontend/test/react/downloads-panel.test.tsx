@@ -1,7 +1,8 @@
 /* 活动页云下载段的行为：任务卡给哪些键、没有任务时整段不画、只读端不给写操作。 */
 import { QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { registerNameWritings, setNameLanguage } from '../../src/core/entity-names';
 
 import { DownloadsPanel, downloadPollInterval } from '../../src/react/activity/downloads-panel';
 import type { DownloadsSnapshot, DownloadTask } from '../../src/react/bundle';
@@ -9,6 +10,7 @@ import { queryClient } from '../../src/react/query';
 import { buttonNamed, click, mount, settle } from './render';
 
 afterEach(() => queryClient.clear());
+beforeEach(() => { registerNameWritings([]); setNameLanguage('zh-CN') });
 
 const task = (patch: Partial<DownloadTask> = {}): DownloadTask => ({
   id: 1, info_hash: 'a'.repeat(40), provider: '115', provider_label: '115', source_uri: 'magnet:?xt=urn:btih:' + 'a'.repeat(40),
@@ -55,6 +57,21 @@ const show = async () => {
   });
   return host;
 };
+
+it('下载卡片的可见署名和读屏名称跟随语言，人物链接保留原身份', async () => {
+  registerNameWritings([], { 宮: '宫', 澤: '泽', 寧: '宁' });
+  serve(snapshot({ tasks: [task({ artwork: { has_cover: false, code: 'ABC-123',
+    performer_entities: [{ id: 20, name: '宮澤寧音', has_image: false }],
+  } })] }));
+  const host = await show();
+  const link = host.querySelector('[data-media-avatar]');
+  expect(link?.getAttribute('aria-label')).toBe('打开女优页：宫泽宁音');
+  expect(link?.getAttribute('href')).toBe('/performers/20');
+  expect(host.textContent).toContain('宫泽宁音');
+  await act(async () => setNameLanguage('ja'));
+  expect(link?.getAttribute('aria-label')).toBe('打开女优页：宮澤寧音');
+  expect(host.textContent).toContain('宮澤寧音');
+});
 
 it.each([
   [{ title: '制作记录' }, 'ABC-123 · 制作记录'],

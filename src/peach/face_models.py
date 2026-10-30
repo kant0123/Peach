@@ -69,6 +69,13 @@ def attach(runs) -> None:
     face_detect.observer = Reporter(runs)
 
 
+def detach(runs) -> None:
+    """服务关停后释放属于这份账本的模型任务记录器。"""
+    observer = face_detect.observer
+    if isinstance(observer, Reporter) and observer.runs is runs:
+        face_detect.observer = None
+
+
 #: 「立即重试」的地址：活动中心页顶「需要处理」那一行调它，请求体 `{}`。
 RETRY_URL = "/api/face-models"
 

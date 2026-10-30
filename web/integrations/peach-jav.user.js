@@ -12,7 +12,7 @@
 // @updateURL    https://update.sleazyfork.org/scripts/600821/Peach%20%C2%B7%20JAV%20%E5%85%A5%E5%BA%93.meta.js
 // @downloadURL  https://update.sleazyfork.org/scripts/600821/Peach%20%C2%B7%20JAV%20%E5%85%A5%E5%BA%93.user.js
 // @license      AGPL-3.0-or-later
-// @version      0.6.7
+// @version      0.6.9
 // @description  Detect video codes on web pages, select titles, and send them to Peach for download and library import.
 // @description:zh-CN 识别网页中的番号，选择影片并交给 Peach 下载入库。
 // @description:zh-TW 識別網頁中的番號，選擇影片並交給 Peach 下載入庫。
@@ -291,7 +291,7 @@
   const STORAGE_POSITION = 'peach.jav.position';
   const STORAGE_APPEARANCE = 'peach.jav.appearance';
   const ROOT_ID = 'peach-jav-action';
-  const SCRIPT_VERSION = "0.6.7";
+  const SCRIPT_VERSION = "0.6.9";
   // 0.6.3 起默认名改为英文；发布页切换前仍返回原名。
   const PUBLISHED_NAMES = ['Peach Userscript', 'Peach · JAV 入库'];
   const PEACH_LOGO = "data:image/png;base64,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";
@@ -305,10 +305,7 @@
   const infoVersion = typeof GM_info === 'object' && validVersion(GM_info?.script?.version) ? GM_info.script.version : SCRIPT_VERSION;
   const RUNNING_VERSION = compareVersion(SCRIPT_VERSION, infoVersion) <= 0 ? SCRIPT_VERSION : infoVersion;
   // 新实例在同页去重及桥接返回之前登记安装版本，正在运行的实例可收到变化。
-  try {
-    const installed = compareVersion(SCRIPT_VERSION, infoVersion) >= 0 ? SCRIPT_VERSION : infoVersion;
-    if (compareVersion(installed, GM_getValue(STORAGE_INSTALLED, '0.0.0')) > 0) GM_setValue(STORAGE_INSTALLED, installed);
-  } catch { /* 安装检测不阻断原有入口。 */ }
+  recordInstalledVersion();
   if (location.pathname === '/integrations/peach-userscript-bridge') {
     let origin;
     try { origin = settings(location.origin, 'bridge-only').base; } catch { return; }
@@ -335,7 +332,7 @@
   // （完成绿、失败红、进行中蓝、需留意黄）。表格行底色与 neutral Chip 同为三级背景，排队改用 soft；
   // 未提交的「待加入」不是任务状态，只用次级文字。完整说明放在悬停提示。
   const ROW_STATES = {
-    pending: ['待加入', 'plain'], sending: ['提交中', 'blue'],
+    pending: ['待加入', 'plain'], checking: ['查询中', 'plain'], sending: ['提交中', 'blue'],
     queued: ['排队中', 'soft'], searching: ['搜索中', 'blue'], submitted: ['下载中', 'blue'],
     importing: ['入库中', 'blue'], organizing: ['整理中', 'blue'],
     ingested: ['已入库', 'lime'], owned: ['已有', 'lime'], no_match: ['无资源', 'yellow'], failed: ['失败', 'rose'],
@@ -401,6 +398,7 @@
   let updateCache = readUpdateCache();
   let updateError = '';
   let updateChecking = false;
+  let updateInstallVersion = '';
   let updateDismissed = '';
   // 没有单部作品浮卡的页面，图标展开的是入口面板；本页番号返回时回到这里。
   let entryOpen = false;
@@ -439,6 +437,7 @@
     settingsView?.dialog.close();
     panelMode='expanded';
     GM_setValue(STORAGE_ENABLED,true);
+    if (!pageInterfaceAllowed()) return;
     if (String(getSelection() || '').trim() && siteFor(new URL(location.href))) {
       selectCode();return;
     }
@@ -631,7 +630,7 @@
     .update-section{display:grid;gap:8px;min-width:0;border-top:1px solid var(--line);padding-top:12px}
     .update-actions{display:flex;flex-wrap:wrap;gap:8px}.update-actions a{text-decoration:none}
     .update-actions .geist-button{height:32px;padding-inline:10px}
-    [data-update-kind=script],[data-update-kind=refresh]{--update-foreground:var(--update-script-foreground)}
+    [data-update-kind=script],[data-update-kind=install],[data-update-kind=refresh]{--update-foreground:var(--update-script-foreground)}
     [data-update-kind=peach]{--update-foreground:var(--update-peach-foreground)}
     .geist-note[data-update-kind]:not([data-update-kind=current]){color:var(--update-foreground)}
     .geist-button[data-update-kind]{color:var(--update-foreground);border-color:color-mix(in srgb,var(--update-foreground) 35%,var(--line));background:color-mix(in srgb,var(--update-foreground) 10%,var(--ground));box-shadow:none}
@@ -1138,6 +1137,14 @@
     } catch { return {}; }
   }
 
+  function recordInstalledVersion() {
+    try {
+      const metadata = typeof GM_info === 'object' && validVersion(GM_info?.script?.version) ? GM_info.script.version : SCRIPT_VERSION;
+      const installed = compareVersion(SCRIPT_VERSION, metadata) >= 0 ? SCRIPT_VERSION : metadata;
+      if (compareVersion(installed, GM_getValue(STORAGE_INSTALLED, '0.0.0')) > 0) GM_setValue(STORAGE_INSTALLED, installed);
+    } catch { /* 安装检测不阻断原有入口。 */ }
+  }
+
   function installedVersion() {
     try { return GM_getValue(STORAGE_INSTALLED, RUNNING_VERSION); } catch { return RUNNING_VERSION; }
   }
@@ -1154,7 +1161,9 @@
     const fromPeach = compareVersion(bundled, remote || '0.0.0') > 0;
     const version = fromPeach ? bundled : remote;
     if (compareVersion(version, RUNNING_VERSION) > 0) return {
-      key: `script:${version}`, kind: 'script', message: `用户脚本 v${version} 可更新。`,
+      key: `${updateInstallVersion === version ? 'install' : 'script'}:${version}`,
+      kind: updateInstallVersion === version ? 'install' : 'script', version,
+      message: updateInstallVersion === version ? '在脚本管理器完成更新后，刷新本页即可使用。' : `用户脚本 v${version} 可更新。`,
       href: fromPeach && config ? `${config.base}/integrations/peach-jav.user.js` : RELEASE_INSTALL,
     };
     if (local?.release?.state === 'available' && typeof local.release.latest_version === 'string') return {
@@ -1178,6 +1187,7 @@
 
   function paintUpdates(node) {
     const model = updateModel();
+    node.dataset.updateKey = model.key;
     const availableOnly = node.dataset.availableOnly === 'true';
     node.hidden = availableOnly && model.kind === 'current';
     if (node.hidden) { node.replaceChildren(); return; }
@@ -1187,17 +1197,22 @@
     note.dataset.copyKey = `userscript.updates.${checking ? 'checking' : model.kind}.message`;
     note.setAttribute('aria-label', '用户脚本更新状态');
     const actions = element('div', 'update-actions');
-    if (model.kind === 'refresh') {
+    if (model.kind === 'refresh' || model.kind === 'install') {
       const reload = control('刷新本页');
       reload.dataset.updateKind = 'refresh';
       reload.dataset.copyKey = 'userscript.updates.refresh.action';
       reload.addEventListener('click', () => location.reload());
       actions.append(reload);
-    } else if (model.href) {
-      const install = element('a', 'geist-button', model.kind === 'script' ? '更新用户脚本' : '查看 Peach 更新');
+    }
+    if (model.href) {
+      const install = element('a', 'geist-button', model.kind === 'script' || model.kind === 'install' ? '更新用户脚本' : '查看 Peach 更新');
       install.dataset.updateKind = model.kind;
       Object.assign(install, { href: model.href, target: '_blank', rel: 'noopener noreferrer' });
       install.dataset.copyKey = `userscript.updates.${model.kind}.action`;
+      if (model.kind === 'script' || model.kind === 'install') install.addEventListener('click', () => {
+        updateInstallVersion = model.version;
+        setTimeout(paintAllUpdates, 0);
+      });
       actions.append(install);
     }
     const check = control('检查更新');
@@ -1362,7 +1377,15 @@
       updateGeneration++; updateChecking = false;
       for (const request of updateRequests) request.abort?.();
       updateRequests.clear();
-    } else { updateCache = readUpdateCache(); paintAllUpdates(); scheduleUpdateCheck(); }
+    } else { refreshInstalledVersion(); scheduleUpdateCheck(); }
+  }
+
+  function refreshInstalledVersion() {
+    if (updateDisposed) return;
+    recordInstalledVersion();
+    const saved = readUpdateCache(), changed = JSON.stringify(saved) !== JSON.stringify(updateCache);
+    updateCache = saved;
+    if (changed || [...updateContainers].some(node => node.isConnected && node.dataset.updateKey !== updateModel().key)) paintAllUpdates();
   }
 
   function disposeUpdates() {
@@ -1371,6 +1394,7 @@
     for (const request of updateRequests) request.abort?.();
     updateRequests.clear(); updateContainers.clear();
     document.removeEventListener('visibilitychange', updateVisibility);
+    removeEventListener('focus', refreshInstalledVersion);
     if (typeof GM_removeValueChangeListener === 'function') for (const listener of updateListeners) GM_removeValueChangeListener(listener);
   }
 
@@ -1417,7 +1441,7 @@
       const people = element('span', 'batch-people');
       people.append(defaultPersonAvatar());
       const status = element('span', 'batch-row-status chip');
-      status.dataset.chip='plain';status.textContent='待加入';status.title='待加入';
+      status.dataset.chip='plain';status.textContent='查询中';status.title='正在查询 Peach 状态';
       const result=element('td');result.append(status);
       const codeLabel=element('span','batch-row-code',code);codeLabel.title=code;
       main.append(people,codeLabel);identity.append(main);row.append(selection,identity,result);
@@ -1429,8 +1453,22 @@
     view.tableFrame.hidden = !view.rows.length;
     view.note.textContent = view.rows.length ? `识别到 ${view.rows.length} 个候选番号，重复番号已合并。`
       : '本页未识别到完整番号。可以选中一个番号后使用脚本菜单，或切换到作品列表页。';
-    view.busy = false; view.paint();
+    view.paint();
     void loadPagePeople(view);
+    const config = configuration(), rows = view.rows;
+    for (const item of rows) {
+      if (!view.root.isConnected || view.rows !== rows) return;
+      try {
+        const body = await request(config, item.code, '', 'GET');
+        if (!view.root.isConnected || view.rows !== rows) return;
+        applyRowStatus(item, body);
+      } catch (error) {
+        if (!view.root.isConnected || view.rows !== rows) return;
+        setRowState(item, 'failed', error.message, '未取得');
+      }
+    }
+    view.busy = false; view.paint();
+    void trackRows(view);
   }
 
   // 只读 Peach 本地人物资料；setAbort 收到可中止当前请求的函数，结束时收到 null。
@@ -1470,8 +1508,9 @@
     if (body.state === 'ingested' && ['queued', 'searching', 'submitted', 'importing'].includes(item.row.dataset.state)) playSound('success');
     item.cause = body.state === 'failed' ? body.cause || '' : '';
     item.tracking = tracking(body);
-    item.done = !['failed', 'no_match'].includes(body.state);
-    if (body.state === 'failed') setRowState(item, 'failed', failureText(body), {magnet:'磁力失效', cloud:'网盘问题'}[item.cause] || '失败');
+    item.done = !['idle', 'failed', 'no_match'].includes(body.state);
+    if (body.state === 'idle') setRowState(item, 'pending');
+    else if (body.state === 'failed') setRowState(item, 'failed', failureText(body), {magnet:'磁力失效', cloud:'网盘问题'}[item.cause] || '失败');
     else if (body.state === 'no_match') setRowState(item, 'no_match', failureText(body));
     else if (body.state === 'submitted' && ['remote_done', 'landed'].includes(download?.state)) setRowState(item, 'importing', download.label || '入库中');
     else if (body.state === 'submitted' && download?.state === 'remote_running' && typeof download.progress === 'number' && Number.isFinite(download.progress)) {
@@ -2268,6 +2307,7 @@
   }
   addEventListener('resize', () => { for (const root of surfaces) if (root.isConnected) placeSurface(root); });
   document.addEventListener('visibilitychange', updateVisibility);
+  addEventListener('focus', refreshInstalledVersion);
   addEventListener('pagehide', event => { if (!event.persisted) disposeUpdates(); });
   scheduleUpdateCheck();
 })();

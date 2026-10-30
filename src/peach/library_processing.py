@@ -7,10 +7,11 @@ import re
 import sqlite3
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 import xml.etree.ElementTree as ET
-from contextlib import closing
+from contextlib import closing, contextmanager
 from contextvars import copy_context
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
@@ -44,7 +45,7 @@ from .scan import scan_location
 from .fsutil import atomic_write_text
 from . import artifact_rules, upgrade_rules
 from .ffmpeg import FFmpegResolver
-from .jobs import DiskGuard, JobPolicyError
+from .jobs import DiskGuard, JobDeferred, JobPolicyError
 from .media_probe import probe_unmeasured
 from .media_sources import cost_for
 from .media_processing_policy import metadata_only
@@ -738,6 +739,83 @@ class LibraryMetadataProvider:
 
 def state_path(config):
     return config.directory('state') / 'library-processing.json'
+
+
+#: 等着全库处理锁的前台处理有几轮。后台定向任务看到它不为零就让路。
+_waiting_foreground = 0
+_waiting_guard = threading.Lock()
+#: 前台处理等锁时多久再试一次。
+LOCK_RETRY_SECONDS = 0.5
+
+
+def _foreground_waiting() -> bool:
+    with _waiting_guard:
+        return _waiting_foreground > 0
+
+
+def _lock_free(config) -> bool:
+    try:
+        with FileLock(str(state_path(config)) + '.lock', timeout=0):
+            return True
+    except Timeout:
+        return False
+
+
+class ProcessingBusy(JobDeferred):
+    """全库处理锁被占着，或者有用户发起的处理在等它；后台定向任务回到队列。"""
+
+    def __init__(self, config):
+        super().__init__('等待扫描与采集完成后继续')
+        self.config = config
+
+    def ready(self) -> bool:
+        return not _foreground_waiting() and _lock_free(self.config)
+
+
+@contextmanager
+def _processing_lock(config, *, background, active):
+    """持有全库处理锁，返回本轮该用的 `active`。
+
+    共享候选文件整份读改写，同一时刻只能有一轮处理在写。用户发起的处理（不带
+    `state_file`）等锁，并让在跑的后台定向任务在下一个检查点退出；后台任务碰上锁被占
+    或有人在等，就抛 `ProcessingBusy` 回到队列，凭各自的进度文件续跑。
+    """
+    global _waiting_foreground
+    lock = FileLock(str(state_path(config)) + '.lock', timeout=0)
+    if background:
+        if _foreground_waiting():
+            raise ProcessingBusy(config)
+        try:
+            lock.acquire()
+        except Timeout:
+            raise ProcessingBusy(config) from None
+        try:
+            yield lambda: active() and not _foreground_waiting()
+        except InterruptedError:
+            if active() and _foreground_waiting():
+                raise ProcessingBusy(config) from None
+            raise
+        finally:
+            lock.release()
+        return
+    with _waiting_guard:
+        _waiting_foreground += 1
+    try:
+        while True:
+            try:
+                lock.acquire()
+                break
+            except Timeout:
+                if not active():
+                    raise InterruptedError('处理任务已停止') from None
+                time.sleep(LOCK_RETRY_SECONDS)
+        try:
+            yield active
+        finally:
+            lock.release()
+    finally:
+        with _waiting_guard:
+            _waiting_foreground -= 1
 
 
 def issues_path(config, job_id):
@@ -2638,8 +2716,9 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
         flush_state(force=True)
         report(dict(state))
     from .update_tasks import activity
+    # 后台任务要让路时，`as active` 换上的那个会转为假；后面的检查点与闭包都读这一个。
     with (activity(Path(db_path), 'library-processing'), traffic.bind(),
-          FileLock(str(state_path(config)) + '.lock', timeout=0),
+          _processing_lock(config, background=state_file is not None, active=active) as active,
           bind_control(control, identity, publish=control_report, active=active, db_path=Path(db_path),
                        mode=speed_mode)):
         state = dict(job_id=identity, status='running',

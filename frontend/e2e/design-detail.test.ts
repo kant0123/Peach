@@ -568,12 +568,14 @@ describe('设计决定：关注详情、作品详情、播放器与侧栏', () =
         ['background-color', 'color', 'padding-top', 'padding-left', 'backdrop-filter', 'white-space']),
       { 'background-color': PLAYER_BLACK, color: 'rgb(255, 255, 255)', 'padding-top': '5px', 'padding-left': '9px',
         'backdrop-filter': 'blur(16px)', 'white-space': 'nowrap' });
-      assert.deepEqual(await styleOf(page, '#stage #playerStatsBtn', ['left', 'top', 'width', 'height', 'border-top-left-radius', 'background-color']),
-        { left: '11px', top: '11px', width: '40px', height: '40px', 'border-top-left-radius': '50%', 'background-color': PLAYER_BLACK });
+      assert.deepEqual(await styleOf(page, '#stage #playerStatsBtn', ['width', 'height', 'border-top-left-radius', 'background-color']),
+        { width: '40px', height: '40px', 'border-top-left-radius': '50%', 'background-color': PLAYER_BLACK });
+      assert.deepEqual(await styleOf(page, '#stage [data-player-toolbar]', ['left', 'top', 'flex-wrap']),
+        { left: '11px', top: '11px', 'flex-wrap': 'wrap' });
       /* 音量胶囊和右边那枚同一排，毛玻璃同一档：只有一边磨砂，展开后它就比邻居更透。 */
       assert.equal((await styleOf(page, `${PLAYER_BAR} > .vjs-volume-panel`, ['backdrop-filter']))!['backdrop-filter'], 'blur(16px)');
-      assert.deepEqual(await styleOf(page, '#stage #playerNet', ['left', 'top', 'height', 'white-space']),
-        { left: '58px', top: '11px', height: '40px', 'white-space': 'nowrap' }, '速率断成两行会顶破 40px 的胶囊');
+      assert.deepEqual(await styleOf(page, '#stage #playerNet', ['height', 'white-space']),
+        { height: '40px', 'white-space': 'nowrap' }, '速率断成两行会顶破 40px 的胶囊');
       /* sprite 里的仪表盘是描边图形，容器不声明就按 SVG 默认填成黑块，压在黑底上等于没有图标。
          演示库的片子放不出来、角标没有速率可写，量的是临时塞进去的一枚 svg。 */
       const gauge = await page.evaluate(() => {

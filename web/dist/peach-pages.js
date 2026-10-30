@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "6bffa863-f602-44c2-af88-722c4bfea253", e._sentryDebugIdIdentifier = "sentry-dbid-6bffa863-f602-44c2-af88-722c4bfea253");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "06891ccc-785c-455e-aa48-c2fd67ee82dc", e._sentryDebugIdIdentifier = "sentry-dbid-06891ccc-785c-455e-aa48-c2fd67ee82dc");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -557,6 +557,14 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	代理地址: "プロキシのアドレス",
 	"以 / 开头的网盘路径": "/ で始まるクラウドドライブのパス",
 	作品显示: "作品の表示",
+	女优名称: "女優名の表記",
+	"名称与别名只显示所选语言的写法；缺少对应时保留当前名称。偏好保存在数据库，其他设备读取同一份设置。": "名前と別名は選んだ言語の表記だけを表示します。対応する表記がないときは現在の名前のままにします。設定はデータベースに保存され、ほかの端末も同じ設定を読み込みます。",
+	日文原文: "日本語の原表記",
+	已保存名称显示偏好: "名前の表示設定を保存しました",
+	保存名称显示偏好: "名前の表示設定を保存",
+	"未取得数据库中的名称偏好，请重新打开设置。": "データベースの名前表示設定を取得できませんでした。設定を開き直してください。",
+	"暂无已核对的日文原文，保留当前名称": "確認済みの日本語表記がないため、現在の名前のままです",
+	"暂无已核对的中文写法，保留当前名称": "確認済みの中国語表記がないため、現在の名前のままです",
 	作品资料站点: "作品情報サイト",
 	"使用你在 Cloudflare 绑定的固定域名。启动前要先设置访问密码。": "Cloudflare に登録した固定ドメインを使います。開始前にアクセスパスワードを設定してください。",
 	侧栏光晕: "サイドバーのグロー",
@@ -26922,4 +26930,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=6bffa863-f602-44c2-af88-722c4bfea253
+//# debugId=06891ccc-785c-455e-aa48-c2fd67ee82dc

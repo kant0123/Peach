@@ -30,6 +30,14 @@ class FaceModelsCase(unittest.TestCase):
 
 
 class ReporterTests(FaceModelsCase):
+    def test_detach_releases_only_the_owning_ledgers_reporter(self):
+        face_models.attach(self.store)
+        attached = face_detect.observer
+        face_models.detach(object())
+        self.assertIs(face_detect.observer, attached)
+        face_models.detach(self.store)
+        self.assertIsNone(face_detect.observer)
+
     def setUp(self):
         super().setUp()
         self.report = face_models.Reporter(self.store)

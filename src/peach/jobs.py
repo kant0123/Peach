@@ -35,6 +35,13 @@ class JobPaused(JobPolicyError):
     exit_code = 3
 
 
+class JobDeferred(RuntimeError):
+    """后台任务这会儿跑不了，得给别的任务让路；回到队列，`ready()` 为真时再领。"""
+
+    def ready(self) -> bool:
+        return True
+
+
 class JobCancelled(InterruptedError):
     """用户停止任务；已保存结果保留，不再自动恢复。"""
 

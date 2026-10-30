@@ -17,6 +17,48 @@ from support.ledger import fresh_ledger
 
 
 class ProcessingControlTests(unittest.TestCase):
+    def test_failed_worker_keeps_retries_out_until_its_real_lock_is_released(self):
+        from filelock import FileLock, Timeout
+        from peach.jobs import BackgroundJob
+        from peach.library_processing import _save, state_path
+        from peach.web_library_processing import _current
+        job = BackgroundJob('library-processing')
+        contract = SimpleNamespace(db_path=self.db, library_processing_job=job)
+        path = state_path(self.config)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _save(path, {'job_id': 'old', 'status': 'failed', 'started_at': 1, 'error': '旧错误'})
+        failed, release = threading.Event(), threading.Event()
+        def work(job_id):
+            with FileLock(str(path) + '.lock', timeout=0):
+                job.update(job_id, status='failed', error='当前处理失败')
+                failed.set()
+                release.wait(10)
+        job.start(work)
+        self.addCleanup(release.set)
+        self.assertTrue(failed.wait(5))
+        identity = job.snapshot()['job_id']
+        try:
+            with patch('peach.web_library_processing.settings_file.active', return_value=self.config):
+                with self.assertRaises(Timeout), FileLock(str(path) + '.lock', timeout=0):
+                    pass
+                state = _current(contract)
+                self.assertEqual((state['job_id'], state['status']), (identity, 'stopping'))
+                retried = w_library_processing(contract, {'retry': True})
+                self.assertEqual((retried['job_id'], retried['status']), (identity, 'stopping'))
+                release.set()
+                job.thread.join(5)
+                self.assertFalse(job.thread.is_alive())
+                with FileLock(str(path) + '.lock', timeout=0):
+                    pass
+                current = _current(contract)
+                self.assertEqual((current['job_id'], current['error']), (identity, '当前处理失败'))
+                _save(path, {'job_id': 'external', 'status': 'complete',
+                             'started_at': job.snapshot()['started_at'] + 1})
+                self.assertEqual(_current(contract)['job_id'], 'external')
+        finally:
+            release.set()
+            job.thread.join(5)
+
     def test_skip_intent_is_shared_scoped_and_cleared_before_next_asset(self):
         from peach.processing_control import ItemSkipped, processing_item
         control = ProcessingControl(self.root / 'skip-control.json')

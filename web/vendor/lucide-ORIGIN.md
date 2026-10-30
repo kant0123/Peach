@@ -1,7 +1,7 @@
-# Lucide static 1.62.0
+# Lucide static 1.64.0
 
-- npm 包：`lucide-static@1.62.0`
-- npm lock integrity：`sha512-WBZA/m2PvkFpMGHDtsBck5P2A9G4ehLlYu4GwwICcmEm1BvYVgj00lCDxKRWLlbMlOibLaiwdQ88G5pHkSWgwA==`
+- npm 包：`lucide-static@1.64.0`
+- npm lock integrity：`sha512-UxWmMteOXbKHI5E4f2qVtxCAAsI9gsInYK1lNw0nrOA0w4FkJeOVZ+UOV6aGA2377FZe3qyiFYq3lqjBKZ6OuA==`
 - 许可证：ISC；原文见 `lucide-LICENSE.txt`
 - 消费者：`web/index.html` 内联的 127 个 symbol
 

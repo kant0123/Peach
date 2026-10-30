@@ -114,6 +114,18 @@ describe('数据库那一份落进本地缓存', () => {
     vi.unstubAllGlobals();
   });
 
+  it('名称偏好以数据库为准，仅在值改变时更新本地缓存和显示效果', () => {
+    const { store, changed, save } = stage({ performerNameLanguage: 'ja' });
+    applySyncedSettings({ performerNameLanguage: 'zh-CN' }, changed, store);
+    expect(store.value.performerNameLanguage).toBe('zh-CN');
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls).toEqual([['performerNameLanguage']]);
+    applySyncedSettings({ performerNameLanguage: 'zh-CN' }, changed, store);
+    applySyncedSettings({ performerNameLanguage: 'unsupported' }, changed, store);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(store.value.performerNameLanguage).toBe('zh-CN');
+  });
+
   it('侧栏顺序没变就不落盘', () => {
     const { store, save, changed } = stage();
     applySyncedSettings({ sidebarOrder: [...store.value.sidebarOrder] }, changed, store);

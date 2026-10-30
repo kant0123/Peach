@@ -296,14 +296,15 @@ class TaskRunStore:
             return self._start(task_key, trigger=trigger, mutex_key=mutex_key,
                                conflict=conflict, total=total, label=label, pid=pid)
 
-    def suspend(self, run_id: int, *, label: str = '等待安装完成后继续') -> None:
+    def suspend(self, run_id: int, *, label: str = '等待安装完成后继续',
+                paused_for_update: bool = True) -> None:
         if not self.enabled:
             return
         with self.database.write_transaction(notify=False) as connection:
             connection.execute(
                 "UPDATE task_run SET status='pending',pid=0,progress_label=?,result_summary=? "
                 "WHERE id=? AND status='running'",
-                (label, json.dumps({'paused_for_update': True}), run_id))
+                (label, json.dumps({'paused_for_update': True} if paused_for_update else {}), run_id))
 
     def _resume(self, run_id, task_key):
         if run_id is None or not self.enabled:

@@ -50,13 +50,16 @@ def api(repo: str, endpoint: str):
 def select(repo: str, sha: str) -> dict:
     if not re.fullmatch(r"[0-9a-f]{40}", sha) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
         raise ValueError("GitHub 晋级需要明确仓库与完整提交")
-    runs = api(repo, f"actions/workflows/release.yml/runs?head_sha={sha}&event=push&per_page=100")["workflow_runs"]
-    matching = [row for row in runs if row["head_sha"] == sha and row["head_branch"] == "master" and row["event"] == "push"]
+    # 版本提交推送时自动演练；其他主线提交的推送演练被跳过，只能手动触发。
+    runs = api(repo, f"actions/workflows/release.yml/runs?head_sha={sha}&per_page=100")["workflow_runs"]
+    matching = [row for row in runs if row["head_sha"] == sha and row["head_branch"] == "master"
+                and row["event"] in {"push", "workflow_dispatch"}]
     if not matching:
         raise ValueError("未取得同一提交的主线发布演练")
-    run = max(matching, key=lambda row: (row["id"], row.get("run_attempt", 1)))
-    if run["status"] != "completed" or run["conclusion"] != "success":
+    succeeded = [row for row in matching if row["status"] == "completed" and row["conclusion"] == "success"]
+    if not succeeded:
         raise ValueError("主线发布演练尚未成功")
+    run = max(succeeded, key=lambda row: (row["id"], row.get("run_attempt", 1)))
     jobs = api(repo, f"actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
     passed = {row["name"] for row in jobs if row["conclusion"] == "success"}
     if not REQUIRED_JOBS <= passed:
