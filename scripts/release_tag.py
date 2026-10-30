@@ -25,7 +25,7 @@ import time
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     __package__ = "scripts"
-from . import changelog, version_bump
+from . import changelog, github_release_candidate, version_bump
 
 ROOT = Path(__file__).resolve().parents[1]
 GITLAB = None
@@ -390,8 +390,16 @@ def plan_commit(repo: str, sha: str) -> dict:
     _require_free_tag(repo, tag)
     if command("git", "tag", "--list", tag):
         raise ValueError(f"本地 {tag} 已存在，请先检查它的归属")
-    return {**verify(repo, sha), "tag": tag, "version": version, "repo": repo,
-            "section": changelog.section_of(document, version)}
+    return {**verify(repo, sha), **require_candidate(repo, sha), "tag": tag, "version": version,
+            "repo": repo, "section": changelog.section_of(document, version)}
+
+
+def require_candidate(repo: str, sha: str) -> dict:
+    """补打标签沿用标签工作流的晋级判据，取不到演练产物时不留下无法发布的标签。"""
+    if GITLAB:
+        return {}
+    run = github_release_candidate.select(repo, sha)
+    return {"rehearsal": f"https://github.com/{repo}/actions/runs/{run['run_id']}"}
 
 
 def main(argv=None) -> int:

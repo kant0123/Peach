@@ -47,6 +47,20 @@ export function requiredEnv(name: string): string {
 
 export async function launch(): Promise<Browser> {
   const args: string[] = [];
+  if (process.platform === 'win32') {
+    // 仅隔离 E2E：Chromium 572515601 的回环随机端口缺陷会返回 WSAENOBUFS 10055。
+    // 重复 --disable-features 会覆盖默认值；保留锁定 Playwright 1.64.1 的全部条目。
+    // browser-launch.test.ts 从真实 Chrome 对照默认参数，依赖升级时检查此表漂移。
+    const disabled = [
+      'AvoidUnnecessaryBeforeUnloadCheckSync', 'DestroyProfileOnBrowserClose', 'DialMediaRouteProvider',
+      'GlobalMediaControls', 'HttpsUpgrades', 'LensOverlay', 'MediaRouter', 'PaintHolding',
+      'ThirdPartyStoragePartitioning', 'BlockOriginHeaderModificationOnRedirect',
+      'AvoidCorsURLLoaderRestartOnRedirect', 'Translate', 'AutoDeElevate', 'OptimizationHints',
+      'NetworkTimeServiceQuerying', 'AimEnabled', 'msForceBrowserSignIn', 'msEdgeUpdateLaunchServicesPreferredVersion',
+      'TcpPortRandomizationWin',
+    ];
+    args.push('--disable-features=' + disabled.join(','));
+  }
   const networkLogs = process.env.PEACH_E2E_NET_LOG_DIR;
   if (networkLogs) {
     mkdirSync(networkLogs, { recursive: true });
@@ -61,6 +75,29 @@ export async function launch(): Promise<Browser> {
     // Windows 首次加载浏览器与系统组件使用独立的启动预算，页面等待由各用例限定。
     timeout: 60_000,
   });
+}
+
+/** 失败时保留焦点、输入和弹层现场；成功路径不额外查询页面。 */
+export async function withPageDiagnostics<T>(page: Page, where: string | (() => string), action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    const state = await page.evaluate(() => ({
+      path: location.pathname + location.search,
+      ready: document.readyState,
+      focus: document.activeElement?.outerHTML.slice(0, 600),
+      query: document.querySelector<HTMLInputElement>('#q')?.value,
+      layers: [...document.querySelectorAll('dialog,[role="dialog"],#searchMenu')].slice(0, 12).map(node => ({
+        tag: node.tagName, id: node.id, hidden: (node as HTMLElement).hidden,
+        expanded: node.getAttribute('aria-expanded'), text: node.textContent?.slice(0, 600),
+      })),
+      busy: [...document.querySelectorAll('[aria-busy="true"],[data-skeleton]')]
+        .slice(0, 12).map(node => ({ tag: node.tagName, id: node.id, label: node.getAttribute('aria-label') })),
+    })).catch(() => '未取得');
+    const tree = await page.locator('body').ariaSnapshot({ timeout: 2000 }).catch(() => '未取得');
+    throw new Error(`${typeof where === 'function' ? where() : where}：${String(error)}\n页面现场：${JSON.stringify(state)}\n无障碍树：\n${tree.slice(0, 4000)}`,
+      { cause: error });
+  }
 }
 
 /** 等待态以 `aria-busy="true"` 与 `data-skeleton` 为准；超时就是等待态卡住了。

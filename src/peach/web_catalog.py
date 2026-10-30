@@ -1281,7 +1281,7 @@ def q_tops(contract: WebContract, n=28, jav=False, seed="", state="", page=0, fi
     续页要是再回到那一段就会把同一个人给两次，所以那一段归第一页独占，续页从它的
     末尾往后按数量数下去。库里六百多位女优，一排给到头才是「滚到底还能接着滚」。
 
-    两条分组 SQL 各要三百毫秒上下，结果只取决于账本与口径，与种子无关：候选池按
+    两条分组 SQL 的结果只取决于账本与口径，与种子无关：候选池按
     `TOPS_TABLES` 的版本缓存，种子抽样和读目录索引的那几个标志都在缓存之外现做。"""
     state = state if state_predicate(state) else ""
     scope = PRESENT_ASSET_CLAUSE + (JAV_ASSET_CLAUSE if jav else "") + state_clause(state)
@@ -1289,6 +1289,7 @@ def q_tops(contract: WebContract, n=28, jav=False, seed="", state="", page=0, fi
     if filters and filters.get('folder'):
         conditions, folder_params = catalog_filter(contract, filters)
         scope += ' AND ' + ' AND '.join(conditions)
+    tops_assets = "SELECT a.id FROM asset a WHERE a.medium='video' " + scope
     base = (
         "SELECT e.id,e.canonical_name,count(DISTINCT ae.asset_id) n,"
         "(SELECT a2.id FROM asset_entity ae2 JOIN asset a2 ON a2.id=ae2.asset_id "
@@ -1296,8 +1297,7 @@ def q_tops(contract: WebContract, n=28, jav=False, seed="", state="", page=0, fi
         " AND (e.kind<>'performer' OR " + solo_performer_clause("a2.id", "e.id") + ") "
         " ORDER BY (a2.play_count IS NULL),a2.size DESC LIMIT 1) rep "
         "FROM asset_entity ae JOIN entity e ON e.id=ae.entity_id "
-        "JOIN asset a ON a.id=ae.asset_id "
-        "WHERE a.medium='video' AND e.kind=? " + scope +
+        "WHERE e.kind=? AND ae.asset_id IN (" + tops_assets + ") " +
         "GROUP BY e.id,e.canonical_name ORDER BY n DESC LIMIT ? OFFSET ?"
     )
     first_page_span = n * TOPS_POOL_FACTOR if seed else n

@@ -16,6 +16,8 @@ import { Button } from '@/components/base/buttons/button';
 
 import { apiGet, apiSend, errorMessage } from '../../api';
 import { javTitleParts } from '../../core/jav-title';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 import type { DownloadsSnapshot, DownloadTask } from '../bundle';
 import { cardClass } from '../components/card';
 import { Note } from '../components/note';
@@ -89,6 +91,7 @@ export function DownloadsPanel() {
 }
 
 function TaskCard({ task, writable }: { task: DownloadTask; writable: boolean }) {
+  useEntityNames();
   const client = useQueryClient();
   const action = useAction();
   const [copied, setCopied] = useState(false);
@@ -155,11 +158,11 @@ function TaskCard({ task, writable }: { task: DownloadTask; writable: boolean })
         {people.length ? <div className="flex min-w-0 items-center gap-2">
           <div className="flex shrink-0 items-center gap-1">
             {people.slice(0, 3).map((person) => <a key={person.id || person.name} data-media-avatar=""
-              href={entityPath('performer', person.name, person.id)} aria-label={t('打开女优页：{name}', { name: person.name })} title={person.name}
+              href={entityPath('performer', person.name, person.id)} aria-label={t('打开女优页：{name}', { name: entityDisplayName('performer', person.name, person.id) })} title={entityDisplayName('performer', person.name, person.id)}
               dangerouslySetInnerHTML={{ __html: avatarInner(person.name, person, null) }} />)}
           </div>
           <span className="min-w-0 truncate text-caption-1-regular text-text-secondary"
-            title={people.map((person) => person.name).join('、')}>{people.map((person) => person.name).join('、')}{(artwork?.performer_total || 0) > people.length ? t(' 等 {performer_total} 人', { performer_total: artwork!.performer_total }) : ''}</span>
+            title={people.map((person) => entityDisplayName('performer', person.name, person.id)).join('、')}>{people.map((person) => entityDisplayName('performer', person.name, person.id)).join('、')}{(artwork?.performer_total || 0) > people.length ? t(' 等 {performer_total} 人', { performer_total: artwork!.performer_total }) : ''}</span>
         </div> : null}
         {task.state === 'remote_running' && task.progress != null
           ? <Progress label={t('远端下载进度')} value={Math.round(task.progress * 100)} max={100} />

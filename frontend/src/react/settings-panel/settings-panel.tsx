@@ -17,6 +17,7 @@ import {
   type KeyboardEvent, type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ButtonLink } from '@/components/base/buttons/button';
 import {
   attachOverlayScrollbar, closeAnchoredMenu, iconSwapHtml, moveGlidePane, revealTexts,
@@ -30,7 +31,8 @@ import { Icon, RemixIcon } from './icon';
 import { IconSwitch, SelectField } from './legacy-controls';
 import { NumberSetting } from './number-setting';
 import type { Choice, PanelSettings, SettingsPanelApi, SettingsPanelHost } from './settings-panel-api';
-import { refreshPanelData, useSaveSettings } from './settings-data';
+import { fetchSettings, refreshPanelData, SETTINGS_KEY, useSaveSettings } from './settings-data';
+import { Note } from '../components/note';
 import { SidebarOrder } from './sidebar-order';
 import { SettingsDialogClose } from '../components/settings-dialog-close';
 import { t } from '../../i18n';
@@ -458,6 +460,7 @@ function JavGroup({ host: current, tab, epoch }: GroupProps) {
   return (
     <Group index={2} tab={tab}>
       <h4 data-settings-subheading="">{t('作品显示')}</h4>
+      <NameLanguageSetting host={current} epoch={epoch} />
       <Row title={t('默认图片')}>
         <IconSwitch id="javImageSetting" name="jav-image" legend={t('默认图片')} options={JAV_IMAGE_OPTIONS}
           value={settings.javImage} attr="data-jav-image-choice" variant="javimageswitch" text epoch={epoch}
@@ -477,6 +480,30 @@ function JavGroup({ host: current, tab, epoch }: GroupProps) {
       ))}
     </Group>
   );
+}
+function NameLanguageSetting({ host: current, epoch }: { host: SettingsPanelHost; epoch: number }) {
+  const query = useQuery({ queryKey: SETTINGS_KEY, queryFn: ({ signal }) => fetchSettings(signal), staleTime: 0 });
+  const save = useSaveSettings();
+  const [pending, setPending] = useState<'zh-CN' | 'ja' | null>(null);
+  const language = query.data?.performerNameLanguage;
+  return <>
+    <Row title={t('女优名称')} description={<small data-copy-key="performer-name-language-help">{t('名称与别名只显示所选语言的写法；缺少对应时保留当前名称。偏好保存在数据库，其他设备读取同一份设置。')}</small>}>
+      <SelectField id="performerNameLanguageSetting" label={t('女优名称')} epoch={epoch}
+        options={[["zh-CN", t('中文')], ["ja", t('日文原文')]]}
+        value={pending ?? language ?? current.store.value.performerNameLanguage}
+        disabled={query.isPending || query.isError || save.isPending || !language} busy={save.isPending}
+        onPick={(value) => {
+          if (save.isPending || (value !== 'zh-CN' && value !== 'ja') || value === language) return;
+          setPending(value);
+          save.mutate({ performerNameLanguage: value }, {
+            onSuccess: (saved) => { current.syncRemote(saved); current.receipt(t('已保存名称显示偏好')) },
+            onError: (error) => current.failure(t('保存名称显示偏好'), error),
+            onSettled: () => setPending(null),
+          });
+        }} />
+    </Row>
+    {query.isError ? <Note tone="error">{t('未取得数据库中的名称偏好，请重新打开设置。')}</Note> : null}
+  </>;
 }
 /* 合集开关由服务端判，列表、未读数和补封面排队都跟着它，所以先存到服务端再重画；往返期间开关
    停在新位置、挂忙态，失败退回原位。 */

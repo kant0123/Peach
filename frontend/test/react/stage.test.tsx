@@ -175,6 +175,35 @@ afterEach(async () => {
 });
 
 describe('常驻组件', () => {
+  it('Escape 命令与原生取消优先关闭内层，没有弹层时关闭详情', async () => {
+    serve();
+    const opened = request(1);
+    await act(async () => { await api.open(opened) });
+    const dialog = q<HTMLDialogElement>('#stage')!;
+    const { overlayHost } = await import('../../src/react/components/overlay-host');
+    const host = overlayHost(dialog);
+    const inner = document.createElement('div');
+    inner.setAttribute('role', 'dialog');
+    inner.tabIndex = -1;
+    const close = vi.fn((event: KeyboardEvent) => {
+      event.preventDefault(); event.stopPropagation(); inner.remove();
+    });
+    inner.addEventListener('keydown', close);
+    const sentinel = document.createElement('span');
+    sentinel.hidden = true;
+    sentinel.dataset.focusScopeEnd = '';
+    host.append(inner, sentinel);
+    act(() => api.requestEscape());
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(opened.actions.close).not.toHaveBeenCalled();
+    host.insertBefore(inner, sentinel);
+    act(() => { dialog.dispatchEvent(new Event('cancel', { cancelable: true })) });
+    expect(close).toHaveBeenCalledTimes(2);
+    expect(opened.actions.close).not.toHaveBeenCalled();
+    act(() => api.requestEscape());
+    expect(opened.actions.close).toHaveBeenCalledTimes(1);
+  });
+
   it('画上之后句柄才交出；宿主是 body 末尾的 [data-stage-host]，里面直接是藏着的小窗，不包 .peach-react', async () => {
     const r = await load();
     await mountRouter(r);

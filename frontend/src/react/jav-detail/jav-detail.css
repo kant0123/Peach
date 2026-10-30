@@ -15,7 +15,7 @@
 .peach-react [data-jav-video] { width: 100%; position: relative; }
 .peach-react [data-jav-video] > [class~="video-js"] { width: 100%; height: auto; max-height: calc(76vh - 112px); aspect-ratio: 16 / 9; }
 .peach-react [data-jav-video] > [role="note"] { margin: 16px; }
-.peach-react [data-jav-preview-toggle] { position: absolute; z-index: 5; top: 16px; left: 16px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 0; border-radius: var(--pill-radius); background: rgba(0, 0, 0, .6); color: #fff; font-size: var(--fs-xs); cursor: pointer; }
+.peach-react [data-jav-preview-toggle] { box-sizing: border-box; position: absolute; z-index: 5; top: 11px; left: 11px; height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: 0; border-radius: var(--pill-radius); background: rgba(0, 0, 0, .6); color: #fff; font-size: var(--fs-xs); line-height: 1; white-space: nowrap; cursor: pointer; }
 .peach-react [data-jav-preview-toggle]:hover { background: rgba(0, 0, 0, .78); }
 .peach-react [data-jav-preview-toggle] svg { width: var(--icon-inline); height: var(--icon-inline); stroke: currentColor; fill: none; stroke-width: 2; }
 .peach-react [data-jav-art][data-jav-playing] { flex-direction: column; }

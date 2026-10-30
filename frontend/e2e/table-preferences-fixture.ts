@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { Locator, Page } from 'playwright-core';
-import { settle } from './harness.ts';
+import { settle, withPageDiagnostics } from './harness.ts';
 
 /** 标题与整组操作共享一行或分行，同组列设置按钮保持在一起。 */
 async function verifyToolbarWrapping(page: Page) {
@@ -60,14 +60,16 @@ export async function verifyTablePreferences(page: Page, table: Locator, label: 
   const width = async () => header.evaluate(node => node.getBoundingClientRect().width);
   const initial = await width();
   const handle = header.getByRole('slider');
-  /* 表格在数据到位后还会重排一次，抢在重排前的 Enter 会落空；没进入调整状态就重新聚焦再按，
-     已进入的不会再按（再按一次 Enter 会结束调整）。 */
-  const resizing = header.locator('.react-aria-ColumnResizer[data-resizing]');
-  for (let attempt = 0; ; attempt++) {
-    await handle.focus(); await handle.press('Enter');
-    try { await resizing.waitFor({ timeout: 3000 }); break }
-    catch (error) { if (attempt >= 4) throw error }
-  }
+  await withPageDiagnostics(page, `${label}进入键盘列宽调整`, async () => {
+    // React Aria 首次进入集合会先聚焦行导航；确认该状态后再移入列宽手柄。
+    await table.locator('tbody tr').first().focus();
+    await table.locator('tbody tr[data-focused]').first().waitFor();
+    await handle.focus();
+    assert.equal(await handle.evaluate(node => document.activeElement === node), true,
+      `${label}键盘调整前焦点必须位于列宽手柄`);
+    await handle.press('Enter');
+    await header.locator('.react-aria-ColumnResizer[data-resizing]').waitFor();
+  });
   await handle.press('ArrowRight'); await handle.press('ArrowRight');
   await page.waitForFunction(({ node, initial }) => node && node.getBoundingClientRect().width > initial,
     { node: await header.elementHandle(), initial }, { timeout: 5000 });

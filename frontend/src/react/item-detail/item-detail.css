@@ -28,8 +28,11 @@
 .peach-react [data-item-gallery] { display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .peach-react [data-item-gallery] > [class~="video-js"] { order: 0; flex: none; }
 .peach-react [data-item-gallery] > [data-carousel-below] { order: 1; flex: none; }
-.peach-react [data-item-gallery]:not([data-item-picture]) > [data-jav-preview-toggle] { left: 64px; }
-.peach-react [data-item-gallery]:has(> [data-jav-preview-toggle]) > [data-player-net] { top: 60px; left: 16px; pointer-events: none; }
+.peach-react [data-item-media] > [data-player-toolbar] { position: absolute; z-index: 8; top: 11px; left: 11px; right: 59px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; pointer-events: none; }
+.peach-react [data-player-toolbar] > :is([data-player-stats-slot], [data-player-net-slot]) { display: contents; }
+.peach-react [data-player-toolbar] :is([data-player-stats-button], [data-player-net], [data-jav-preview-toggle]) { position: relative; top: auto; left: auto; flex: none; }
+.peach-react [data-player-toolbar] button { pointer-events: auto; }
+.peach-react [data-item-gallery][data-item-picture] [data-player-toolbar] > :is([data-player-stats-slot], [data-player-net-slot]) { display: none; }
 .peach-react [data-item-gallery][data-item-picture] > :is([class~="video-js"], video, [data-item-gate], #playerStatsBtn, #playerStats, #playerNet, [data-ambient-canvas]) { display: none; }
 .peach-react [data-catalog-picture] { display: block; width: 100%; height: auto; max-height: calc(76vh - 112px); object-fit: contain; min-height: 0; }
 .peach-react [data-item-gallery][data-item-picture] > [role="note"] { margin: 24px; }

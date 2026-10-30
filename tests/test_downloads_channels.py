@@ -1,7 +1,10 @@
 """媒体库渠道、只读能力探测与缓存的隔离回归。"""
 from types import SimpleNamespace
+import json
+from pathlib import Path
+import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from peach.downloads import DownloadConfig, DownloadError, DownloadTask, Landing, REMOTE_DONE
 from peach.downloads_channels import LibraryChannels
@@ -11,6 +14,35 @@ from peach.follow_secrets import CredentialError
 
 
 class LibraryChannelTests(unittest.TestCase):
+    def test_unavailable_capabilities_leave_phase_and_failure_evidence_without_exposing_credentials(self):
+        from peach import error_reporting
+        for operation in ('token_permissions', 'folder_capabilities', 'mount_points'):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory() as directory:
+                self.setUp()
+                error = DownloadError('config', 'Authorization: Bearer test-only-token')
+                if operation == 'token_permissions':
+                    self.client.token_info.side_effect = error
+                elif operation == 'folder_capabilities':
+                    self.client.folder.side_effect = error
+                else:
+                    self.client.token_info.return_value.permissions.allow_get_mounts = True
+                    self.client.call.side_effect = error
+                with patch.object(error_reporting, '_log_dir', Path(directory)):
+                    result = self.catalog()
+                records = [json.loads(line) for path in Path(directory).glob('errors-*.log')
+                           for line in path.read_text(encoding='utf-8').splitlines()]
+                record = next(row for row in records if row.get('operation') == operation)
+                self.assertEqual(record['stage'], 'download-channel-probe')
+                self.assertEqual(record['failure'], 'config')
+                self.assertTrue(record['exception'])
+                self.assertNotIn('test-only-token', json.dumps(records))
+                self.assertNotIn('test-only-token', str(result))
+                if operation == 'mount_points':
+                    self.assertEqual(len(result['providers']), 1, '可用的路径映射仍应继续探测')
+                else:
+                    self.assertEqual(result['providers'], [])
+                    self.assertTrue(result['problems'])
+
     def test_a_broken_clouddrive_credential_keeps_a_healthy_pikpak_channel(self):
         self.credentials.load.side_effect = CredentialError("test-only-secret-detail")
         self.credentials.describe.return_value = {"fields": ["refresh_token"]}

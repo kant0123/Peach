@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { firstGrapheme } from '@peach/legacy/core';
 import { javImageUrl } from './source-picture';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 
 /** 来源头像经 `/jav-image` 取，浏览器缓存复用；进入视口才取，取图失败时保留首字。 */
 export function SourceAvatar({ code, person, detail = false }: {
   code: string; person: { name: string; source_actor_id?: string }; detail?: boolean;
 }) {
+  useEntityNames();
   const node = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(detail || typeof IntersectionObserver === 'undefined');
   useEffect(() => {
@@ -16,7 +19,7 @@ export function SourceAvatar({ code, person, detail = false }: {
     observer.observe(node.current);
     return () => observer.disconnect();
   }, [visible]);
-  const face = <><span ref={node} data-source-initial="">{firstGrapheme(person.name)}</span>{visible && person.source_actor_id
+  const face = <><span ref={node} data-source-initial="">{firstGrapheme(entityDisplayName('performer', person.name))}</span>{visible && person.source_actor_id
     ? <img src={javImageUrl(code, `actor:${person.source_actor_id}`)} alt="" data-drop="self" /> : null}</>;
   return detail ? <span data-id-face="">{face}</span> : face;
 }

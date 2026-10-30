@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -1007,6 +1008,32 @@ class LocalClientTests(unittest.TestCase):
     def test_the_login_rate_limit_uses_the_peer_without_a_tunnel(self):
         request = self.request("stopped", {"cf-connecting-ip": "198.51.100.7"})
         self.assertEqual(routes_auth._attempt_key(request), "127.0.0.1")
+
+    def test_the_login_rate_limit_separates_edge_clients_on_the_service_address(self):
+        request = self.request("running", {"cf-connecting-ip": "198.51.100.7"})
+        request.client.host = "192.0.2.5"
+        request.scope["server"] = ("192.0.2.5", 443)
+        self.assertEqual(routes_auth._attempt_key(request), "cf:198.51.100.7")
+
+    def test_a_lan_client_cannot_reset_the_login_rate_limit_with_forwarded_headers(self):
+        request = self.request("running", {})
+        request.client.host = "192.0.2.8"
+        request.scope["server"] = ("192.0.2.5", 443)
+        with mock.patch.object(routes_auth, "_ATTEMPTS", OrderedDict()):
+            for number in range(10):
+                request.headers = {"cf-connecting-ip": f"198.51.100.{number + 1}"}
+                routes_auth._login_attempt(request)
+            request.headers = {"cf-connecting-ip": "198.51.100.99"}
+            with self.assertRaises(HTTPException) as caught:
+                routes_auth._login_attempt(request)
+        self.assertEqual(caught.exception.status_code, 429)
+
+    def test_a_tunnel_peer_uses_only_a_valid_normalized_forwarded_address(self):
+        for value, expected in (("not-an-ip", "127.0.0.1"),
+                                ("2001:0db8:0:0:0:0:0:1", "cf:2001:db8::1")):
+            with self.subTest(value=value):
+                request = self.request("running", {"cf-connecting-ip": value})
+                self.assertEqual(routes_auth._attempt_key(request), expected)
 
 
 class AccessTunnelInterlockTests(unittest.TestCase):
