@@ -15,6 +15,7 @@ import { $, api, esc } from '../core';
 import { dismissMenu, glideEase, presentMenu, wireHorizontalScroller } from '../ui-kit';
 import { openManagedRoute } from './../history/managed';
 import { applicationEffects } from './effects';
+import { t } from '../i18n';
 import { searchMorphFrames } from './search-morph.js';
 import { immerseApi, settingsPanelApi, stageApi } from '../react/application-residents';
 import { openDrawer } from './layout.js';

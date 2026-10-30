@@ -261,7 +261,7 @@ React 子树读到 BoardUI 的 token 原值、持久警示是状态色块、一�
 导航按用途定位：页面分区在正文上方；配置、复核与设置弹窗的分类目录在桌面左侧，窄屏移到正文上方；图表维度与显示方式用内容附近的分段控件。目录选中态使用填充，未选中项悬停只提亮文字。
 配置保存使用主按钮，检查、添加、刷新与取消使用次按钮，移除使用删除按钮。安装教程与系统诊断入口使用单行设置；活动后继明细可展开和收起，进行中及失败的后继默认展开。
 
-`npm --prefix frontend run lint` 检查 `src/`、`test/`、`e2e/` 的 correctness 规则、严格相等比较和累积展开；`== null` 保留同时匹配 null 与 undefined 的语义。设计系统规则只作用于 `src/react/`，排除 BoardUI 与 EvilCharts 的上游副本。`web` 域与 CI 都跑。`no-restyle` 报在
+`npm --prefix frontend run lint` 检查 `src/`、`test/`、`e2e/` 的 correctness 规则、未定义标识符（`no-undef`，如漏写 `import { t }`）、严格相等比较和累积展开；`== null` 保留同时匹配 null 与 undefined 的语义。设计系统规则只作用于 `src/react/`，排除 BoardUI 与 EvilCharts 的上游副本。`web` 域与 CI 都跑。`no-restyle` 报在
 BoardUI 组件上的间距或外观，处理办法是在组件外面套一层普通元素，不给规则加例外。
 `src/react/boardui/` 只加不改，`UPSTREAM.sha256` 记着复制时每个文件的哈希，由 `tests/test_frontend_build.py` 比对。
 

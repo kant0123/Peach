@@ -212,6 +212,7 @@ describe('混排作品的画面框',()=>{
     await page.evaluate(()=>{document.documentElement.dataset.theme='light';document.documentElement.classList.remove('dark')});
     const frames=page.locator('#grid [data-media-pic][data-pic-portrait]');
     await frames.first().waitFor();
+    await settle(page); // 顶部的人物与筛选骨架收起后第一行才落在最终位置
     const edges=[];
     for(const index of [0,1]){
      const box=await frames.nth(index).evaluate(async node=>{
