@@ -9,6 +9,8 @@
  * 详情浮窗打开期间壳不推任何东西，关掉回来还是同一批节点（`buildBars` 那段注释讲了为什么）。 */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 import { fitSkeleton, popBadges, popCount } from '@peach/legacy/ui';
 
 import { FilterGlassRows, FilterPill } from '../components/filter-glass';
@@ -122,6 +124,7 @@ function TagPill({ tag, onPress }: { tag: CatalogTag; onPress(tag: string): void
 
 /** 两排头像。空的一排仍占 28px，画出来就是一条什么都没有的空带，所以没人就不画那一排。 */
 function Tiers(props: CatalogFilterProps) {
+  useEntityNames();
   const { actions, helpers } = props;
   const tiers = props.tiers ?? { key: '', performers: [], studios: [] };
   const loading = !props.tiers;
@@ -153,7 +156,7 @@ function Tiers(props: CatalogFilterProps) {
             <button key={person.name} type="button" data-tier-performer="" data-entity-kind="performer"
               data-entity-name={person.name} onClick={() => actions.openEntity('performer', person.name)}>
               <span data-tier-ring="" dangerouslySetInnerHTML={{ __html: person.ringHtml }} />
-              <span data-tier-name="">{person.name}</span>
+              <span data-tier-name="">{entityDisplayName('performer', person.name)}</span>
             </button>
           ))}
         </div>

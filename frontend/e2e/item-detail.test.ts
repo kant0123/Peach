@@ -849,17 +849,18 @@ describe('作品详情岛', () => {
         forwarded.push(route.request().postDataJSON());
         return route.fulfill({ json: { recorded: false } });
       });
-      const before = opened.stub.mediaErrors.length;
       const replies = await opened.page.evaluate(async () => {
-        const send = async (kind: string, source_route: string) => (await fetch('/api/diagnostics/client-error', {
+        const send = async (kind: string, source_route: string, message = '夹具错误') => (await fetch('/api/diagnostics/client-error', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind, message: '夹具错误', playback: { source_route } }),
+          body: JSON.stringify({ kind, message, playback: { source_route } }),
         })).json();
+        const ambient = await send('media', '/stream', '并发播放器错误');
         const media = await Promise.all(Array.from({ length: 21 }, () => send('media', '/stream')));
-        return { media, other: await send('error', '/stream'), external: await send('media', '/external') };
+        return { ambient, media, other: await send('error', '/stream'), external: await send('media', '/external') };
       });
+      assert.deepEqual(replies.ambient, { recorded: true });
       assert.deepEqual(replies.media, Array.from({ length: 21 }, () => ({ recorded: true })));
-      assert.equal(opened.stub.mediaErrors.length - before, 21);
+      assert.equal(opened.stub.mediaErrors.filter((sent) => sent.message === '夹具错误').length, 21);
       assert.deepEqual(replies.other, { recorded: false });
       assert.deepEqual(replies.external, { recorded: false });
       assert.deepEqual(forwarded, [

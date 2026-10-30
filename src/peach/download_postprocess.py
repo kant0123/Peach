@@ -12,6 +12,7 @@ from .downloads import (INGESTED, POSTPROCESS_COMPLETE, POSTPROCESS_FAILED,
                         DownloadStore, iso)
 from .field_owners import SCAN_FILENAME, write_owned_fields
 from .followups import FollowupType, register
+from .jobs import JobDeferred
 from .library_processing import COLLECT_STAGE, _ffprobe_path, process_library
 from .media_probe import probe_unmeasured
 from .task_runs import declared_rows
@@ -184,6 +185,10 @@ def run(contract, key: str, handle) -> dict:
         rows = declared_rows(metadata.get('followups'))
         if rows and getattr(handle, 'run_id', None) is not None:
             contract.task_runs.enqueue_followups(handle.run_id, rows)
+    except JobDeferred as error:
+        # 给扫描与采集让路：后继回到队列，路让回来后从头续跑，这次不算失败。
+        store.postprocess(task_id, POSTPROCESS_QUEUED, detail=str(error))
+        raise
     except Exception as error:
         store.postprocess(task_id, POSTPROCESS_FAILED,
                           detail=f"{type(error).__name__}: {error}")

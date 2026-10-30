@@ -89,7 +89,7 @@ function Work({ code, item, actions, readOnly, retry, retrying }: JavDetailProps
         <Spec glyph="briefcase" label={t('发行商')} value={item.publisher} />
         <Spec glyph="clapperboard" label={t('导演')} value={item.director} />
       </div>
-      {(item.tag_refs?.length ?? item.tags.length) > 0 ? <div data-stage-tags="" data-jav-tags="">{(item.tag_refs || item.tags.map(name => ({ name, category: 'general', source_name: name }))).map(tag =>
+      {(item.tag_refs?.length ?? item.tags.length) > 0 ? <div data-stage-tags="" data-detail-tags="" data-jav-tags="">{(item.tag_refs || item.tags.map(name => ({ name, category: 'general', source_name: name }))).map(tag =>
         <span data-detail-tag="" data-tag-cat={tag.category} key={tag.name}><button type="button" data-tag={tag.name}
           title={tagLabel(tag.name)} onClick={() => actions.openTag(tag.name)}>{tagLabel(tag.name)}</button></span>)}</div> : null}
       {item.summary ? <p data-jav-summary="" data-long-text="" lang={textLang(item.summary)}>{item.summary}</p> : null}

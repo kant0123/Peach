@@ -16,6 +16,7 @@ import { ArtSlot } from '../components/art-slot';
 import { useLibraryTints } from '../components/library-tint';
 import { catalogListSkeletonCellHtml } from '../../catalog-content-skeleton';
 import { identityParts } from '../components/media-card';
+import { useEntityNames } from '../use-entity-names';
 import { SourceMark } from '../settings/section';
 import { DataTableFrame } from '../components/data-table-frame';
 import { DataTableFooter, DataTableSort } from '../components/table-controls';
@@ -220,6 +221,7 @@ function ListIdentity({ item, props, disabled }: { item: MediaItem; props: Catal
   const rawName = parts?.title || item.name || '';
   const name = props.helpers.displayName(item, rawName).trim() || t('未命名作品');
   const titleHtml = props.helpers.titleHtml(item, rawName).trim() || t('未命名作品');
+  useEntityNames();
   const { avatar, who } = identityParts(item);
   const watched = !parts && Number(item.play_seconds) > 0 && Number(item.duration) > 0
     ? Math.min(Number(item.play_seconds) / Number(item.duration), 1) : 0;

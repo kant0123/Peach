@@ -12,6 +12,7 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     __package__ = "scripts"
 ROOT = Path(__file__).resolve().parents[1]
+AUTO_SHARD_FILES = 150
 
 
 def browser_matrix(root: Path = ROOT, count: int = 6) -> dict:
@@ -74,11 +75,13 @@ def plan(event: str, paths: list[str], contents: dict | None = None) -> dict:
     scopes, _ = runner.scopes_for_changes(paths, contents=contents)
     wide = event == "workflow_dispatch" or "full" in scopes
     runtime_tools = wide or scopes != ("checks",)
+    selected_count = len({path for scope in scopes for path in runner.selected_files(scope)}) if not wide else 0
     rows = []
     for system in ("macos-latest", "windows-latest"):
         scope = "full" if wide else "auto"
         # 独立 runner 承担分片，避免共享文件、端口和全量证据锁。
-        shards = (4 if system == "windows-latest" else 2) if scope == "full" else 1
+        split = wide or (system == "windows-latest" and selected_count >= AUTO_SHARD_FILES)
+        shards = (4 if system == "windows-latest" else 2) if split else 1
         for index in range(shards):
             rows.append({"os": system, "python": "3.14", "scope": scope,
                          "runtime_tools": runtime_tools,

@@ -16,7 +16,7 @@ from peach.avatar_followup import TASK_KEY as AVATAR_TASK_KEY
 from peach.avatar_followup import followup_key, parse_key, plan
 from peach.followups import FollowupRunner, FollowupType, lanes
 from peach.jav_cover_fetch import NotFound
-from peach.jobs import BackgroundJob
+from peach.jobs import BackgroundJob, JobDeferred
 from peach.library_processing import process_library
 from peach.repository import LedgerDatabase
 from peach.task_runs import MAX_FOLLOWUPS, TaskRunStore
@@ -209,6 +209,55 @@ class RunnerTests(LedgerTestCase):
         self.assertEqual(peak[0], 1)
         self.assertEqual(
             {row.status for row in self.store.children(parent.id)}, {"succeeded"})
+
+    def test_a_followup_that_steps_aside_waits_in_the_queue_and_runs_once_the_way_is_clear(self):
+        """给扫描与采集让路的后继回到队列，不判失败；路让回来以后同一条接着跑完。"""
+        clear = threading.Event()
+        attempts = []
+
+        class Blocked(JobDeferred):
+            def ready(self):
+                return clear.is_set()
+
+        def busy_until_clear(_contract, key, _handle):
+            attempts.append(key)
+            if not clear.is_set():
+                raise Blocked("等待扫描与采集完成后继续")
+            return {"outcome": key}
+
+        parent = self.parent()
+        with registered(echo_type("ledger-a", run=busy_until_clear)), \
+                mock.patch.object(followups_module, "DEFER_POLL_SECONDS", 0.01):
+            child = self.store.enqueue_followups(parent.id, [("ledger-a:1", "ledger-a", "甲")])["queued"][0]
+            runner = FollowupRunner(self.contract())
+            runner.wake()
+            deadline = time.monotonic() + 10
+            while not attempts and time.monotonic() < deadline:
+                time.sleep(0.01)
+            time.sleep(0.05)
+            waiting = self.store.get(child)
+            self.assertEqual(waiting.status, "pending")
+            self.assertEqual(waiting.progress_label, "等待扫描与采集完成后继续")
+            self.assertEqual(attempts, ["ledger-a:1"])
+            clear.set()
+            self.wait_until_settled(parent.id)
+            runner.stop(timeout=10)
+        self.assertEqual(self.store.get(child).status, "succeeded")
+        self.assertEqual(attempts, ["ledger-a:1", "ledger-a:1"])
+
+    def test_draining_leaves_a_followup_that_steps_aside_in_the_queue(self):
+        attempts = []
+
+        def busy(_contract, key, _handle):
+            attempts.append(key)
+            raise JobDeferred("等待扫描与采集完成后继续")
+
+        parent = self.parent()
+        with registered(echo_type("ledger-a", run=busy)):
+            child = self.store.enqueue_followups(parent.id, [("ledger-a:1", "ledger-a", "甲")])["queued"][0]
+            self.assertEqual(FollowupRunner(self.contract()).drain(), 1)
+        self.assertEqual(attempts, ["ledger-a:1"])
+        self.assertEqual(self.store.get(child).status, "pending")
 
     def test_a_type_that_jumps_the_queue_is_claimed_before_earlier_ones_in_its_lane(self):
         """下载后处理这类人在等的后继，排在已经在排的后台批次前面；同一档里仍是先排先跑。"""

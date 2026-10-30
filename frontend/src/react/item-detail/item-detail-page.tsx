@@ -176,9 +176,14 @@ function MediaFrame({ item, gate, helpers, actions, autoplay, onEnded }: {
     <div ref={frameRef} data-stage-media="" data-item-media={gate || 'video'} data-item-gallery={hasPictures ? '' : undefined}
       data-item-picture={image !== -2 ? '' : undefined}>
       <CloseStage onClose={actions.close} />
-      {hasPictures ? <>
-        <button type="button" data-jav-preview-toggle="" aria-pressed={image !== -2}
+      <div data-player-toolbar="">
+        <span data-player-stats-slot="" />
+        {hasPictures ? <button type="button" data-jav-preview-toggle="" aria-pressed={image !== -2}
           onClick={() => selectImage(image === -2 ? media[0]!.index : -2)}><Glyph name={image === -2 ? 'image' : 'play'} />{image === -2 ? t('查看图片') : t('播放正片')}</button>
+          : null}
+        <span data-player-net-slot="" />
+      </div>
+      {hasPictures ? <>
         {image !== -2 ? <CatalogPicture key={item.id} item={item} image={image} source={samples.find(sample => sample.index === image)?.source} /> : null}
         <MediaCarousel items={media} position={Math.max(0, media.findIndex(entry => entry.index === image))} onSelect={selectImage}
           below renderThumbnail={entry => <CatalogPicture item={item} image={entry.index === -2 ? media[0]!.index : entry.index}

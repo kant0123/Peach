@@ -6,8 +6,7 @@
 侧栏不一样。左侧导航放哪些入口、什么顺序，是长出来的使用习惯；在 Windows 上排好，
 到 Mac 上又是默认顺序，那不叫两台设备，叫两个应用。所以它跟着账本走。
 
-落点是 `profile.settings_json`——0001 建表时就留好的字段，一直是空的 `{}`。
-不新建表也就不需要迁移。
+名称显示语言也随用户走，落在现有的 `profile.settings_json` 中，不需要新增表或迁移。
 
 写入受 ledger 只读闸门约束：reader（只读端）改不了顺序，但读到的是 writer 的那份，
 这正是「同一份习惯」的意思。
@@ -56,7 +55,7 @@ SEARCH_HISTORY_LIMIT_MAX = 50
 SYNCED_SETTING_KEYS = frozenset({
     "sidebarOrder", "followInitialDays", "postSetupTutorialDone",
     "organizeTemplates", "feedHideGroupCompilations", "feedHideSoloCompilations",
-    "feedHideExcerpts", "searchHistoryLimit", "codePatterns",
+    "feedHideExcerpts", "searchHistoryLimit", "codePatterns", "performerNameLanguage",
 })
 #: 三个收起开关的键与各自对应的那一类，缺省值取 `feeds.DEFAULT_HIDDEN_COMPILATIONS`。
 FEED_COMPILATION_SWITCHES = (
@@ -209,6 +208,7 @@ def q_settings(contract: SettingsContract, _args=None) -> dict:
         "codePatterns": _stored_code_patterns(payload),
         **_feed_switches(payload),
         "searchHistoryLimit": normalise_search_history_limit(payload.get("searchHistoryLimit")),
+        "performerNameLanguage": "ja" if payload.get("performerNameLanguage") == "ja" else "zh-CN",
     }
 
 
@@ -227,6 +227,11 @@ def w_settings(contract: SettingsContract, body) -> dict:
         raise ValueError("没有要写入的设置")
 
     merged = _stored(contract)
+    if "performerNameLanguage" in body:
+        language = body["performerNameLanguage"]
+        if language not in ("zh-CN", "ja"):
+            raise ValueError("performerNameLanguage 只收 zh-CN 或 ja")
+        merged["performerNameLanguage"] = language
     if "sidebarOrder" in body:
         merged["sidebarOrder"] = normalise_sidebar_order(body["sidebarOrder"])
     if "followInitialDays" in body:

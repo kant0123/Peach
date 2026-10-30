@@ -16,7 +16,8 @@ def selection(root: Path, selectors: list[str]) -> tuple[unittest.TestSuite, tup
     browsers = []
     islands = []
     names = []
-    for selector in dict.fromkeys(selectors):
+    # pwsh -File 将 -Focus a,b 作为一个参数传入；交互式数组和重复 --focus 共用边界。
+    for selector in dict.fromkeys(part.strip() for value in selectors for part in value.split(',')):
         if selector.startswith("frontend/e2e/") and selector.endswith(".test.ts"):
             path = (root / selector).resolve()
             if not path.is_relative_to((root / "frontend/e2e").resolve()) or not path.is_file():

@@ -101,10 +101,10 @@ def create(repo: Path, agent: str, task: str, root: Path | None = None) -> dict[
     }
 
 
-def ready(repo: Path, target_branch: str = "main") -> dict[str, object]:
+def _worker_delivery(repo: Path, target_branch: str) -> dict[str, object]:
     branch = _git(repo, "branch", "--show-current").stdout.strip()
     if not branch.startswith("agent/"):
-        raise WorkspaceError("ready must run from an agent/* branch")
+        raise WorkspaceError("preflight/ready must run from an agent/* branch")
     dirty = _lines(_git(repo, "status", "--porcelain"))
     if dirty:
         raise WorkspaceError("worktree is dirty; commit only owned paths first")
@@ -114,10 +114,7 @@ def ready(repo: Path, target_branch: str = "main") -> dict[str, object]:
         raise WorkspaceError("branch has no commits")
     worker_files = set(_lines(_git(repo, "diff", "--name-only", f"{base}..HEAD")))
     target_files = set(_lines(_git(repo, "diff", "--name-only", f"{base}..{target_branch}")))
-    require_verified(repo, target_branch, worker_files)
     return {
-        "ok": True,
-        "action": "ready",
         "branch": branch,
         "base": base,
         "head": _git(repo, "rev-parse", "HEAD").stdout.strip(),
@@ -127,7 +124,25 @@ def ready(repo: Path, target_branch: str = "main") -> dict[str, object]:
     }
 
 
-def require_verified(worker: Path, target_branch: str, paths: Iterable[str]) -> None:
+def preflight(repo: Path, target_branch: str = "main") -> dict[str, object]:
+    """快速核对当前交付提交；不读取或签发测试证明，也不查询 PR。"""
+    report = _worker_delivery(repo, target_branch)
+    if require_metadata(repo, target_branch) != report["head"]:
+        raise WorkspaceError("预检期间工作者分支改变，请重试")
+    return {"ok": True, "action": "preflight", **report,
+            "metadata": "passed", "tests": "not_checked", "pull_request": "not_checked"}
+
+
+def ready(repo: Path, target_branch: str = "main") -> dict[str, object]:
+    report = _worker_delivery(repo, target_branch)
+    require_verified(repo, target_branch, set(report["files"]))
+    if _git(repo, "rev-parse", "HEAD").stdout.strip() != report["head"]:
+        raise WorkspaceError("验证检查期间工作者分支改变，请重试")
+    return {"ok": True, "action": "ready", **report}
+
+
+def require_metadata(worker: Path, target_branch: str) -> str:
+    """干净交付内容、目标祖先与提交声明的共用判据。"""
     head = _git(worker, "rev-parse", "HEAD").stdout.strip()
     if _git(worker, "status", "--porcelain").stdout.strip():
         raise WorkspaceError("验证工作树必须干净")
@@ -138,6 +153,14 @@ def require_verified(worker: Path, target_branch: str, paths: Iterable[str]) -> 
                 + commit_subject.check(worker, target_branch))
     if problems:
         raise WorkspaceError("; ".join(problems))
+    if _git(worker, "rev-parse", "HEAD").stdout.strip() != head or \
+            _git(worker, "status", "--porcelain").stdout.strip():
+        raise WorkspaceError("元数据检查期间工作树改变，请重试")
+    return head
+
+
+def require_verified(worker: Path, target_branch: str, paths: Iterable[str]) -> None:
+    head = require_metadata(worker, target_branch)
     scopes, _ = test_runner.scopes_for_changes(paths, contents=test_runner.changed_contents(worker, target_branch, paths))
     state = test_evidence.key(worker)
     if not test_evidence.covers(test_evidence.read(worker, state), scopes):
@@ -145,6 +168,35 @@ def require_verified(worker: Path, target_branch: str, paths: Iterable[str]) -> 
     if _git(worker, "rev-parse", "HEAD").stdout.strip() != head or \
             _git(worker, "status", "--porcelain").stdout.strip():
         raise WorkspaceError("验证检查期间工作树改变，请重试")
+
+
+def require_pull_request(worker: Path, branch: str, target_branch: str, head: str) -> dict[str, str]:
+    """用工作树的 GitHub 仓库上下文取得当前分支 PR，绑定精确提交与目标分支。"""
+    fields = ("url", "state", "headRefOid", "baseRefName")
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "view", branch, "--json", ",".join(fields)], cwd=worker,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise WorkspaceError(f"未取得 PR：{error}") from error
+    if result.returncode:
+        raise WorkspaceError("未取得 PR：" + (result.stderr or result.stdout).strip())
+    try:
+        pr = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise WorkspaceError("PR 回执不是有效 JSON") from error
+    if not isinstance(pr, dict) or any(not isinstance(pr.get(key), str) or not pr[key] for key in fields):
+        raise WorkspaceError("PR 回执字段无效")
+    if not re.fullmatch(r"https://[^/\s]+/[^/\s]+/[^/\s]+/pull/[1-9]\d*", pr["url"]):
+        raise WorkspaceError("PR 回执链接无效")
+    if pr["state"] != "OPEN":
+        raise WorkspaceError(f"PR 状态为 {pr['state']}；交付 PR 必须开放待合入")
+    if pr["headRefOid"] != head:
+        raise WorkspaceError("PR 提交与工作者分支不一致；请先推送当前提交并核对对应 CI")
+    if pr["baseRefName"] != target_branch:
+        raise WorkspaceError(f"PR 目标分支不是 {target_branch}")
+    return {"url": pr["url"], "head": head, "base": target_branch}
 
 
 def integrate(repo: Path, worker_branch: str, target_branch: str = "main", *,
@@ -205,6 +257,7 @@ def _integrate_locked(repo: Path, worker_branch: str,
         raise WorkspaceError("工作者必须有唯一、干净且已注册的工作树")
     worker_head = _git(main, "rev-parse", worker_branch).stdout.strip()
     require_verified(workers[0], target_branch, worker_files)
+    pull_request = require_pull_request(workers[0], worker_branch, target_branch, worker_head)
     if _git(main, "rev-parse", worker_branch).stdout.strip() != worker_head or \
             _git(workers[0], "rev-parse", "HEAD").stdout.strip() != worker_head:
         raise WorkspaceError("验证检查期间工作者分支改变，请重试")
@@ -222,6 +275,7 @@ def _integrate_locked(repo: Path, worker_branch: str,
         "before": before,
         "after": _git(main, "rev-parse", "HEAD").stdout.strip(),
         "files": sorted(worker_files),
+        "pull_request": pull_request,
         "version": version_bump.read_version(main),
         "release_tag_entry": RELEASE_TAG_ENTRY,
         # 发布提示挂在这里，是因为集成的输出是人和智能体每次都会读的那一份。挂在别处
@@ -532,8 +586,9 @@ def main() -> int:
     start.add_argument("--agent", required=True)
     start.add_argument("--task", required=True)
     start.add_argument("--root", type=Path)
-    inspect = sub.add_parser("ready")
-    inspect.add_argument("--target", default="main")
+    for name in ("preflight", "ready"):
+        inspect = sub.add_parser(name)
+        inspect.add_argument("--target", default="main")
     merge = sub.add_parser("integrate")
     merge.add_argument("--branch", required=True)
     merge.add_argument("--target", default="main")
@@ -546,6 +601,8 @@ def main() -> int:
     try:
         if args.command == "create":
             result = create(args.repo, args.agent, args.task, args.root)
+        elif args.command == "preflight":
+            result = preflight(args.repo, args.target)
         elif args.command == "ready":
             result = ready(args.repo, args.target)
         elif args.command == "prune":

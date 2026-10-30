@@ -27,6 +27,8 @@ import {
 } from '@peach/card-art';
 import { esc, fmtDur, fmtSize } from '@peach/legacy/core';
 import { spinnerHtml } from '@peach/legacy/ui';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 
 import type { MediaCardActions, MediaCardHelpers, MediaCardLayout, MediaItem } from '../catalog-grid/types';
 import { ArtSlot } from './art-slot';
@@ -114,7 +116,7 @@ export function identityParts(item: MediaItem): { avatar: ReactNode; who: ReactN
       <div data-media-avatars="" style={{ '--media-avatar-count': Math.min(5, performers.length) } as CSSProperties}>
         {performers.slice(0, 5).map((nm, index) => (
           <button key={`${nm}:${index}`} type="button" data-media-avatar="" data-entity-kind="performer"
-            data-entity-name={nm} title={t('打开{label}页：{nm}', { label, nm })}
+            data-entity-name={nm} title={t('打开{label}页：{nm}', { label, nm: entityDisplayName('performer', nm, refs[index]?.id) })}
             style={{ '--media-avatar-index': index } as CSSProperties}
             dangerouslySetInnerHTML={{ __html: entityAvatar(nm, refs[index] ?? null, 'performer') }} />
         ))}
@@ -132,12 +134,12 @@ export function identityParts(item: MediaItem): { avatar: ReactNode; who: ReactN
   const who = coStarred
     ? (
       <>
-        <button type="button" data-media-who="" data-entity-kind="performer" data-entity-name={performer} title={performer}><Icon name="user-round" /><span>{performer}</span></button>
+        <button type="button" data-media-who="" data-entity-kind="performer" data-entity-name={performer} title={entityDisplayName('performer', performer)}><Icon name="user-round" /><span>{entityDisplayName('performer', performer)}</span></button>
         <span data-media-who-more="">{t('等 {total} 人', { total })}</span>
       </>
     )
     : kind
-      ? <button type="button" data-media-who="" data-entity-kind={kind} data-entity-name={name} title={name}><Icon name="user-round" /><span>{name}</span></button>
+      ? <button type="button" data-media-who="" data-entity-kind={kind} data-entity-name={name} title={entityDisplayName(kind, name)}><Icon name="user-round" /><span>{entityDisplayName(kind, name)}</span></button>
       /* 没有署名人的那批是馆藏里的一类，点得开，和女优名、厂牌名一样。 */
       : <button type="button" data-media-who="" data-open-unowned=""><Icon name="user-round" /><span>{name}</span></button>;
   return { avatar, who };
@@ -202,6 +204,7 @@ function seekPreview(card: HTMLElement | null, delta: number) {
 }
 
 function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, helpers, actions, onOpen, grouped = true }: MediaCardProps) {
+  useEntityNames();
   const card = useRef<HTMLElement | null>(null);
   const [written, setWritten] = useState<{ id: number; on: boolean } | null>(null);
   const later = written?.id === item.id ? written.on : !!item.watch_later;

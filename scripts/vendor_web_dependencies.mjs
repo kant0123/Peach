@@ -271,7 +271,7 @@ index = index.replace(
   new RegExp(`<symbol id="i-sperm" viewBox="${SPERM_VIEWBOX}">[\\s\\S]*?<\\/symbol>`),
   `<symbol id="i-sperm" viewBox="${SPERM_VIEWBOX}">${healthInner}</symbol>`);
 index = index.replace(/Lucide static [0-9.]+, ISC/, `Lucide static ${versions["lucide-static"]}, ISC`);
-index = index.replace(/Health Icons sperm outline-24px, CC0\/public domain/,
+index = index.replace(/Health Icons [0-9.]+ sperm outline-24px, CC0\/public domain/,
   `Health Icons ${versions.healthicons} sperm outline-24px, CC0/public domain`);
 index = index.replace(/Phosphor [0-9.]+ regular, MIT/,
   `Phosphor ${versions["@phosphor-icons/core"]} regular, MIT`);
@@ -342,7 +342,7 @@ stage("web/vendor/healthicons-ORIGIN.md",
   `# Health Icons ${versions.healthicons}\n\n` +
   `- npm 包：\`healthicons@${versions.healthicons}\`\n` +
   `- npm lock integrity：\`${integrity("healthicons")}\`\n` +
-  "- 许可证：npm 包为 MIT，图标由上游声明为 CC0/public domain；原文见 `healthicons-LICENSE.txt`\n" +
+  `- 许可证：${JSON.parse(text("node_modules", "healthicons", "package.json")).license}；原文见 \`healthicons-LICENSE.txt\`\n` +
   "- 消费者：`web/index.html` 的 `sperm` outline-24px symbol\n");
 
 // 雪碧图的分区检查。少了它，新画一枚 symbol 只会安静地待在 index.html 里，

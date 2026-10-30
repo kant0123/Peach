@@ -18,7 +18,7 @@ import type {
 import { createSettingsStore } from '../../src/settings-store';
 import { FOLLOW_INITIAL_RANGE_OPTIONS } from '../../src/application/initial-follow-ranges';
 
-import { click, settle } from './render';
+import { click, pending, settle } from './render';
 
 notifyManager.setScheduler((notify) => notify());
 
@@ -109,7 +109,7 @@ async function connect(r: Loaded) {
 const settings = (): PanelSettings => ({
   theme: 'system', uiSounds: true, homeGlow: { ...normalizeHomeGlow(null), on: true, preset: 'ash' }, accent: 'blue',
   sidebarOrder: [''], batchSize: 60, defaultSort: 'seed', defaultSortDirection: '', groupCollapse: true,
-  javImage: 'cover', feedAutoScroll: true, feedLimit: 12, feedHideGroupCompilations: true, feedHideSoloCompilations: false,
+  javImage: 'cover', performerNameLanguage: 'zh-CN', feedAutoScroll: true, feedLimit: 12, feedHideGroupCompilations: true, feedHideSoloCompilations: false,
   feedHideExcerpts: true, hoverDelaySeconds: 5, detailAutoplay: false, miniplayer: true, seekSeconds: 10,
   relatedLimit: 24, searchHistoryLimit: 10, followInitialDays: 30, avatarRefreshDays: 90, faviconRefreshDays: 365,
 });
@@ -171,6 +171,40 @@ function watchReports() {
 }
 
 describe('设置面板与壳的接缝', () => {
+  it.each([true, false])('名称偏好等待数据库回执，保存成功=%s 时才更新全局显示', async (success) => {
+    const answer = pending<{ ok: boolean; status: number; json(): Promise<unknown> }>();
+    const writes: unknown[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      if (init?.body) { writes.push(JSON.parse(init.body)); return answer.answer }
+      return { ok: true, status: 200, json: async () => ({ performerNameLanguage: 'zh-CN' }) };
+    }));
+    const current = await setup();
+    const names = await import('../../src/core/entity-names');
+    names.setNameLanguage('zh-CN');
+    const failure = vi.fn();
+    current.host.failure = failure;
+    current.host.syncRemote = (saved) => {
+      const language = saved.performerNameLanguage;
+      if (language === 'zh-CN' || language === 'ja') {
+        current.value.performerNameLanguage = language;
+        names.setNameLanguage(language);
+      }
+    };
+    const panel = await open(current, 'JAV 与新作');
+    const field = panel.querySelector<HTMLElement & { value: string }>('#performerNameLanguageSetting > div')!;
+    expect(field.value).toBe('zh-CN');
+    await act(async () => { field.value = 'ja'; field.dispatchEvent(new Event('change', { bubbles: true })) });
+    expect(writes).toEqual([{ performerNameLanguage: 'ja' }]);
+    expect(names.nameLanguage()).toBe('zh-CN');
+    expect(current.value.performerNameLanguage).toBe('zh-CN');
+    await answer.release({ ok: success, status: success ? 200 : 500,
+      json: async () => success ? { performerNameLanguage: 'ja' } : { error: '保存失败' } });
+    await settle();
+    expect(names.nameLanguage()).toBe(success ? 'ja' : 'zh-CN');
+    expect(current.value.performerNameLanguage).toBe(success ? 'ja' : 'zh-CN');
+    expect(field.value).toBe(success ? 'ja' : 'zh-CN');
+    expect(failure).toHaveBeenCalledTimes(success ? 0 : 1);
+  });
   it('五个分区按使用场景组织，Peach 配置入口遵守设备权限', async () => {
     const current = await setup();
     const openConfiguration = vi.fn();
