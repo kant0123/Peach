@@ -39,6 +39,15 @@ describe('localizeServer', () => {
     expect(localizeServer('追更检查 · 手动')).toBe('新作チェック · 手動');
   });
 
+  it('自动修复的任务名、进度与失败原因也换成译文，影片名之类的数据原样保留', async () => {
+    const { localizeServer } = await load('ja');
+    expect(localizeServer('自动修复')).toBe('自動修復');
+    expect(localizeServer('自动修复资料 · 手动')).toBe('情報の自動修復 · 手動');
+    expect(localizeServer('影片 42')).toBe('作品 42');
+    expect(localizeServer('ABC-123 · 更新影片资料')).toBe('ABC-123 · 作品情報の更新');
+    expect(localizeServer('处理记录无法读取，请重试')).toBe('処理記録を読み取れません。もう一度お試しください');
+  });
+
   it('实体分类名与常见的接口错误换成译文', async () => {
     const { localizeServer } = await load('ja');
     expect(localizeServer({ label: '女优' })).toEqual({ label: '女優' });

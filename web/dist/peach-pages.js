@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "64468517-9f1a-49a5-a4bf-097ec406c0cb", e._sentryDebugIdIdentifier = "sentry-dbid-64468517-9f1a-49a5-a4bf-097ec406c0cb");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "094bd7de-be3a-484b-ad08-aba0858fa3fc", e._sentryDebugIdIdentifier = "sentry-dbid-094bd7de-be3a-484b-ad08-aba0858fa3fc");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -3689,6 +3689,14 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	视频缩略图采集: "動画サムネイルの収集",
 	云下载后处理: "クラウドダウンロードの後処理",
 	导入初始资料: "初期データの取り込み",
+	自动修复: "自動修復",
+	自动修复资料: "情報の自動修復",
+	补全女优资料: "女優情報の補完",
+	补全女优别名: "女優の別名の補完",
+	补新作封面: "新作カバーの補完",
+	关注作者建档: "フォロー中の作者のプロフィール作成",
+	"重建 amane 桥": "amane ブリッジの再構築",
+	下载人脸模型: "顔モデルのダウンロード",
 	手动: "手動",
 	定时: "定期",
 	启动: "起動時",
@@ -4222,7 +4230,24 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	"{path} 不是盘符路径；网络位置先映射成盘符再来": "{path} はドライブ文字のパスではありません。ネットワークの場所は先にドライブ文字を割り当ててください",
 	"端口要是 1 到 65535 之间的整数": "ポートは 1〜65535 の整数にしてください",
 	"这个端口已被占用，请换一个端口": "このポートはすでに使用されています。別のポートを指定してください",
-	"名字只能用字母、数字和连字符，不能以连字符开头或结尾": "名前に使えるのは英字、数字、ハイフンのみで、先頭と末尾にハイフンは使えません"
+	"名字只能用字母、数字和连字符，不能以连字符开头或结尾": "名前に使えるのは英字、数字、ハイフンのみで、先頭と末尾にハイフンは使えません",
+	更新后自动处理: "更新後の自動処理",
+	更新已有资料: "既存の情報を更新",
+	后台更新进度: "バックグラウンド更新の進捗",
+	更新后的处理记录无法读取: "更新後の処理記録を読み取れません",
+	"处理记录无法读取，请重试": "処理記録を読み取れません。もう一度お試しください",
+	更新后的处理记录格式无效: "更新後の処理記録の形式が正しくありません",
+	"更新后的处理记录需要重新准备，请重试": "更新後の処理記録を再準備する必要があります。もう一度お試しください",
+	更新已有资料时账本完整性校验失败: "既存の情報の更新中に、ライブラリの整合性チェックに失敗しました",
+	更新已有资料时关联校验失败: "既存の情報の更新中に、関連データのチェックに失敗しました",
+	更新后自动处理只在本机写入端可用: "更新後の自動処理は、書き込み可能なこのパソコンでのみ利用できます",
+	安排自动更新资料: "情報の自動更新をスケジュール",
+	"资料派发被中断，正在重新安排": "情報の割り当てが中断されたため、再スケジュールしています",
+	更新影片资料: "作品情報の更新",
+	"影片 {asset_id}": "作品 {asset_id}",
+	服务重启后继续: "サービスの再起動後に再開します",
+	"影片升级补全未完成，请在任务中心查看后重试": "作品のアップグレード補完が完了しませんでした。タスクセンターで確認してから再試行してください",
+	影片升级补全完成: "作品のアップグレード補完が完了しました"
 }, d = "peach.locale", f = "zh-CN";
 function p() {
 	try {
@@ -26934,4 +26959,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=64468517-9f1a-49a5-a4bf-097ec406c0cb
+//# debugId=094bd7de-be3a-484b-ad08-aba0858fa3fc
