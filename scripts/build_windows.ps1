@@ -50,8 +50,10 @@ if (-not $Npm) {
 }
 & $Python -X utf8 (Join-Path $ProjectRoot 'scripts/npm_ci.py') --prefix $FrontendPath
 if ($LASTEXITCODE -ne 0) { throw 'npm ci failed in frontend/.' }
-& $Npm.Source --prefix $FrontendPath run build
-if ($LASTEXITCODE -ne 0) { throw 'Frontend bundle build failed (frontend/).' }
+# 派生分支：按 package_locale.ps1 的打包语言构建，打完包或中途失败都把 web/dist 按源语言重建回去。
+. (Join-Path $PSScriptRoot 'package_locale.ps1')
+trap { if ($PackageLocale) { Restore-SourceFrontendBuild $Npm.Source $FrontendPath }; break }
+$PackageLocale = Invoke-PackageFrontendBuild $Npm.Source $FrontendPath
 foreach ($FrontendAsset in @('peach-app.js', 'peach-app.css', 'peach-pages.js', 'peach-pages.css')) {
     if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot "web\dist\$FrontendAsset") -PathType Leaf)) {
         throw "web/dist/$FrontendAsset is missing after the frontend build."
@@ -82,7 +84,7 @@ $BuildInfo = [ordered]@{
     version = $BuildVersionMatch.Matches[0].Groups[1].Value
     built_at = (Get-Date).ToString('o')
     # 托盘菜单按它选语言：与前端包的默认语言同一个构建开关，见 ADR-0130。
-    locale = $(if ($env:VITE_DEFAULT_LOCALE -eq 'ja') { 'ja' } else { 'zh-CN' })
+    locale = $(if ($PackageLocale -eq 'ja') { 'ja' } else { 'zh-CN' })
 }
 Set-Content -LiteralPath $BuildInfoPath -Value (ConvertTo-Json $BuildInfo) -Encoding utf8
 $SentryConfigPath = Join-Path $BuildPath 'sentry.json'
@@ -163,6 +165,7 @@ foreach ($ResourceEntry in $ResourceEntries) {
     --add-data "${SentryConfigPath};." `
     (Join-Path $ProjectRoot 'scripts\build_app_entry.py')
 if ($LASTEXITCODE -ne 0) { throw 'Peach build failed.' }
+Restore-SourceFrontendBuild $Npm.Source $FrontendPath
 if ($Standalone) {
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'docs/TESTING_DESKTOP.md') -Destination (Join-Path $OutputPath '开始使用.md')
     Copy-Item -LiteralPath (Join-Path $ProjectRoot 'LICENSE') -Destination (Join-Path $OutputPath 'LICENSE.txt')

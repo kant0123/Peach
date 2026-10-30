@@ -1,8 +1,8 @@
 """托盘菜单的日语译文。
 
 托盘是 Python 原生菜单，读不到浏览器里的 `peach.locale`。语言由构建时写进包根
-`build-info.json` 的 `locale` 决定（`scripts/build_ja_installer.ps1` 以 `VITE_DEFAULT_LOCALE=ja`
-构建时写入），环境变量 `PEACH_UI_LOCALE` 可以覆盖，方便不打包时验证。
+`build-info.json` 的 `locale` 决定（`scripts/build_windows.ps1` 按 `scripts/package_locale.ps1` 的打包语言
+写入，派生分支默认日语），环境变量 `PEACH_UI_LOCALE` 可以覆盖，方便不打包时验证。
 
 简体中文原文就是键：整句命中才换，带 `{名}` 的键匹配一段可变文字。没有译文的句子原样保留。
 """
