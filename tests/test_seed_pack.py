@@ -130,7 +130,7 @@ class SeedPerformerNameTests(SeedPackCase):
             alias(self.source, person, "天使もえ", "avdb-actor-mapping@test")
         return seed_pack.export_pack(self.source, version=VERSION, revision=revision)
 
-    def test_verified_chinese_name_updates_the_entity_and_work_projection(self):
+    def test_landing_keeps_the_japanese_name_and_adds_the_chinese_one_as_an_alias(self):
         pack = self.name_pack()
         with self.target:
             person = entity(self.target, "performer", "天使もえ")
@@ -138,12 +138,29 @@ class SeedPerformerNameTests(SeedPackCase):
             self.target.execute("INSERT INTO asset_entity(asset_id,entity_id,role,source) VALUES(1,?,'performer','test')", (person,))
             self.target.execute("INSERT INTO asset_tag(asset_id,tag,source) VALUES(1,'演员:天使もえ','test')")
             report = seed_pack.land(self.target, pack)
-        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使萌")
-        self.assertEqual(self.target.execute("SELECT tag FROM asset_tag WHERE asset_id=1").fetchone()[0], "演员:天使萌")
-        self.assertEqual(report["names"], 1)
-        self.assertIn("天使もえ", {r[0] for r in self.target.execute("SELECT alias FROM entity_alias WHERE entity_id=?", (person,))})
+        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
+        self.assertEqual(self.target.execute("SELECT tag FROM asset_tag WHERE asset_id=1").fetchone()[0], "演员:天使もえ")
+        self.assertNotIn("names", report)
+        self.assertIn("天使萌", {r[0] for r in self.target.execute("SELECT alias FROM entity_alias WHERE entity_id=?", (person,))})
+        self.assertEqual(seed_pack.planned_names(self.target, "auto:seed"), [])
+
+    def test_a_chinese_name_is_not_adopted_even_when_the_revision_identity_is_unique(self):
+        pack = self.name_pack(revision=1)
         with self.target:
-            self.assertEqual(seed_pack.written(seed_pack.land(self.target, pack)), 0)
+            person = entity(self.target, "performer", "天使もえ")
+            seed_pack.land(self.target, pack)
+        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
+
+    def test_a_chinese_name_written_by_an_older_seed_can_still_be_reverted(self):
+        from peach.entities import prefer_entity_name
+        with self.target:
+            person = entity(self.target, "performer", "天使もえ")
+            alias(self.target, person, "天使萌", "avdb-actor-mapping@test")
+            self.target.execute("INSERT INTO asset(id,location,path,name,medium) VALUES(1,'local','R:\\a.mp4','a','video')")
+            self.target.execute("INSERT INTO asset_entity(asset_id,entity_id,role,source) VALUES(1,?,'performer','test')", (person,))
+            self.target.execute("INSERT INTO asset_tag(asset_id,tag,source) VALUES(1,'演员:天使もえ','test')")
+            prefer_entity_name(self.target, person, "天使萌", source=BATCH)
+        self.assertEqual(len(seed_pack.planned_names(self.target, "auto:seed")), 1)
         target_path = self.target.execute("PRAGMA database_list").fetchone()[2]
         revert = load_script("revert_auto_landing")
         with contextlib.redirect_stdout(io.StringIO()):
@@ -151,47 +168,6 @@ class SeedPerformerNameTests(SeedPackCase):
                 "--backup", str(self.root / "pre-revert.db"), "--logo-root", str(self.root / "logos")]), 0)
         self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
         self.assertEqual(self.target.execute("SELECT tag FROM asset_tag WHERE asset_id=1").fetchone()[0], "演员:天使もえ")
-
-    def test_a_user_preferred_name_is_preserved(self):
-        from peach.entities import prefer_entity_name
-        pack = self.name_pack()
-        with self.target:
-            person = entity(self.target, "performer", "天使萌")
-            alias(self.target, person, "天使もえ", "user:manual")
-            prefer_entity_name(self.target, person, "天使もえ")
-            seed_pack.land(self.target, pack)
-        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
-        self.assertEqual(seed_pack.planned_names(self.target, "auto:seed"), [])
-
-    def test_confirming_the_current_name_protects_it_from_localization(self):
-        from peach.entities import prefer_entity_name
-        pack = self.name_pack()
-        with self.target:
-            person = entity(self.target, "performer", "天使もえ")
-            prefer_entity_name(self.target, person, "天使もえ")
-            seed_pack.land(self.target, pack)
-        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
-
-    def test_revision_identity_and_aliases_must_resolve_to_one_person(self):
-        pack = self.name_pack(revision=1)
-        with self.target:
-            person = entity(self.target, "performer", "天使もえ")
-            report = seed_pack.land(self.target, pack)
-        self.assertEqual(report["names"], 1)
-        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使萌")
-
-    def test_custom_names_and_ambiguous_identities_are_preserved(self):
-        pack = self.name_pack()
-        with self.target:
-            person = entity(self.target, "performer", "我选的名字")
-            alias(self.target, person, "天使もえ", "user:manual")
-            seed_pack.land(self.target, pack)
-        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "我选的名字")
-        with self.target:
-            entity(self.target, "performer", "天使萌")
-            report = seed_pack.land(self.target, pack)
-        self.assertEqual(len(report["duplicates"]), 1)
-        self.assertEqual(report.get("names", 0), 0)
 
 
 class ExportTests(SeedPackCase):

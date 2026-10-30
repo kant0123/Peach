@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""从 javdb 资料页取女优的中文写法，产出可喂给 `localize_performer_names.py` 的映射。
+r"""从 javdb 资料页取女优的中文写法，产出中文写法的复核映射。
 
 账本里 95 位女优的规范名还卡在假名上（`深田えいみ`、`河合あすな`、`長谷川るい`），
 按中文名一个都搜不到。`localize_performer_names.py` 靠的那份 avdb 映射 XML 不在这台
@@ -41,8 +41,8 @@ r"""从 javdb 资料页取女优的中文写法，产出可喂给 `localize_perf
 规范名的人（`--scope all`）：她们才是缺第二个中文名的那一批。整批要走 300 多页、近一个
 钟头；起点是某一位的资料页时用 `--only` 点名，两次请求就能出结论。
 
-只产出复核 CSV，不写账本。规范名落库走 `localize_performer_names.py --mapping-csv`，
-别名落库走 `apply_alias_candidates.py`，两边各有自己的冲突判定与备份门槛。
+只产出复核 CSV，不写账本。女优规范名用日文名（ADR-0131），中文写法只作别名，
+别名落库走 `apply_alias_candidates.py`，它有自己的冲突判定与备份门槛。
 """
 from __future__ import annotations
 

@@ -9,9 +9,9 @@
 这张表不靠手写记对：`tests/test_performer_localization.py` 拿 opencc 逐字复核，`斎`
 曾被写成 `齐`（`斋藤満里奈` 于是落成 `齐藤满里奈`），就是那道复核抓出来的。
 
-放在 `peach` 里而不是某个脚本里，是因为它有两个用处，而且两个都不能各留一份：
-落库时把日本字形归一（`localize_performer_names.py`），比名字时把字形差别折掉
-（`harvest_javdb_cn_names.py`）。opencc 只管繁简，日本新字体不在它的职责里——
+放在 `peach` 里而不是某个脚本里，是因为多处共用，不能各留一份：比名字时把字形差别折掉
+（`harvest_javdb_cn_names.py`），界面按字形投影中文显示（`performer_name_display.py`）。
+opencc 只管繁简，日本新字体不在它的职责里——
 `永瀬` 转不成 `永濑`，`姫川` 转不成 `姬川`，少了这张表就会把同一个人判成两个人。
 """
 from __future__ import annotations
