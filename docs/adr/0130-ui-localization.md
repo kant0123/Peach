@@ -16,6 +16,8 @@
 
 默认语言在构建时由 `VITE_DEFAULT_LOCALE` 决定：设为 `ja` 的前端包在没有存过语言时以日语启动，未设置则仍是简体中文。仓库里提交的 `web/dist` 一律是简体中文默认，日语包只在构建时产生。
 
+打包时的语言由派生分支专有的 `scripts/package_locale.ps1` 统一决定：`build_windows.ps1` 不论由哪个入口调用，只要没有显式设 `VITE_DEFAULT_LOCALE`，前端包和 `build-info.json` 的托盘语言都按日语构建，打完包或中途失败后再把 `web/dist` 按简体中文重建回去。要打简体中文包时显式设 `VITE_DEFAULT_LOCALE=zh-CN`。这样直接调用 `build_windows.ps1 -Installer` 也不会装上默认简体中文的包。
+
 上游有更新时，在 Windows 上运行 `scripts/build_ja_installer.ps1 -Sync`：
 
 1. 合并 `origin/master`。只有 `web/dist` 冲突时按合并后的源码重新构建；源码冲突则停下，手工解决后不带 `-Sync` 再运行。
