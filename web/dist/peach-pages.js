@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "06891ccc-785c-455e-aa48-c2fd67ee82dc", e._sentryDebugIdIdentifier = "sentry-dbid-06891ccc-785c-455e-aa48-c2fd67ee82dc");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "a2ddb46e-d882-4c5b-b66a-66f8f31e8622", e._sentryDebugIdIdentifier = "sentry-dbid-a2ddb46e-d882-4c5b-b66a-66f8f31e8622");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -142,7 +142,7 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	广泛匹配: "広く一致",
 	应用到子文件夹: "サブフォルダーにも適用",
 	"开启后匹配任一所选标签；关闭后必须同时包含全部标签。": "オンにすると選択したタグのいずれかに一致し、オフにするとすべてを含む必要があります。",
-	归属: "所属",
+	归属: "出演者",
 	性交体位: "体位",
 	情境场所: "シチュエーション・場所",
 	所选标签操作: "選択したタグの操作",
@@ -169,7 +169,7 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	显示结果: "結果を表示",
 	更新稍后看: "「後で見る」の更新",
 	未命名作品: "名称未設定の作品",
-	未归属: "所属なし",
+	未归属: "出演者なし",
 	本地: "ローカル",
 	查找文件夹: "フォルダーを検索",
 	"查看 {value}": "{value}を表示",
@@ -357,7 +357,7 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	想要: "観たい",
 	手写: "手書き",
 	打开已保存关注: "保存済みのフォローを開く",
-	"打开未归属：馆藏里没有署名人的作品": "所属なしを開く：人物の記載がないライブラリ内の作品",
+	"打开未归属：馆藏里没有署名人的作品": "出演者なしを開く：人物の記載がないライブラリ内の作品",
 	"找到 {count} 条中文字幕": "中国語字幕が {count} 件見つかりました",
 	"按番号或厂牌推断的产地，批量判定后不再变；打开同产地的作品": "品番またはレーベルから推定した制作地域で、一括判定後は変わりません。同じ地域の作品を開く",
 	描边: "縁取り",
@@ -26930,4 +26930,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=06891ccc-785c-455e-aa48-c2fd67ee82dc
+//# debugId=a2ddb46e-d882-4c5b-b66a-66f8f31e8622
