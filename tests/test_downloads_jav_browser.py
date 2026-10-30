@@ -165,7 +165,7 @@ class BrowserTests(unittest.TestCase):
         with contract.database.write_transaction() as connection:
             asset_id = connection.execute(
                 'INSERT INTO asset(path,name,location,medium,code) VALUES(?,?,?,?,?)',
-                ('R:\Media\ABC-123.mp4', 'ABC-123.mp4', 'local', 'video', 'ABC-123')).lastrowid
+                (r'R:\Media\ABC-123.mp4', 'ABC-123.mp4', 'local', 'video', 'ABC-123')).lastrowid
             person = upsert_asset_entity(connection, asset_id=asset_id, kind='performer', name='测试演员',
                                          role='performer', source='user:test')
         contract.avatar_root.mkdir(parents=True, exist_ok=True)

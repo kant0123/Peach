@@ -298,7 +298,10 @@ def valid_manifest(manifest) -> bool:
                 or value[2] not in {'100644', '100755'}):
             return False
     return all(isinstance(name, str) and isinstance(value, dict)
-               and all(isinstance(key, str) and isinstance(stamp, str) and _STATE.fullmatch(stamp)
+               and all(isinstance(key, str) and (
+                           key == 'scope_entries' and name == 'scripts/test_runner.py'
+                           and change_impact.valid_scope_entries(stamp)
+                           or isinstance(stamp, str) and _STATE.fullmatch(stamp))
                        for key, stamp in value.items())
                for name, value in manifest.get('signatures', {}).items())
 

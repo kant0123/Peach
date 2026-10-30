@@ -14,6 +14,7 @@
  * 解码过的路径，名字里的斜杠吃掉剩下全部段，空尾段不算）。 */
 import { overlayMatch } from './overlay';
 import { entityLinkName } from '../core/entity-links';
+import { entityDisplayName } from '../core/entity-names';
 import { PREFERENCE_SECTIONS, CONFIGURATION_SECTIONS } from './settings-route';
 import { t } from '../i18n';
 
@@ -84,5 +85,5 @@ export function routeMetaOf(path: string): RouteMeta | null {
   const pattern = `/${segment}/*`;
   const kinds: Record<string, string> = { performers: 'performer', studios: 'studio', creators: 'creator', agencies: 'agency', series: 'series', tags: 'tag' };
   const name = /^\d+$/.test(rest.join('/')) ? entityLinkName(kinds[segment] || '', Number(rest[0])) : rest.join('/');
-  return Object.hasOwn(ROUTE_META, pattern) ? { ...ROUTE_META[pattern], title: name || t('资料') } : null;
+  return Object.hasOwn(ROUTE_META, pattern) ? { ...ROUTE_META[pattern], title: name ? entityDisplayName(kinds[segment] || '', name) : t('资料') } : null;
 }

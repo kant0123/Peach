@@ -1,3 +1,5 @@
+import io
+import json
 import os
 import shutil
 import subprocess
@@ -6,7 +8,7 @@ import tempfile
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from threading import Event
 from unittest import mock
@@ -74,10 +76,18 @@ def commit(repo: Path, message: str) -> None:
 
 
 class _WorktreeCase(unittest.TestCase):
+    mock_pull_request = True
+
     def setUp(self):
         self.verification = mock.patch.object(agent_worktree, "require_verified")
         self.verification.start()
         self.addCleanup(self.verification.stop)
+        if self.mock_pull_request:
+            pull_request = mock.patch.object(agent_worktree, "require_pull_request", side_effect=
+                lambda worker, branch, target, head: {"url": "https://github.com/example/peach/pull/1",
+                                                      "head": head, "base": target})
+            pull_request.start()
+            self.addCleanup(pull_request.stop)
         self.tmp = tempfile.TemporaryDirectory()
         # 先 resolve：prune 报告的是 git worktree list 给出的真实路径，而 CI runner 的
         # 临时目录是别名（macOS /var 软链到 /private/var，Windows 的 RUNNER~1 短名展开
@@ -209,6 +219,145 @@ class AgentWorktreeTests(_WorktreeCase):
         commit(self.repo, "main overlap")
         with self.assertRaisesRegex(WorkspaceError, "same-file"):
             integrate(self.repo, str(result["branch"]))
+
+
+class PullRequestIntegrationTests(_WorktreeCase):
+    mock_pull_request = False
+
+    def setUp(self):
+        super().setUp()
+        result = create(self.repo, "Codex", "pr-boundary", self.root / "worktrees")
+        self.worker = Path(result["path"])
+        self.branch = result["branch"]
+        (self.worker / "worker.txt").write_text("worker\n", encoding="utf-8")
+        commit(self.worker, "fix(tooling): 示例变更")
+        self.head = _git(self.worker, "rev-parse", "HEAD").stdout.strip()
+        self.pr = {"url": "https://github.com/example/peach/pull/12", "state": "OPEN",
+                   "headRefOid": self.head, "baseRefName": "main"}
+
+    @contextmanager
+    def github(self, stdout=None, returncode=0, stderr=""):
+        run = subprocess.run
+        query = mock.Mock(return_value=subprocess.CompletedProcess(
+            ["gh"], returncode, json.dumps(self.pr) if stdout is None else stdout, stderr))
+
+        def call(command, *args, **kwargs):
+            return query(command, *args, **kwargs) if command[0] == "gh" else run(command, *args, **kwargs)
+
+        with mock.patch.object(agent_worktree.subprocess, "run", side_effect=call):
+            yield query
+
+    def assert_refused(self, message):
+        before = _git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        with self.assertRaisesRegex(WorkspaceError, message):
+            integrate(self.repo, self.branch)
+        self.assertEqual(_git(self.repo, "rev-parse", "HEAD").stdout.strip(), before)
+        self.assertEqual((self.repo / "worker.txt").read_text(encoding="utf-8"), "base\n")
+        entry = next(row for row in agent_worktree._worktree_entries(self.repo) if row.get("branch") == self.branch)
+        self.assertIn("locked", entry)
+
+    def test_missing_pull_request_preserves_master(self):
+        with self.github(returncode=1, stderr="no pull requests found for branch"):
+            self.assert_refused("未取得 PR")
+
+    def test_open_matching_pull_request_is_bound_to_the_merge(self):
+        with self.github() as query:
+            result = integrate(self.repo, self.branch)
+        self.assertEqual(result["pull_request"], {"url": self.pr["url"], "head": self.head, "base": "main"})
+        self.assertEqual((self.repo / "worker.txt").read_text(encoding="utf-8"), "worker\n")
+        command = query.call_args.args[0]
+        self.assertEqual(command[:4], ["gh", "pr", "view", self.branch])
+        self.assertEqual(query.call_args.kwargs["cwd"], self.worker)
+
+    def test_an_older_remote_head_and_another_base_are_refused(self):
+        for field, value, message in (("headRefOid", "0" * 40, "提交.*不一致"),
+                                      ("baseRefName", "other", "目标分支"),
+                                      ("state", "CLOSED", "必须开放"),
+                                      ("state", "MERGED", "必须开放")):
+            with self.subTest(field=field, value=value), self.github(json.dumps({**self.pr, field: value})):
+                self.assert_refused(message)
+
+    def test_unreadable_or_invalid_receipts_never_count_as_a_pull_request(self):
+        cases = (("", "有效 JSON"), ("{", "有效 JSON"), ("[]", "字段无效"),
+                 (json.dumps({**self.pr, "headRefOid": None}), "字段无效"),
+                 (json.dumps({**self.pr, "url": "file:///private"}), "链接无效"))
+        for stdout, message in cases:
+            with self.subTest(stdout=stdout), self.github(stdout):
+                self.assert_refused(message)
+
+    def test_an_unavailable_client_and_a_timeout_preserve_master(self):
+        for error in (FileNotFoundError("gh"), subprocess.TimeoutExpired(["gh"], 60)):
+            with self.subTest(error=type(error).__name__), self.github() as query:
+                query.side_effect = error
+                self.assert_refused("未取得 PR")
+
+    def test_a_worker_change_during_the_remote_read_prevents_merge(self):
+        before = _git(self.repo, "rev-parse", "HEAD").stdout.strip()
+        with self.github() as query:
+            reply = query.return_value
+
+            def advance(*_args, **_kwargs):
+                (self.worker / "worker.txt").write_text("parallel\n", encoding="utf-8")
+                commit(self.worker, "fix(tooling): 并行变更")
+                return reply
+
+            query.side_effect = advance
+            with self.assertRaisesRegex(WorkspaceError, "工作者分支改变"):
+                integrate(self.repo, self.branch)
+        self.assertEqual(_git(self.repo, "rev-parse", "HEAD").stdout.strip(), before)
+        self.assertNotEqual(_git(self.worker, "rev-parse", "HEAD").stdout.strip(), self.head)
+
+    def test_the_requested_target_branch_is_preserved(self):
+        _git(self.repo, "branch", "-m", "main", "develop")
+        with self.github(json.dumps({**self.pr, "baseRefName": "develop"})):
+            result = integrate(self.repo, self.branch, "develop")
+        self.assertEqual(result["pull_request"]["base"], "develop")
+
+
+class PreflightTests(_WorktreeCase):
+    def worker(self, *, declaration=True):
+        item = create(self.repo, "Codex", "preflight", self.root / "worktrees")
+        worker = Path(item["path"])
+        path = worker / "src/peach/module.py"
+        path.write_text("VALUE = 1\n", encoding="utf-8")
+        _git(worker, "add", "src/peach/module.py")
+        trailers = ("README-Impact: none; 内部规则，使用方式不变\n" if declaration else "") + AUTHOR
+        _git(worker, "commit", "-m", "fix(tooling): 示例规则", "-m", trailers)
+        return worker
+
+    def test_the_cli_checks_metadata_without_reading_or_signing_test_proof(self):
+        worker = self.worker()
+        output = io.StringIO()
+        with mock.patch.object(sys, "argv", ["agent_worktree.py", "--repo", str(worker), "preflight"]), \
+                mock.patch.object(agent_worktree.test_evidence, "key") as key, redirect_stdout(output):
+            self.assertEqual(agent_worktree.main(), 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual((result["action"], result["metadata"], result["tests"]),
+                         ("preflight", "passed", "not_checked"))
+        self.assertEqual(result["head"], _git(worker, "rev-parse", "HEAD").stdout.strip())
+        key.assert_not_called()
+        agent_worktree.require_verified.assert_not_called()
+        agent_worktree.require_pull_request.assert_not_called()
+        self.assertFalse((self.repo / "build/agent-verification").exists())
+
+    def test_a_missing_final_declaration_is_rejected_before_test_proof(self):
+        worker = self.worker(declaration=False)
+        with mock.patch.object(agent_worktree.test_evidence, "key") as key:
+            with self.assertRaisesRegex(WorkspaceError, "README"):
+                agent_worktree.preflight(worker)
+        key.assert_not_called()
+
+    def test_dirty_content_and_a_newer_target_require_preparation(self):
+        worker = self.worker()
+        path = worker / "src/peach/module.py"
+        path.write_text("VALUE = 2\n", encoding="utf-8")
+        with self.assertRaisesRegex(WorkspaceError, "dirty"):
+            agent_worktree.preflight(worker)
+        path.write_text("VALUE = 1\n", encoding="utf-8")
+        (self.repo / "tracked.txt").write_text("parallel\n", encoding="utf-8")
+        commit(self.repo, "docs(tooling): 并行变更")
+        with self.assertRaisesRegex(WorkspaceError, "已前进"):
+            agent_worktree.preflight(worker)
 
 
 class MasterCommitGuardTests(_WorktreeCase):

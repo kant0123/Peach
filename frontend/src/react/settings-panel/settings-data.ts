@@ -38,6 +38,7 @@ export const fetchMediaProcessing = (signal?: AbortSignal) =>
 
 /** `q_settings` 返回的整份；写入时只送改了的那几个键，回来的仍是整份。 */
 export interface SyncedSettings {
+  performerNameLanguage?: 'zh-CN' | 'ja';
   sidebarOrder?: string[];
   followInitialDays?: number;
   postSetupTutorialDone?: boolean;

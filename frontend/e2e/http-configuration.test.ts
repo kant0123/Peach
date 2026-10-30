@@ -9,7 +9,9 @@ describe('普通 HTTP 的配置与播放', () => {
   after(async () => { await browser?.close() });
 
   for (const viewport of VIEWPORTS) {
-    it(`${viewport.name}：非安全来源打开配置、编辑索引器并挂载播放器`, { timeout: 60_000 }, async () => {
+    it(`${viewport.name}：非安全来源打开配置、编辑索引器并挂载播放器`, { timeout: 60_000 }, async t => {
+      let phase = '准备演示服务';
+      t.after(() => { if (t.signal.aborted) t.diagnostic(`HTTP 配置用例超时阶段：${phase}`); });
       const service = requiredEnv('PEACH_E2E_ORIGIN');
       const origin = 'http://peach-http.test';
       const opened = await visit(browser, '/', viewport, async page => {
@@ -48,38 +50,48 @@ describe('普通 HTTP 的配置与播放', () => {
           if (response.url().startsWith(origin) && response.status() >= 400) problems.push(`${response.status()} ${response.url()}`);
         });
         for (const path of ['/settings/library', '/settings/subscriptions']) {
+          phase = `打开 ${path}`;
           await page.goto(origin + path, { waitUntil: 'load' });
           assert.deepEqual(await page.evaluate(() => ({
             secure: isSecureContext, uuid: typeof crypto.randomUUID, random: typeof crypto.getRandomValues,
           })), { secure: false, uuid: 'undefined', random: 'function' });
+          phase = `等待 ${path} 配置主体`;
           await expectBody(page, path, configurationBody(page));
           await page.getByRole('tab', { name: '来源与订阅', exact: true }).click();
           const section = page.getByRole('form', { name: '资源搜索', exact: true });
+          phase = `编辑 ${path} 索引器`;
           await section.getByRole('button', { name: '添加索引器', exact: true }).click();
           await section.getByRole('button', { name: '添加索引器', exact: true }).click();
           await section.getByRole('textbox', { name: /名称/ }).nth(1).fill('HTTP 测试');
           await section.getByRole('textbox', { name: /Torznab 地址/ }).nth(1).fill('https://indexer.example/api');
           await section.getByRole('button', { name: '移除索引器 1', exact: true }).click();
+          phase = `保存 ${path} 索引器`;
           const saved = page.waitForResponse(response => response.url() === `${origin}/api/configuration/indexers`
             && response.request().method() === 'POST');
           await section.getByRole('button', { name: '保存配置', exact: true }).click();
           assert.equal((await saved).status(), 200);
           assert.equal(writes.at(-1)!.indexers.length, 1);
           assert.equal(writes.at(-1)!.indexers[0]!.name, 'HTTP 测试');
+          phase = `等待 ${path} 保存后布局`;
           await settle(page, '.ui-configpage');
           const bounds = await layout(page);
           assert.ok(bounds.scrollWidth <= bounds.viewportWidth);
           assert.deepEqual(bounds.offenders, []);
         }
+        phase = '打开播放器';
         await page.goto(`${origin}/assets/${requiredEnv('PEACH_E2E_ITEM')}`, { waitUntil: 'load' });
+        phase = '等待播放器挂载';
         await page.locator('#stage .video-js video.vjs-tech').waitFor();
         assert.deepEqual(problems, []);
       } finally {
+        phase = '离开播放器页面';
         await page.goto('about:blank');
+        phase = '等待请求转发结束';
         /* 播放器拉流的转发请求要等整段响应读完才结束，慢时拖过用例限时；多等一会儿让多数回调正常收尾，
            其余的页面关闭后会按已取消处理（上面的 catch 接住）。 */
         await Promise.race([page.unrouteAll({ behavior: 'wait' }), new Promise(resolve => setTimeout(resolve, 10_000))]);
         await page.unrouteAll({ behavior: 'ignoreErrors' });
+        phase = '关闭浏览器上下文';
         await opened.close();
       }
     });

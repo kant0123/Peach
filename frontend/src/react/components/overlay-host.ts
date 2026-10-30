@@ -27,6 +27,19 @@ export function overlayHost(node: Element | null | undefined): HTMLElement {
   return hostIn((modal as HTMLElement | null) ?? document.body);
 }
 
+const LAYER = '[role="dialog"],[role="listbox"],[role="menu"]';
+
+/** 挂在 `modal` 里最上面那层弹层的对话框、列表或菜单；没有开着的层时为 `null`。
+ *  容器里还有焦点范围的哨兵等非弹层节点，按从后往前取第一个是层或含层的子元素。 */
+export function topOverlay(modal: HTMLElement): HTMLElement | null {
+  const host = modal.querySelector(':scope > [data-react-overlays]');
+  for (let node = host?.lastElementChild; node; node = node.previousElementSibling) {
+    const layer = node.matches(LAYER) ? node as HTMLElement : node.querySelector<HTMLElement>(LAYER);
+    if (layer) return layer;
+  }
+  return null;
+}
+
 /** 全站 Toast 栈（`#toasts`）跟着模态 dialog 进出：传开着的 dialog 就挪进去，传 `null` 放回 `body`。
  *  栈留在 `body` 上时被顶层的详情浮窗整个盖住，回执发了也看不见；挪进 dialog 才在它之上，
  *  也不落进模态 dialog 之外那片 inert 区，「撤销」照样点得到。dialog 卸掉之前必须先放回，

@@ -13,6 +13,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from collections.abc import Iterable
@@ -520,6 +521,12 @@ def changed_contents(root: Path, base: str, paths: Iterable[str]) -> dict:
 
 def special_scopes(path: str, kind: str) -> tuple[str, ...] | None:
     """内容类型、共享设施和工作流职责的优先边界。"""
+    if path == 'scripts/test_runner.py' and kind.startswith('registration:'):
+        added = kind.removeprefix('registration:').split(',')
+        if all(scope in SCOPES for scope in added):
+            # tooling 保留登记完整性与证据协议回归，checks 保留选测计划和公共门槛。
+            return tuple(scope for scope in SCOPES if scope in {'checks', 'tooling', *added})
+        return ('full',)
     if kind == "unsafe":
         return ("full",)
     if kind == "prose":
@@ -703,7 +710,21 @@ class TimedResult(unittest.TextTestResult):
 
     def startTestRun(self):
         self.last = time.monotonic()
+        self.thread_errors = []
+        self.previous_thread_hook = threading.excepthook
+        threading.excepthook = self._thread_error
         super().startTestRun()
+
+    def _thread_error(self, args):
+        self.thread_errors.append((args.thread.name, (args.exc_type, args.exc_value, args.exc_traceback)))
+        self.previous_thread_hook(args)
+
+    def stopTestRun(self):
+        threading.excepthook = self.previous_thread_hook
+        for name, error in self.thread_errors:
+            self.addError(unittest.suite._ErrorHolder(f"background thread {name}"), error)
+        self.thread_errors.clear()
+        super().stopTestRun()
 
     def startTest(self, test):
         if self.selection and test.id() in test_resume.CONTAINERS:

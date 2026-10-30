@@ -115,7 +115,8 @@ CREATE TABLE entity_membership(
 CREATE TABLE label_maker(
   label_id INTEGER PRIMARY KEY,maker_id INTEGER,source TEXT,
   confidence REAL DEFAULT 1.0,checked_at TEXT);
-CREATE TABLE performer_profile(entity_id INTEGER PRIMARY KEY,source TEXT);
+CREATE TABLE performer_profile(entity_id INTEGER PRIMARY KEY,source TEXT,
+  raw_json TEXT DEFAULT '{}',tags_json TEXT DEFAULT '[]',source_url TEXT DEFAULT '');
 CREATE TABLE watch_queue(profile_id TEXT,asset_id INTEGER,added_at TEXT,source TEXT,
   PRIMARY KEY(profile_id,asset_id));
 CREATE TABLE playlist(
@@ -573,6 +574,12 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
             # `detail` 是诊断串，界面要展示的是 `message`；缺了它前端只能显示内部原话。
             self.assertEqual(body["detail"], "写入端是 mac")
             self.assertIn("只能浏览", body["message"])
+
+            name_settings = await client.post(
+                '/api/settings?t=secret', json={'performerNameLanguage': 'ja'},
+            )
+            self.assertEqual(name_settings.status_code, 409)
+            self.assertEqual(name_settings.json()['error'], 'ledger read-only')
 
     async def test_replication_off_runs_as_a_standalone_writer(self):
         """`replication.enabled = false` 时没有 sync 对象（ADR-0023 第 3 阶段）。
@@ -2276,7 +2283,12 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
             connection.execute("INSERT INTO performer_profile(entity_id,source) VALUES(901,'test')")
             connection.execute(
                 "INSERT INTO entity_alias VALUES(901,'</script><script>演示','alias','test',1)")
-        shapes = (await self.client.get('/api/entity/shapes')).json()['entities']
+        projection = (await self.client.get('/api/entity/shapes')).json()
+        self.assertTrue(projection['ok'])
+        self.assertEqual(projection['name_variants'], [])
+        self.assertEqual(projection['name_glyphs']['寧'], '宁')
+        self.assertEqual(projection['name_glyphs']['鈴'], '铃')
+        shapes = projection['entities']
         by_id = {shape['id']: shape for shape in shapes}
         for entity_id in (901, 902):
             for method in ('GET', 'HEAD'):

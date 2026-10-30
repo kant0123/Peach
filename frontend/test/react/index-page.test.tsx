@@ -5,7 +5,9 @@
  * 页面把什么交了出去。 */
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
 import { act, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerResponseEntities } from '../../src/core/entity-links';
+import { registerNameWritings, setNameLanguage } from '../../src/core/entity-names';
 
 import { refitNativeImages } from '@peach/card-art';
 import { tagLabel } from '@peach/legacy/tags';
@@ -22,6 +24,7 @@ vi.mock('@peach/card-art', async (importOriginal) => ({
 }));
 
 afterEach(() => { queryClient.clear() });
+beforeEach(() => { registerNameWritings([]); setNameLanguage('zh-CN') });
 notifyManager.setScheduler((notify) => notify());
 
 const person = (k: string, patch: Record<string, unknown> = {}) => ({ k, n: 3, entity_id: 1, ...patch });
@@ -73,6 +76,17 @@ const tab = (host: ParentNode, value: string) => host.querySelector(`[role="tab"
 const alphaTag = (host: ParentNode, k: string) => host.querySelector(`[data-alpha-tag][data-k="${k}"]`);
 
 describe('地址栏上的类型', () => {
+  it('名称接口的共享字形覆盖名册标签，切换语言不改资料页的原始参数', async () => {
+    registerResponseEntities('/api/entity/shapes', { entities: [], name_variants: [], name_glyphs: { 鈴: '铃' } });
+    const given = props();
+    seed(indexKey('performers', ''), [person('山田鈴奈')]);
+    const host = await open(given); await settle();
+    expect(cells(host)[0]?.textContent).toContain('山田铃奈');
+    await click(cells(host)[0]);
+    expect(given.openEntity).toHaveBeenCalledWith('performer', '山田鈴奈');
+    await act(async () => setNameLanguage('ja'));
+    expect(cells(host)[0]?.textContent).toContain('山田鈴奈');
+  });
   it('标签分页只显示当前页，搜索条件变化回到首页', async () => {
     const all = Array.from({ length:230 }, (_, index) => tag(`tag-${index}`));
     const fetcher = serve(url => {

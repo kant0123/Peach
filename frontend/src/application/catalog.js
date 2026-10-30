@@ -15,6 +15,7 @@ import { buildManageBar, cardLayout, homeLayoutActive, javActive, layoutState, s
 import { selectionState, setSelectMode, toggleSelection } from './selection.js';
 import { javDisplayName, javTitleHtml } from '../core/jav-title';
 import { tagLabel } from '../core/tags';
+import { entityDisplayName } from '../core/entity-names';
 import { loadStage, stageApi } from '../react/application-residents';
 import { currentBarsContext, entityState, openEntity, pushEntityPage, routeEntityPage, sortKeys } from './entity.js';
 import { applicationEffects } from './effects';
@@ -274,7 +275,7 @@ export function catalogTags(filters){
 }
 
 export function tierPerformer(x){
-  return {name:x.k,ringHtml:`<span data-tier-initial>${esc(firstGrapheme(x.k))}</span>${entityFaceImg(
+  return {name:x.k,ringHtml:`<span data-tier-initial>${esc(firstGrapheme(entityDisplayName('performer',x.k,x.id)))}</span>${entityFaceImg(
     {id:x.id,hasImage:x.has_image,version:x.image_version,rep:x.has_avatar?x.rep:null,style:facePos(x.avatar_focus),focus:x.avatar_focus,
       standIn:x.avatar_stand_in})}`};
 }

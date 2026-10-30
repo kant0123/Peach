@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 from peach import download_postprocess as post
 from peach import ledger_backups
 from peach.downloads import DownloadStore, DownloadTask, INGESTED, POSTPROCESS_PENDING
+from peach.jobs import JobDeferred
 from peach.repository import LedgerDatabase
 from support.ledger import fresh_ledger
 
@@ -149,6 +150,16 @@ class DownloadPostprocessTests(unittest.TestCase):
         self.assertEqual(result['probed'], 1)
         self.assertEqual(self.run_task(), {'task_id': self.task.id, 'already_complete': True})
         self.contract.task_runs.enqueue_followups.assert_called_once()
+
+    def test_collection_that_steps_aside_stays_queued_instead_of_failed(self):
+        self.handle.run_id = 123
+        self.contract.task_runs = Mock()
+        with patch.object(post, '_collect', side_effect=JobDeferred('等待扫描与采集完成后继续')):
+            with self.assertRaises(JobDeferred):
+                self.run_task()
+        task = self.store.get(self.task.id)
+        self.assertEqual((task.postprocess_state, task.postprocess_detail), ('queued', '等待扫描与采集完成后继续'))
+        self.contract.task_runs.enqueue_followups.assert_not_called()
 
     def test_metadata_or_organization_failure_never_dispatches_followups(self):
         self.handle.run_id = 123

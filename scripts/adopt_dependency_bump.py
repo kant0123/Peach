@@ -42,6 +42,12 @@ if not __package__:
 from . import co_author
 
 ROOT = Path(__file__).resolve().parents[1]
+DELIVERY_STEPS = [
+    "提交后预检（工作树根目录，PowerShell 7）："
+    "& .\\.venv\\Scripts\\python.exe -X utf8 .\\scripts\\agent_worktree.py preflight",
+    "测试：& .\\scripts\\test.ps1 full",
+    "交付：推送工作者分支并创建交付 PR，核对当前提交的 CI；ready 后由协调者 integrate",
+]
 
 #: 每份清单的接管方式。`manifests` 是从 Dependabot 分支套过来的文件，`derived` 是重算后
 #: 可能变的路径，`commands` 是重算命令，`checks` 只核对不产出文件。以 `/` 结尾的条目按
@@ -352,8 +358,7 @@ def adopt_all(prs: list[dict], *, signature: str, root: Path = ROOT) -> dict:
                              "再跑一次 --all-open --apply，已接管的会跳过"]}
         except RuntimeError as exc:
             return {"ok": False, "error": str(exc), "stopped_at": pr["number"], "done": done}
-    next_steps = ["测试：& .\\scripts\\test.ps1 full",
-                  "交付：scripts/agent_worktree.py ready，再由协调者 integrate",
+    next_steps = [*DELIVERY_STEPS,
                   "推送 main 之后逐个收尾：",
                   *(close_command(item["pr"], item["recipe"]) for item in done)]
     return {"ok": True, "done": done, "next": next_steps if done else []}
@@ -401,8 +406,7 @@ def main(argv: list[str] | None = None) -> int:
             pr = pull_request(args.pr) if args.pr else {"headRefName": args.branch}
             item = adopt(pr, apply=args.apply, signature=args.co_author)
             plan = {"ok": True, **item,
-                    "next": ["测试：& .\\scripts\\test.ps1 full",
-                             "交付：scripts/agent_worktree.py ready，再由协调者 integrate"]}
+                    "next": list(DELIVERY_STEPS)}
             if item.get("already"):
                 plan["next"] = []
             elif not args.apply:

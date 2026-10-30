@@ -31,6 +31,8 @@ LOGGER = logging.getLogger(__name__)
 
 #: 写账本的后继共用的通道名。它不是任务种类，是「这条路上一次只许过一个」。
 LEDGER_LANE = "ledger"
+#: 后继让路以后，通道隔多久看一眼路让回来没有。
+DEFER_POLL_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -212,8 +214,11 @@ class FollowupRunner:
                 run = self.store.claim_followup(keys, first=_ahead(keys))
                 if run is None:
                     break
-                self._execute(run)
+                deferred = self._execute(run)
                 done += 1
+                if deferred is not None:
+                    # 让路的那条已回到队列，同步排空时没人会把路让回来，留给后台通道。
+                    break
         return done
 
     # -- 执行 --------------------------------------------------------------
@@ -231,13 +236,17 @@ class FollowupRunner:
             with self._lock:
                 self._active[thread] = run.task_key
             try:
-                self._execute(run)
+                deferred = self._execute(run)
             finally:
                 with self._lock:
                     self._active.pop(thread, None)
+            # 让路的那条已回到队列：路让回来之前再领，领到的还是它。
+            while deferred is not None and not self._stopping and not deferred.ready():
+                time.sleep(DEFER_POLL_SECONDS)
 
-    def _execute(self, run) -> None:
-        from .jobs import JobCancelled, JobPaused
+    def _execute(self, run):
+        """跑一条后继；它给别的任务让路时返回那个 `JobDeferred`，否则返回 None。"""
+        from .jobs import JobCancelled, JobDeferred, JobPaused
         followup_type = REGISTRY.get(run.task_key)
         handle = TaskRunHandle(self.store, run.id)
         if followup_type is None:
@@ -247,6 +256,9 @@ class FollowupRunner:
             return
         try:
             summary = followup_type.run(self.contract, run.followup_key, handle)
+        except JobDeferred as error:
+            self.store.suspend(run.id, label=str(error), paused_for_update=False)
+            return error
         except JobPaused as error:
             self.store.suspend(run.id, label=str(error) or '等待安装完成后继续')
             self._paused_for_update = True

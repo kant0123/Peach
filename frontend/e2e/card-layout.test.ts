@@ -192,7 +192,7 @@ describe('混排作品的画面框',()=>{
   });
   /* 竖屏格一律 9:16，九宫格切出来的海报却是 480×850（略宽）或 480×876（略高）。按 contain 放，
    * 沿短的那一轴会留下不到一像素到几像素的黑底，随落点的小数时有时无。白图浅色页面上量四条边的中段。
-   * 默认大图密度下 1280 宽排两列，一格 470×836：视口给到 1200 高，第一行整格都在截图范围里。 */
+   * 默认大图密度下 1280 宽排两列，一格 470×836；截图前将目标格居中，留出完整的四边。 */
   it(`竖屏格的视频海报铺满，四边不留黑线（${scale} 倍像素）`,async()=>{
    const viewport={width:1280,height:1200};
    const context=await browser.newContext({viewport,deviceScaleFactor:scale,colorScheme:'light'});
@@ -218,6 +218,8 @@ describe('混排作品的画面框',()=>{
      const box=await frames.nth(index).evaluate(async node=>{
       const img=node.querySelector('img')!;
       if(!img.complete)await new Promise(done=>img.addEventListener('load',done,{once:true}));
+      // 整条边都要参与像素检查，先将目标画面框滚入视口再读取截图坐标。
+      node.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
       await new Promise(requestAnimationFrame);
       return node.getBoundingClientRect().toJSON();
      });

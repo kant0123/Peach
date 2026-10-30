@@ -75,6 +75,10 @@ Dependabot 的 PR 一律在本地接管，不在网页上合：
 
 Python 静态检查使用开发依赖 Ruff，随每个正式测试域扫描全仓自有 Python 文件，覆盖应用、脚本、测试和打包入口。规则为 Pyflakes（`F`）、Ruff 支持的 Pylint 错误规则（`PLE`），以及可变默认参数、`finally` 跳转、无效表达式和循环闭包规则（`B006`、`B012`、`B018`、`B023`）。生成的 `downloads_clouddrive_pb2.py` 排除；公开导出的导入用显式同名别名声明。命名、行数、空行和复杂度偏好不属于这套 lint 门槛。
 
+无效转义由 Ruff `W605` 阻断，Windows 路径使用原始字符串或双反斜杠。正式入口和定向调试都将未处理的后台线程异常记为测试错误，保留原始 traceback；临时账本须在线程退出后清理。Starlette TestClient 使用开发依赖 `httpx2`，应用的 HTTP 客户端仍按运行时清单安装。
+
+前端通过 `allowScripts` 逐项登记安装脚本策略，未登记脚本由 `frontend/.npmrc` 拒绝安装。`@sentry/cli` 使用锁文件中的平台二进制包，禁用额外下载脚本；`fsevents` 的可选原生构建也禁用，文件监听沿用 Node 提供的能力。升级后核对实际安装、构建和 CLI 可用性，不批量放行脚本。
+
 文档与文案检查包含 seiso 稳定规则和最终状态检查，随正式入口执行。分类、范围、独立检查与预览规则用法见 [文档与界面文案](WRITING.md#检查与复核)。seiso 由开发依赖与锁文件固定，运行 Peach 不需要它。
 
 不是每次都跑全量：本机按改动涉及的域选测，CI 按提交类型决定覆盖多宽。
@@ -90,7 +94,7 @@ Python 静态检查使用开发依赖 Ruff，随每个正式测试域扫描全�
 | wheel | Windows 与 macOS 各一次 Python 3.14 独立最小安装 |
 | Release | 复用同 SHA 主线成功 CI；Windows 独立 EXE 与 Apple Silicon、Intel DMG 分别构建和验收 |
 
-Python 全量按文件稳定分片，Windows 四片、macOS 两片，每片使用独立 runner；汇总任务要求所有分片和计划选择的任务成功。分片子进程不签发记录。
+Python 全量按文件稳定分片，Windows 四片、macOS 两片。`auto` 按影响域选择文件；唯一选测文件达到 150 个时，Windows 复用四片分配，macOS 仍用单片；更小的 `auto` 两端均用单片。每片使用独立 runner，仍按同一基线和影响域运行，汇总任务要求所有分片和计划选择的任务成功。分片子进程不签发记录。
 
 Test 工作流的 `web-bundle` 在 Ubuntu 上统一执行 tsc、lint、Vitest、构建及产物差异检查；lint 同时检查无诊断且扫描文件数大于零。CI 的 Python 任务把这三个工具用例交给前端任务，把两个真实浏览器用例交给浏览器矩阵；同模块的契约测试仍执行。任务身份由固定工作流与 job 名识别，未知任务和本机保留完整测试。承担部分 CI 职责的运行不签发本机测试记录。
 
@@ -125,6 +129,8 @@ Windows 的路径、挂载、托盘、证书、进程编码、更新、认证及
 纯 HTTP 请求契约可使用 `tests/support/web.py` 的 `route_client`：请求经过真实路由、中间件和依赖，不启动后台服务；调用方仍须准备完整临时账本。服务启动、恢复与关闭语义使用正常 lifespan，由集成测试覆盖。
 
 浏览器入口通过 `PEACH_E2E_NET_LOG_DIR` 保存 Chromium 网络事件日志；模式为 `HeavilyRedacted`，文件位于 `build/agent-verification/browser/network/`，CI 与 TAP 一起上传。网络请求失败仍使测试失败；排查 `ERR_NO_BUFFER_SPACE` 时同时核对 TAP 与该次浏览器的网络事件，不根据错误字样推断机器资源状态，也不添加放行重试。
+
+Windows 隔离 E2E 浏览器对 [Chromium 572515601](https://issuetracker.google.com/issues/572515601) 的回环建连缺陷禁用 `TcpPortRandomizationWin`，保留当前锁定 Playwright 的全部默认禁用特性。同名开关的最后一个值会覆盖先前值，不能只追加此单项；`browser-launch.test.ts` 用真实 Chrome 启动参数与原生 Playwright 对照，依赖升级后也验证默认列表没有漂移。生产浏览器、页面断言、请求失败判据及机器网络配置不变；独立的启动超时不能据此标为已修复。
 
 测试应在用户可感知的行为错误时失败。页面的请求、缓存、选择、错误反馈和路由由组件测试与浏览器测试验证；CSS 层叠、主题、尺寸和交互后的样式由浏览器读取计算值。
 
@@ -201,11 +207,33 @@ macOS 按影响域验证：
 ffmpeg 起不来是事实，但它不该挡住一次只改文档的 `checks`。域由选中的测试源码推出来。
 确认本次无关时用 `PEACH_SKIP_PREFLIGHT=1` 整体跳过预检；分片子进程不重复预检。
 
+### 交付预检与 PR 绑定
+
+最后交付提交完成后，先在当前隔离工作树根目录运行元数据预检，再开始耗时验证或推送。预检核对工作树干净、目标分支已纳入，以及提交主题、署名和 README 声明。
+
+Windows（PowerShell 7）运行预检：
+
+```powershell
+& .\.venv\Scripts\python.exe -X utf8 .\scripts\agent_worktree.py preflight
+```
+
+macOS/Linux（zsh）运行同一预检：
+
+```zsh
+./.venv/bin/python -X utf8 scripts/agent_worktree.py preflight
+```
+
+`preflight` 不安装依赖、不计算测试环境身份、不读取或签发测试证明，也不访问远端 PR。退出码为 `0` 只表示元数据通过；`tests` 与 `pull_request` 仍是 `not_checked`。`ready` 和 `integrate` 继续使用相同元数据判据，并核对当前内容对应的正式测试记录。
+
+`integrate` 在合并前通过工作树的 GitHub CLI 仓库上下文取得 PR。PR 必须开放，`headRefOid` 等于工作者当前提交，`baseRefName` 等于集成目标分支；成功回执保留 PR 链接及这两个身份。未取得 PR、字段无效或身份不匹配时停止，不改变主线内容。此核对不替代 PR 审阅、对应提交的 CI 与既有预览确认。
+
 ## 定向调试与局部记录
 
-Windows 的 `-Focus` 接受 Python 模块、类、方法或仓库相对路径，可传数组；macOS/Linux 对每个选择器重复传 `--focus`。入口准备隔离依赖并核对源码。选择器不存在、浏览器路径超出 `frontend/e2e` 或与分片混用时拒绝执行。浏览器用例只收单个 `frontend/e2e/*.test.ts` 文件，不收目录；要跑全部 e2e 时把文件逐个列进数组。
+Windows 的 `-Focus` 接受 Python 模块、类、方法或仓库相对路径，可传数组；通过 `pwsh -File` 调用时也接受一个逗号分隔参数。macOS/Linux 对每个选择器重复传 `--focus`。入口统一去重，拒绝空项并核对源码及隔离依赖。选择器不存在、浏览器路径超出 `frontend/e2e` 或与分片混用时拒绝执行。浏览器用例只收单个 `frontend/e2e/*.test.ts` 文件，不收目录；要跑全部 e2e 时把文件逐个列进数组。
 
-浏览器冒烟逐个文件执行，一个文件失败仍跑完其余文件，最后把各失败文件的输出与日志路径一起报出；一轮全量就能看到所有 e2e 失败，修完再起下一轮。
+浏览器冒烟逐个文件执行，一个文件失败仍跑完其余文件，最后把各失败文件的输出与日志路径一起报出；一轮全量就能看到所有 e2e 失败。搜索建议、键盘列宽调整和嵌套弹层的失败输出另保留当时的输入、焦点、弹层、等待态与无障碍树，原异常作为 cause 保留。取证不延长等待、不重试交互，也不忽略运行期错误。
+
+React Aria 表格首次取得焦点时先建立行导航。键盘列宽测试先进入行并确认公开焦点状态，再聚焦手柄，核对真实 `activeElement` 后按 Enter；不把直接调用 `focus()` 已返回当成焦点仍在手柄的证明，也不用等待时长或重复按键消除竞态。
 
 定向调试 Python 回归：
 
@@ -267,6 +295,8 @@ GitGud 的三平台验证使用正式恢复入口，通过 GitLab 原生缓存�
 
 新增、删除文件按所属功能域选测；已有文件的执行权限变化和符号链接保持 `full`。
 
+只在 `SCOPES` 的现有域末尾追加精确 `test_*.py` 文件名、且登记表外的 AST 完全不变时，选择新增测试所属域、checks 与 tooling；这两项保留选测计划、登记完整性和证明协议回归。删除、改序、通配符、新域、既有路径映射和执行逻辑变化仍按完整验证处理。普通 `scripts/` 脚本已有 tooling 前缀映射，同域时不再添加重复的 `AUTO_SCOPE_FILES` 条目。记录快照和 CI 使用同一内容判据；无法识别的旧记录保持保守判断。
+
 `src/peach/` 的已知模块合并直接导入它的测试所在域，名称或显式映射不排除直接消费者。按名字推不出测试文件的模块，还并上直接导入它的源码文件按同一套规则推出的域；互相导入的一组模块合起来算。导入者推不出域、谁都不导入它，或未知模块被共享测试设施 `tests/support` 使用时仍 `full`。不沿导入链一路扩散：函数里的延迟导入把几乎所有模块连成一团，传递闭包等于全量。随应用分发的 `resources/` 按加载它的模块与打包面选域；`.gitlab-ci.yml` 与 `MANIFEST.in` 在本机选 `packaging` 与 `tooling`（主线流水线改 `.gitlab-ci.yml` 时三平台仍跑全量）；只登记在 `core` 或 `packaging` 的测试文件改动时跑登记它的那个域。
 
 README 的 Python 下限和双语入口由 checks 的安装契约检查，普通文档不选择整个 tooling。静态文件输入识别以仓库根及其别名为依据，临时夹具的同名写入不属于仓库读取。缺失文件不进入当前快照，删除由前后文件集合识别，暂存或提交相同删除不会改变内容证明。
@@ -297,8 +327,8 @@ PowerShell 里解析到 `Git\cmd\git.exe`、在 Git Bash 里解析到 `Git\mingw
 跑出记录，换另一个 shell 跑 `integrate` 就报「缺少有效测试记录」，回到工作树跑 `auto`
 又说「复用记录」，两句查的是两个键，代价是白跑一遍全量。
 
-改 `environment()` 的算法本身时，主检出那份代码算不出新键，无法验证带着新算法的分支。
-那一次的 `integrate` 用分支自己的脚本跑，并把仓库指到主检出。`--repo` 是顶层参数，
+改环境身份、内容签名或记录结构时，主检出的旧算法可能算不出新键或读不了新记录，无法验证带着新格式的分支。
+那一次的 `integrate` 用分支自己的脚本和判据，并把仓库指到主检出；不重复执行已取得有效记录的测试。`--repo` 是顶层参数，
 放在子命令前面，放后面会被 argparse 拒收：
 
 ```powershell

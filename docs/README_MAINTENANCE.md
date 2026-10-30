@@ -43,7 +43,7 @@ README 改动必须核对两种语言；`updated` 至少对应一份实际差异
 仅一份需要调整时，用唯一 `README-Reviewed` 写明未改文件及原因，不能为了满足检查改动正确的译文。
 提交后的暂存内容不能满足要求。原因的真实性仍由代码审阅负责，脚本不代替语义判断。
 
-`agent_worktree.py ready/integrate` 在接受测试记录前执行这一门槛。检查覆盖本次分支交付，
+`agent_worktree.py preflight` 在耗时验证前核对这一门槛；`ready/integrate` 在接受测试记录前复用同一检查。检查覆盖本次分支交付，
 允许在最后交付提交统一核对整批差异。仓库 `scripts/githooks/commit-msg` 在 `agent/*`
 分支提交时检查署名，以及消息中已有 README 声明的格式与分段；中间提交可以不写 README 声明。
 合并消息免除署名检查，amend 使用同一套字段判据；钩子只读消息。README 声明与整个分支差异

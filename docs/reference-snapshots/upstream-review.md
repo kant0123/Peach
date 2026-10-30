@@ -6,7 +6,7 @@
 
 ### 稳定版 v0.23.0 暂不采用
 
-2026-10-28 复核官方 [v0.23.0](https://github.com/sqzw-x/amane/releases/tag/v0.23.0)，提交 `4230de458c3197e1e17b6c5b42cc385fc6961d15`。[相对现固定提交的差集](https://github.com/sqzw-x/amane/compare/fd9294fbe5b4aa88ce1df84d534f6816ad9460d5...4230de458c3197e1e17b6c5b42cc385fc6961d15)含 16 个提交、142 个文件，爬虫只改了 `theporndb`；桥消费的 makers、prestige、faleno、dahlia、mgstage、fc2club、freejavbt、airav、avsox 站点类和 `amane.net` 都没有变化，其余是 CLI、服务端与图片代理。继续固定 v0.22.1；桥接站点或网络接口出现修复时再升级。
+2026-10-30 复核官方 [v0.23.0](https://github.com/sqzw-x/amane/releases/tag/v0.23.0)，提交 `4230de458c3197e1e17b6c5b42cc385fc6961d15`。[相对现固定提交的差集](https://github.com/sqzw-x/amane/compare/fd9294fbe5b4aa88ce1df84d534f6816ad9460d5...4230de458c3197e1e17b6c5b42cc385fc6961d15)含 16 个提交、142 个文件，爬虫只改了 `theporndb`；桥消费的 makers、prestige、faleno、dahlia、mgstage、fc2club、freejavbt、airav、avsox 站点类和 `amane.net` 都没有变化，其余是 CLI、服务端与图片代理。继续固定 v0.22.1；桥接站点或网络接口出现修复时再升级。本次更新其约束允许的传递依赖，并核对独立环境的离线类加载。
 
 ### 稳定版 v0.22.1 的桥接范围
 

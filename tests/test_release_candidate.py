@@ -262,6 +262,26 @@ class GitHubCandidateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 github.select("owner/repo", "a" * 40)
 
+    def test_a_dispatched_rehearsal_is_promoted_when_the_push_run_was_skipped(self):
+        def row(run_id, event, conclusion, branch="master"):
+            return {"id": run_id, "head_sha": "a" * 40, "head_branch": branch, "event": event,
+                    "status": "completed", "conclusion": conclusion}
+        runs = [row(5, "workflow_dispatch", "success"), row(6, "push", "skipped"),
+                row(8, "push", "failure", branch="v0.37.0"), row(9, "pull_request", "success")]
+        jobs = [{"name": name, "conclusion": "success"} for name in github.REQUIRED_JOBS]
+        artifacts = [{"name": name, "id": index, "expired": False, "digest": "sha256:" + "b" * 64}
+                     for index, name in enumerate(sorted(github.REQUIRED_ARTIFACTS))]
+        def api(_repo, endpoint):
+            return {"workflow_runs": runs} if "workflows/" in endpoint else {"jobs": jobs} if "/jobs?" in endpoint else {"artifacts": artifacts}
+        with mock.patch.object(github, "api", side_effect=api):
+            self.assertEqual(github.select("owner/repo", "a" * 40)["run_id"], 5)
+            runs[0]["conclusion"] = "failure"
+            with self.assertRaisesRegex(ValueError, "尚未成功"):
+                github.select("owner/repo", "a" * 40)
+            del runs[:2]
+            with self.assertRaisesRegex(ValueError, "未取得"):
+                github.select("owner/repo", "a" * 40)
+
     def test_loaded_docker_image_must_match_the_recorded_image_id(self):
         image = {"Id": "sha256:" + "b" * 64, "Config": {"Labels": {
             "org.opencontainers.image.version": "1.2.3", "org.opencontainers.image.revision": "a" * 40}}}

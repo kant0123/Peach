@@ -14,6 +14,7 @@ from .media_sources import SOURCES
 from .clouddrive_proxy import media_remote_path
 from .push_discovery import normalise_prefix
 from .follow_secrets import CredentialError
+from .error_reporting import local_event
 
 
 def root_key(value):
@@ -68,8 +69,10 @@ class LibraryChannels:
         if logged_in and direct_root and direct_root[0] == "pikpak" and config.targets.get("pikpak"):
             rows.append(self._row("pikpak", "pikpak", direct_root[1], config.targets["pikpak"], names))
         if roots and config.clouddrive_address and token:
+            phase = 'connect'
             try:
                 with self.client(config.clouddrive_address, token, timeout=PROBE_TIMEOUT) as client:
+                    phase = 'token_permissions'
                     permissions = client.token_info().permissions
                     if not (permissions.allow_add_offline_download and permissions.allow_list_offline_downloads):
                         problems.append("CloudDrive2 令牌需要提交和查看离线任务权限。")
@@ -78,8 +81,10 @@ class LibraryChannels:
                         if getattr(permissions, "allow_get_mounts", False):
                             try:
                                 mounts = client.call("GetMountPoints", Empty(), "读取媒体库挂载点").mountPoints
-                            except DownloadError:
-                                pass
+                            except DownloadError as error:
+                                local_event('download-channel-probe', error, operation='mount_points',
+                                            source='clouddrive', failure=error.failure)
+                        phase = 'library_mapping'
                         candidates = self._candidates(roots, prefixes, mounts, rows, names, problems)
                         seen = set()
                         for key, source, root, target, prefix in candidates:
@@ -92,9 +97,13 @@ class LibraryChannels:
                                     rows.append(self._row(key, source, root, target, names, cloud_root=prefix,
                                                           can_cancel=folder.can_manage and bool(
                                                               permissions.allow_modify_offline_downloads)))
-                            except DownloadError:
+                            except DownloadError as error:
+                                local_event('download-channel-probe', error, operation='folder_capabilities',
+                                            source=source, failure=error.failure)
                                 problems.append(f"{names.get(root_key(root)) or SOURCES[source].name}的云下载能力未取得。")
-            except DownloadError:
+            except DownloadError as error:
+                local_event('download-channel-probe', error, operation=phase,
+                            source='clouddrive', failure=error.failure)
                 problems.append("CloudDrive2 云下载能力未取得，请检查连接与令牌。")
         return {"providers": rows, "problems": list(dict.fromkeys(problems))}
 

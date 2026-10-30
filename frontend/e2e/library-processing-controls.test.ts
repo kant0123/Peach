@@ -3,7 +3,10 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import type { Browser } from 'playwright-core';
-import { launch, layout, settle, visit, VIEWPORTS } from './harness.ts';
+import { launch, layout, requiredEnv, settle, visit, VIEWPORTS } from './harness.ts';
+
+// 暂无预览只表示图片尚未生成，媒体仍复用测试服务提供的有效短片。
+const itemId = Number(requiredEnv('PEACH_E2E_ITEM'));
 
 describe('扫描与采集控制', () => {
   let browser: Browser;
@@ -301,7 +304,7 @@ describe('扫描与采集控制', () => {
         await page.screenshot({ path: path.join(artifacts, `${viewport.name}-page.png`), fullPage: true });
         await card.screenshot({ path: path.join(artifacts, `${viewport.name}.png`) });
         await page.route(url => url.pathname === '/api/items', route => route.fulfill({ json: {
-          items: [{ id: 11, name: '没有预览的本地影片.mp4', medium: 'video', location: 'local',
+          items: [{ id: itemId, name: '没有预览的本地影片.mp4', medium: 'video', location: 'local',
             has_thumb: false, has_local_poster: false, size: 12345, duration: 3600 }],
           total: 1, has_more: false,
         } }));

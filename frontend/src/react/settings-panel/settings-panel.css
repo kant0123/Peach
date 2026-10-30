@@ -38,6 +38,7 @@
 [data-settings-panel] [data-setting-group]>h3+[data-setting-row]{border-top:0}
 [data-settings-panel] [data-setting-row] b{display:block;font-size:var(--fs-md)}
 [data-settings-panel] [data-setting-row] small{display:block;color:var(--muted);margin-top:8px;line-height:1.45;overflow-wrap:anywhere}
+[data-settings-panel] [data-setting-row]:has(#performerNameLanguageSetting){align-items:start}
 [data-settings-panel] [data-setting-row] [class~=ui-gselect]{min-width:148px}
 [data-settings-panel] [data-setting-row][data-setting-related]{border-top:0}
 [data-settings-panel] [data-setting-group] [data-setting-row][data-setting-sort]{grid-template-columns:minmax(0,1fr);gap:12px;padding-block:14px 16px}
