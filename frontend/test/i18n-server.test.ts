@@ -39,6 +39,14 @@ describe('localizeServer', () => {
     expect(localizeServer('追更检查 · 手动')).toBe('新作チェック · 手動');
   });
 
+  it('一个来源有多个根时盘名带序号，序号保留，网盘名一并换成译文', async () => {
+    const { localizeServer } = await load('ja');
+    expect(localizeServer('资源盘')).toBe('リソースドライブ');
+    expect(localizeServer('资源盘 2')).toBe('リソースドライブ 2');
+    expect(localizeServer('115 网盘 1')).toBe('115 クラウド 1');
+    expect(localizeServer('PikPak 网盘 3')).toBe('PikPak クラウド 3');
+  });
+
   it('自动修复的任务名、进度与失败原因也换成译文，影片名之类的数据原样保留', async () => {
     const { localizeServer } = await load('ja');
     expect(localizeServer('自动修复')).toBe('自動修復');

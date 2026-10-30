@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "094bd7de-be3a-484b-ad08-aba0858fa3fc", e._sentryDebugIdIdentifier = "sentry-dbid-094bd7de-be3a-484b-ad08-aba0858fa3fc");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "870e5591-99b2-4ce8-ac38-41670c0f8596", e._sentryDebugIdIdentifier = "sentry-dbid-870e5591-99b2-4ce8-ac38-41670c0f8596");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -4184,6 +4184,12 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	"{n} 分钟": "{n} 分",
 	系统盘: "システムドライブ",
 	资源盘: "リソースドライブ",
+	"资源盘 {n}": "リソースドライブ {n}",
+	"115 网盘 {n}": "115 クラウド {n}",
+	"PikPak 网盘 {n}": "PikPak クラウド {n}",
+	预览与封面: "プレビューとカバー",
+	影片资料: "作品情報",
+	临时文件: "一時ファイル",
 	低画质: "低画質",
 	去馆藏评价作品: "ライブラリで作品を評価",
 	"当前喜欢 {a} · 不合口味 {b}": "現在の好き {a} · 好みに合わない {b}",
@@ -26959,4 +26965,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=094bd7de-be3a-484b-ad08-aba0858fa3fc
+//# debugId=870e5591-99b2-4ce8-ac38-41670c0f8596
