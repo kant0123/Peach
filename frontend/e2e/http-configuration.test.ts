@@ -76,7 +76,10 @@ describe('普通 HTTP 的配置与播放', () => {
         assert.deepEqual(problems, []);
       } finally {
         await page.goto('about:blank');
-        await page.unrouteAll({ behavior: 'wait' });
+        /* 播放器拉流的转发请求要等整段响应读完才结束，慢时拖过用例限时；多等一会儿让多数回调正常收尾，
+           其余的页面关闭后会按已取消处理（上面的 catch 接住）。 */
+        await Promise.race([page.unrouteAll({ behavior: 'wait' }), new Promise(resolve => setTimeout(resolve, 10_000))]);
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
         await opened.close();
       }
     });

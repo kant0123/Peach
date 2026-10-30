@@ -87,6 +87,8 @@ describe('库外 JAV 作品详情', () => {
         `选项面板 ${panelBox?.width}px，触发框 ${goalBox?.width}px`);
       await panel.getByRole('option', { name: '高清', exact: true }).click();
       await panel.waitFor({ state: 'detached' });
+      // 选项面板收起后焦点回到弹层里才按 Escape；落在 body 上的 Escape 会直接关掉详情浮窗。
+      await page.waitForFunction(() => document.querySelector('[data-modal-surface]')?.contains(document.activeElement));
       await page.keyboard.press('Escape');
       await page.locator('[data-modal-surface]').waitFor({ state: 'detached' });
       assert.equal(await page.locator('#stage[open]').count(), 1, 'Escape 只关掉里层弹层');
@@ -380,6 +382,8 @@ describe('库外 JAV 作品详情', () => {
           assert.ok(Math.max(...values) - Math.min(...values) < 1, `评论切换 ${field} 保持一致：${JSON.stringify(values)}`);
         }
         await resourcesToggle.click();
+        // 资源只在区块进入视口后才取数：展开后内容在折叠线以下，要先滚到位。
+        await page.locator('[data-jav-resources] [data-want-magnets]').scrollIntoViewIfNeeded();
         await page.getByText('EXM-001 示例资源 1', { exact: false }).waitFor({ state: 'visible' });
         assert.equal(await page.locator('[data-jav-resources] [data-resource-protocol]:visible').count(), 3);
         await page.getByText('更多资源（3 条）', { exact: true }).click();

@@ -644,7 +644,7 @@ describe('JAV 用户脚本', () => {
     } finally { await opened.close(); }
   });
 
-  it('后台状态轮询有次数上限且不创建 POST，馆藏已有时不可加入', async () => {
+  it('后台状态轮询前 30 次每 2 秒、之后每 15 秒，满 1 小时停下且不创建 POST，馆藏已有时不可加入', async () => {
     const opened = await open(browser, { initial: 'queued' });
     try {
       await pending(opened.page, 1);
@@ -653,13 +653,24 @@ describe('JAV 用户脚本', () => {
         await opened.page.clock.fastForward(2100);
         await pending(opened.page, index + 2);
       }
-      await opened.page.clock.fastForward(10);
+      // 第 31 次之后间隔拉到 15 秒：2 秒多不够再发，补满 15 秒才发第 32 次。
+      await opened.page.waitForFunction(() => document.querySelector('#peach-jav-action')?.shadowRoot?.querySelector('p')?.textContent?.includes('已排队'));
+      await opened.page.clock.fastForward(2100);
+      await opened.page.waitForTimeout(200);
+      assert.equal(await opened.page.evaluate(() => window.javMock.calls.length), 31);
+      await opened.page.clock.fastForward(13_000);
+      await pending(opened.page, 32);
+      // 跟踪满 1 小时就停：再回一次后收起进度，按钮回到「查询 Peach 状态」，此后不再自己发请求。
+      await opened.page.waitForFunction(() => document.querySelector('#peach-jav-action')?.shadowRoot?.querySelector('p')?.textContent?.includes('已排队'));
+      await opened.page.clock.fastForward(60 * 60_000);
+      await pending(opened.page, 33);
       await ready(opened.page, '查询 Peach 状态');
       const calls = await opened.page.evaluate(() => window.javMock.calls);
-      assert.equal(calls.length, 31);
+      assert.equal(calls.length, 33);
       assert.ok(calls.every(call => call.method === 'GET'));
       await opened.page.clock.fastForward(60_000);
-      assert.equal(await opened.page.evaluate(() => window.javMock.calls.length), 31);
+      await opened.page.waitForTimeout(200);
+      assert.equal(await opened.page.evaluate(() => window.javMock.calls.length), 33);
     } finally { await opened.close(); }
     const owned = await open(browser, { initial: 'owned' });
     try {
