@@ -37,7 +37,7 @@ import { busyProps } from '../settings/use-action';
 import { ExternalPlayback } from './external-playback';
 import { CoverCrop } from '../cover-crop/cover-crop-page';
 import { queryClient } from '../query';
-import { LibraryCompletionPrompt, missingPreviewIds } from '../library-processing/library-completion';
+import { LibraryCompletionPrompt, missingPreviewIds, processableIds } from '../library-processing/library-completion';
 import {
   CAST_SHOWN, EDITION_TONE, FEEDBACK_URL, ITEM_TAG_URL, PLAYLIST_URL, PREFERENCE_URL, QUALITY_GOAL_URL,
   RELATED_URL, WATCH_LATER_URL, chooseItem, clampRating, detailTags, feedbackReceipt, fetchItem, fetchQueue,
@@ -401,7 +401,8 @@ function Side({ item, queue, write, helpers, actions }: {
           ? <ExternalPlayback key={item.id} id={item.id} onOpened={() => actions.toast(t('已请求打开本地播放器'))} /> : null}
         <Identity item={item} helpers={helpers} actions={actions} />
         <Tags item={item} write={write} helpers={helpers} actions={actions} />
-        <LibraryCompletionPrompt assetIds={missingPreviewIds([item], helpers.javImage())}
+        <LibraryCompletionPrompt assetIds={processableIds([item])}
+          refresh={!missingPreviewIds([item], helpers.javImage()).length}
           onComplete={() => { void queryClient.invalidateQueries({ queryKey: itemKey(item.id) }) }} />
         <Trace item={item} />
         <div data-stage-actions="" data-item-feedback="">

@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "2da5ab17-ccd3-44ab-aaa8-b5b181f4557e", e._sentryDebugIdIdentifier = "sentry-dbid-2da5ab17-ccd3-44ab-aaa8-b5b181f4557e");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "06891ccc-785c-455e-aa48-c2fd67ee82dc", e._sentryDebugIdIdentifier = "sentry-dbid-06891ccc-785c-455e-aa48-c2fd67ee82dc");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -3137,6 +3137,9 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	"这批影片中有 {value} 部暂无预览，{value2}": "この中の {value} 本はまだプレビューがありません。{value2}",
 	"当前任务结束后可单独补全。": "現在のタスクの終了後に単独で補完できます。",
 	"可补全资料与图片。": "情報と画像を補完できます。",
+	"可重新采集这部影片的资料与图片。": "この動画の情報と画像を再取得できます。",
+	"当前任务结束后可重新采集这部影片的资料。": "現在のタスクの終了後にこの動画の情報を再取得できます。",
+	重新采集资料: "情報を再取得",
 	打开扫描与采集: "スキャンと収集を開く",
 	"{conflicts} 项同名人物资料需要确认是否为同一人": "同名の人物情報 {conflicts} 件が同一人物かどうかの確認が必要です",
 	"已扫描 {value} 个文件，识别 {value2} 个番号，": "{value} 個のファイルをスキャンし、{value2} 件の品番を認識しました。",
@@ -26927,4 +26930,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=2da5ab17-ccd3-44ab-aaa8-b5b181f4557e
+//# debugId=06891ccc-785c-455e-aa48-c2fd67ee82dc

@@ -2,7 +2,7 @@ import { act } from 'react';
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { LibraryCompletionPrompt, missingPreviewIds } from '../../src/react/library-processing/library-completion';
+import { LibraryCompletionPrompt, missingPreviewIds, processableIds } from '../../src/react/library-processing/library-completion';
 import { LIBRARY_PROCESSING_KEY } from '../../src/react/library-processing/library-processing';
 import type { MediaItem } from '../../src/react/catalog-grid/types';
 import { queryClient } from '../../src/react/query';
@@ -26,6 +26,29 @@ it('缺图提示只选择没有可用卡面且可以补全的影片，保留来�
     item(10, { has_cover: true, cover_key: 'sample' }),
     item(11, { name: 'unknown.strm' }), item(12, { name: 'unknown.iso' }),
   ], 'cover')).toEqual([1, 8]);
+});
+
+it('可处理范围不看卡面，已有封面的影片仍可交给采集', () => {
+  expect(processableIds([
+    item(1), item(2, { has_cover: true, cover_key: 'sample' }), item(3, { has_local_poster: true }),
+    item(4, { location: 'online' }), item(5, { disposal: 'trash' }), item(6, { name: 'unknown.iso' }),
+  ])).toEqual([1, 2, 3]);
+});
+
+it('已有卡面的单片提供重新采集，资料采集只提交这一部', async () => {
+  const posts: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') posts.push(JSON.parse(String(init.body)));
+    return { ok: true, json: async () => ({ status: 'idle' }) };
+  }));
+  const host = await mount(<QueryClientProvider client={queryClient}>
+    <LibraryCompletionPrompt assetIds={[9]} refresh /></QueryClientProvider>);
+  expect(host.querySelector('section')?.getAttribute('aria-label')).toBe('重新采集资料');
+  expect(host.textContent).toContain('可重新采集这部影片的资料与图片');
+  expect(host.textContent).not.toContain('暂无预览');
+  await click(host.querySelector('[aria-haspopup="dialog"]'));
+  await click(menuItem('仅补全影片资料'));
+  expect(posts).toEqual([{ stage: 'metadata', asset_ids: [9] }]);
 });
 
 it('关闭视频预览生成时保留资料同步，并禁用单独抽帧', async () => {

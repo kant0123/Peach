@@ -21,19 +21,33 @@ import { t } from '../../i18n';
 type PreviewItem = Pick<MediaItem, 'id' | 'name' | 'medium' | 'disposal' | 'location' | 'code' | 'is_jav'
   | 'has_cover' | 'cover_key' | 'has_thumb' | 'has_local_poster' | 'follow_thumb_url'>;
 
-export function missingPreviewIds(items: PreviewItem[], javImage: string): number[] {
-  return [...new Set(items.filter(item => (!item.medium || item.medium === 'video')
+function processable(item: PreviewItem): boolean {
+  return (!item.medium || item.medium === 'video')
     && (!/\.(strm|iso)$/i.test(item.name || '') || !!item.code)
-    && !item.disposal && item.location !== 'online' && (item.location === 'local' || !!item.code)
+    && !item.disposal && item.location !== 'online' && (item.location === 'local' || !!item.code);
+}
+
+/** 能交给扫描与采集的影片，不看现有卡面。 */
+export function processableIds(items: PreviewItem[]): number[] {
+  return [...new Set(items.filter(processable).map(item => item.id))];
+}
+
+export function missingPreviewIds(items: PreviewItem[], javImage: string): number[] {
+  return [...new Set(items.filter(item => processable(item)
     && !cardArtwork(item, 'small', false, javImage).html).map(item => item.id))];
 }
 
-/** 单独一行；`className` 交给所在布局定外边距，列表页由父级间距负责。 */
-export function LibraryCompletionPrompt({ assetIds, onComplete, className = 'mb-4' }: { assetIds: number[]; onComplete?(): void; className?: string }) {
-  return assetIds.length ? <Completion assetIds={assetIds} onComplete={onComplete} className={className} /> : null;
+/** 单独一行；`className` 交给所在布局定外边距，列表页由父级间距负责。
+ *  `refresh` 表示这部影片已有卡面，入口用来重新采集单片资料。 */
+export function LibraryCompletionPrompt({ assetIds, onComplete, className = 'mb-4', refresh = false }: {
+  assetIds: number[]; onComplete?(): void; className?: string; refresh?: boolean;
+}) {
+  return assetIds.length ? <Completion assetIds={assetIds} onComplete={onComplete} className={className} refresh={refresh} /> : null;
 }
 
-function Completion({ assetIds, onComplete, className }: { assetIds: number[]; onComplete?(): void; className: string }) {
+function Completion({ assetIds, onComplete, className, refresh }: {
+  assetIds: number[]; onComplete?(): void; className: string; refresh: boolean;
+}) {
   const job = useQuery({ queryKey: LIBRARY_PROCESSING_KEY,
     queryFn: ({ signal }) => fetchLibraryProcessing(signal),
     refetchInterval: query => pollInterval(query.state.data, true) });
@@ -65,8 +79,10 @@ function Completion({ assetIds, onComplete, className }: { assetIds: number[]; o
   const problem = start.error ? errorMessage(start.error) : job.error ? DISCONNECTED_TEXT
     : started && state?.job_id === started && state.status === 'failed' ? state.error || t('补全未完成') : '';
   const message = problem || (start.isPending ? t('正在启动补全…')
-    : outcome || t('这批影片中有 {value} 部暂无预览，{value2}', { value: assetIds.length.toLocaleString(), value2: processingActive(state) ? t('当前任务结束后可单独补全。') : t('可补全资料与图片。') }));
-  return <section aria-label={t('补全预览')} aria-live="polite" data-library-completion="" className={cx('@container', className)}>
+    : outcome || (refresh
+      ? processingActive(state) ? t('当前任务结束后可重新采集这部影片的资料。') : t('可重新采集这部影片的资料与图片。')
+      : t('这批影片中有 {value} 部暂无预览，{value2}', { value: assetIds.length.toLocaleString(), value2: processingActive(state) ? t('当前任务结束后可单独补全。') : t('可补全资料与图片。') })));
+  return <section aria-label={refresh ? t('重新采集资料') : t('补全预览')} aria-live="polite" data-library-completion="" className={cx('@container', className)}>
     <Note tone={problem ? 'warning' : 'neutral'} action={<div className="flex flex-wrap items-center gap-2"><ProcessingActions busy={busy} metadataOnly={state?.metadata_only} onRun={command => {
       if (busy) return;
       setOutcome('');
