@@ -352,6 +352,13 @@ def w_library_processing(contract, body, *, resume=False):
                 active=lambda: (contract.library_processing_job.snapshot() or {}).get('job_id') == job_id,
                 report=lambda state: contract.library_processing_job.update(job_id, **{
                     key: value for key, value in state.items() if key != 'job_id'}))
+            pending = result.get('iv_pending_ids') or []
+            if pending:
+                from .iv_completion import complete
+                result['iv_completion'] = complete(
+                    config, contract.database, contract.candidate_root, contract.cover_root, pending,
+                    active=lambda: (contract.library_processing_job.snapshot() or {}).get('job_id') == job_id,
+                    report=lambda **values: contract.library_processing_job.update(job_id, **values))
             contract.library_processing_job.update(job_id, **{key: value for key, value in result.items() if key != 'job_id'})
         finally:
             contract.cache_bust()

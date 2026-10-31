@@ -43,21 +43,66 @@ def actresses(rows) -> list[dict]:
 
     `japanese_name` 只取 `name_kanji`，那是 DMM 登记的艺名（`RARA`、`JULIA` 这类本来就写拉丁
     字母的也在这一栏）。没有它的只剩 r18 拼的罗马字，名字留空，由 `with_japanese` 剔掉。
+
+    IV（イメージビデオ）在 r18 的 combined 页上常常只有 `actors`、没有 `actresses`：
+    `ENFD-5710`、`LCDV-41078`、`TSDS-42225` 这一批都是这样，只读 `actresses` 就把来源已经
+    给出的出演者整批丢掉。两栏同一形状，合并后按 DMM id 或艺名去重。
     """
     found = []
+    seen = set()
     for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get('name_kanji') or row.get('name') or '').strip()
+        dmm_id = row.get('id') or ''
+        key = (str(dmm_id), name)
+        if key in seen:
+            continue
+        seen.add(key)
         image = str(row.get('image_url') or '').strip()
         thumb_url = (ACTRESS_IMAGE.format(filename=quote(image, safe=''))
                      if image and '/' not in image and '\\' not in image else '')
         found.append({
-            'japanese_name': row.get('name_kanji') or '',
+            'japanese_name': name,
             'name_kana': row.get('name_kana') or '',
             'name_romaji': row.get('name_romaji') or '',
-            'dmm_id': row.get('id') or '',
+            'dmm_id': dmm_id,
             'thumb_url': thumb_url,
             'profile_source': 'r18dev',
         })
     return found
+
+
+def cast(rows: list[dict]) -> tuple[dict, ...]:
+    """combined 页的出演者：`actresses` 与 `actors` 两栏合起来，去掉同一个 DMM id 的重复项。"""
+    return tuple(row for row in actresses(rows) if row['japanese_name'])
+
+
+def raw_cast(rows) -> tuple[dict, ...]:
+    """作品 JSON 顶层的出演者：只有名字，没有 combined 页那些头像与假名。"""
+    found = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get('name') or row.get('name_kanji') or '').strip()
+        if name and name not in {item['japanese_name'] for item in found}:
+            found.append({'japanese_name': name})
+    return tuple(found)
+
+
+def jacket_urls(jacket: object) -> tuple[str, ...]:
+    """作品 JSON 的 `jacket_image`：值可能是空串或半角空格，取其中真正的地址。
+
+    `large` 在 IV 上常是 `" "`，原图只写在 `large2`；把整个 dict 当封面地址交下去，
+    封面层拿到的是一个没有主机的对象，量不出尺寸。
+    """
+    if isinstance(jacket, str):
+        return (jacket.strip(),) if jacket.strip() else ()
+    if not isinstance(jacket, dict):
+        return ()
+    return tuple(dict.fromkeys(
+        str(value).strip() for value in jacket.values()
+        if isinstance(value, str) and str(value).strip()))
 
 
 def english_only(record: SiteRecord) -> SiteRecord:
@@ -76,7 +121,7 @@ def with_japanese(record: SiteRecord, combined: object) -> SiteRecord:
     translations = [dict(language='ja', title=title, series=series,
                          label=combined.get('label_name_ja') or '',
                          director=directors[0] if directors else '')]
-    performers = tuple(row for row in actresses(combined.get('actresses')) if row['japanese_name'])
+    performers = cast([*(combined.get('actresses') or []), *(combined.get('actors') or [])])
     japanese = [row.get('name_ja') or row.get('name_en') or '' for row in combined.get('categories') or []]
     return replace(
         record, title=title, series=series, performers=performers,
@@ -110,12 +155,12 @@ class R18DevSource(SiteSource):
         return SiteRecord(
             source=self.config.name, provenance=self.config.provider, code=code, source_url=page.url,
             title=raw.get('title') or '',
-            performers=tuple({'japanese_name': row.get('name', '')} for row in raw.get('actresses', [])),
+            performers=raw_cast([*(raw.get('actresses') or []), *(raw.get('actors') or [])]),
             studio=name('maker'), label=name('label'), series=name('series'),
             director=raw.get('director') or '', release_date=raw.get('release_date') or '',
             runtime=raw.get('runtime_minutes'),
             tags=tuple(row.get('name', '') for row in raw.get('categories', [])),
-            cover_urls=(jacket,) if jacket else (),
+            cover_urls=jacket_urls(jacket),
             extra={'content_id': raw.get('content_id'), 'raw': raw})
 
     def japanese(self, record: SiteRecord, *, session: Session) -> SiteRecord:

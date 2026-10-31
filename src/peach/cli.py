@@ -509,11 +509,21 @@ def _process_library(args: argparse.Namespace) -> int:
     config = settings_file.active()
     with cli_run('library-processing', args.db, label='资料处理') as handle:
         from .jobs import JobCancelled
+        database = LedgerDatabase(args.db)
         try:
             result = process_library(config, args.db, config.directory('generated'),
                                      config.directory('generated') / 'covers', location=args.location,
-                                     database=LedgerDatabase(args.db),
+                                     database=database,
                                      report=lambda state: print(f"{state['stage']}：{state['checked']}/{state['total']}", flush=True))
+            pending = result.get('iv_pending_ids') or []
+            if pending:
+                from .iv_completion import complete
+                result['iv_completion'] = complete(
+                    config, database, config.directory('generated'),
+                    config.directory('generated') / 'covers', pending,
+                    report=lambda **values: print(f"{values.get('stage') or '补全未取得的资料'}", flush=True))
+                print(f"文件名补全：处理 {result['iv_completion'].get('processed', 0)} 部，"
+                      f"自动反映 {result['iv_completion'].get('applied', 0)} 项", flush=True)
         except JobCancelled:
             handle.finish('cancelled', error='用户停止任务')
             print('任务已停止，已保存结果保留。')

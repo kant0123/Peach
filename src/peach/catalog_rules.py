@@ -471,6 +471,19 @@ _HYPHENATED_CODE = re.compile(
     rf"^(?:{_KIRARI_BODY}(?![0-9])|(?:\d{{3}})?[A-Z]{{2,8}}-\d{{3,5}}(?![0-9]|-\d{{2}}-\d))",
     re.I,
 )
+#: 片名在前、番号在后：`[icao.me]佐々木桃華 IMBD-214`、`Konoha57_1219-ICDV-30159`。
+#: 只认末尾这一处，并要求字母段至少四位——两位、三位的 `rei_mk01`、`himesaki01` 是
+#: 创作者自编号或角色名加序号，不是发行番号。末尾的 `trailer`／`sample` 不是番号的一部分。
+_LOOSE_TRAILING_CODE = re.compile(
+    r"(?<![A-Za-z0-9])([A-Za-z]{4,8})[-_]0*(\d{2,5})"
+    r"(?:[-_ ](?:trailer|sample|preview|pv))?$",
+    re.I,
+)
+#: 方括号里的番号可以出现在片名任何位置：`[JSSJ-077] 純粋…`、`(IV) … [IMBD-214]`。
+_LOOSE_BRACKETED_CODE = re.compile(
+    r"[\[\(【]\s*([A-Za-z]{4,8})[-_]0*(\d{2,5})\s*[\]\)】]",
+    re.I,
+)
 #: 用户番号识别规则的上限。每条规则要对库里每个文件名跑一遍，条数和长度都设个顶。
 CODE_PATTERN_LIMIT = 20
 CODE_PATTERN_MAX_LENGTH = 200
@@ -976,6 +989,29 @@ def release_code_from_filename(name: str | None, *, patterns: Iterable[re.Patter
     if mib and mib.group(1).upper() in KOREAN_MIB_PREFIXES:
         return normalise_code_key(f"{mib.group(1)}-{mib.group(2)}")
     return _titled_release_code(stem)
+
+
+def release_code_from_filename_suffix(name: str | None) -> str | None:
+    """「片名／出演者 + 番号」里落在末尾或方括号里的番号；认不出返回 None。
+
+    `release_code_from_filename` 只看第一个词元：`ICDV-30159` 前面有出演者、
+    `[IMBD-214]` 在片名前面时都读不出来。IV 的发行目录常把番号放在末尾
+    （`[icao.me]佐々木桃華 IMBD-214`）或方括号里（`[JSSJ-077] 純粋…`），文件名本身
+    就是最可靠的本机证据。
+
+    只认 4～8 个字母、带分隔符、序号 2～5 位的写法，且必须落在末尾或方括号里：
+    创作者自编号 `rei_mk01`、`himesaki01` 与「Berry 15」「MARE 18」这种片名里的数字
+    都不带这种分隔符与位置。两位序号按账本既有写法补零（`CHAMA-17` → `CHAMA-017`）。
+    """
+    stem = _ASSET_EXTENSION.sub("", _PART_MARKER.sub("", str(name or "").strip()))
+    for pattern in (_LOOSE_TRAILING_CODE, _LOOSE_BRACKETED_CODE):
+        match = pattern.search(stem)
+        if not match:
+            continue
+        code = normalise_code_key(f"{match.group(1)}-{match.group(2)}")
+        if is_jav_code(code):
+            return code
+    return None
 
 
 def _titled_release_code(stem: str) -> str | None:

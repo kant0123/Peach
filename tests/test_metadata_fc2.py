@@ -188,11 +188,14 @@ class Fc2CodeTests(unittest.TestCase):
     def test_a_collection_part_asks_nowhere(self):
         # `FC2-PPV-3312576-1` 是 21 段合集里的一段，两个站都只有整份合集那一页。
         # 认出商品号就意味着把合集封面套给每一段，屏幕上是 21 个内容顶着同一张图。
-        for code in ("FC2-PPV-3312576-1", "FC2-PPV-3312576_4", "", "ABW-358"):
+        for code in ("FC2-PPV-3312576-1", "FC2-PPV-3312576_4", ""):
             self.assertEqual(video_id(code), "", code)
             self.assertEqual(Fc2Source().article_url(code), "", code)
             self.assertEqual(Fc2cmadbSource().article_url(code), "", code)
             self.assertEqual(JavArchiveSource().search_url(code), "", code)
+        # 非 FC2 番号现在也能搜：JavArchive 是 IV 在 DMM／r18 落空后的目录。
+        self.assertEqual(JavArchiveSource().search_url("ABW-358"),
+                         "https://javarchive.com/search?q=ABW-358")
 
     def test_a_code_without_a_shop_number_fails_every_site_before_any_request(self):
         for site in (Fc2Source(), Fc2cmadbSource(), JavArchiveSource()):
@@ -482,7 +485,7 @@ class JavArchiveTests(unittest.TestCase):
     def test_another_products_archive_page_is_not_this_ones_data(self):
         for html, code, wording in ((archive_page(video="4364209"), "FC2-PPV-4137487", "JavArchive 上没有这个商品"),
                                     ("<div class='news'></div>", "FC2-PPV-4137487", "JavArchive 上没有这个商品"),
-                                    (archive_page(), "ORETD-615", UNRECOGNISED)):
+                                    (archive_page(), "ORETD-615", "JavArchive 上没有这个商品")):
             with self.subTest(code=code, html=html[:40]), self.assertRaises(SourceFailure) as caught:
                 archive(html, code)
             self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, wording))
@@ -493,7 +496,8 @@ class JavArchiveTests(unittest.TestCase):
         self.assertEqual(JAVARCHIVE.name, "javarchive")
         self.assertEqual(JavArchiveSource().search_url("FC2-PPV-4137487"),
                          "https://javarchive.com/search?q=FC2-PPV-4137487")
-        self.assertEqual(JavArchiveSource().search_url("ORETD-615"), "")
+        self.assertEqual(JavArchiveSource().search_url("ORETD-615"),
+                         "https://javarchive.com/search?q=ORETD-615")
 
 
 DB_COVER = "https://d39jz7pbpqkw9s.cloudfront.net/thumbnails/48/4898837.webp"

@@ -25,6 +25,7 @@ from .catalog_rules import (
     is_korean_mib_code,
     normalise_code_key,
     release_code_from_filename,
+    release_code_from_filename_suffix,
     same_release_code,
     strip_scrape_mark,
 )
@@ -838,6 +839,11 @@ def _settled_candidates(connection, field: str, code: str, candidates: list[dict
 _FC2_PRODUCT = re.compile(r"^FC2[-_ ]*(?:PPV)?[-_ ]*(\d{5,})$", re.I)
 
 
+def _name_code(name: str) -> str | None:
+    """文件名里读出的番号：先说完整文件名，再认末尾／方括号里的 IV 写法。"""
+    return release_code_from_filename(name) or release_code_from_filename_suffix(name)
+
+
 def _filename_carries_code(code: str, name: str) -> bool:
     """这个文件名认不认得出这个番号。
 
@@ -854,7 +860,7 @@ def _filename_carries_code(code: str, name: str) -> bool:
     product = _FC2_PRODUCT.search(code)
     if product:
         return bool(re.search(rf"(?<!\d){product.group(1)}(?!\d)", name))
-    parsed = release_code_from_filename(name)
+    parsed = _name_code(name)
     return bool(parsed) and same_release_code(code, parsed)
 
 
@@ -902,11 +908,11 @@ def _group_identifies_code(code: str, targets) -> bool:
     """
     names = [str(target["name"] or "") for target in targets]
     if not any(_filename_carries_code(code, name) for name in names):
-        if any(release_code_from_filename(name) for name in names):
+        if any(_name_code(name) for name in names):
             return False
         return any(_folder_carries_code(code, target) for target in targets)
     return not any(
-        (parsed := release_code_from_filename(name)) and not same_release_code(code, parsed)
+        (parsed := _name_code(name)) and not same_release_code(code, parsed)
         for name in names if not _filename_carries_code(code, name))
 
 

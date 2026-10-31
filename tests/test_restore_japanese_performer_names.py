@@ -126,12 +126,12 @@ class RestoreJapanesePerformerNameTests(unittest.TestCase):
                          "--review-csv", str(self.root / "restore.csv")])
         self.assertEqual(code, 0)
         self.assertTrue(backup.is_file())
-        with sqlite3.connect(self.db) as check:
+        with contextlib.closing(sqlite3.connect(self.db)) as check:
             self.assertEqual(check.execute("SELECT canonical_name FROM entity WHERE id=?", (entity_id,)).fetchone()[0], "純白彩永")
             self.assertEqual(check.execute("SELECT tag FROM asset_tag WHERE asset_id=?", (asset_id,)).fetchone()[0], "演员:純白彩永")
             aliases = dict(check.execute("SELECT alias,source FROM entity_alias WHERE entity_id=?", (entity_id,)))
         self.assertEqual(aliases.get("纯白彩永"), NAME_SOURCE)
-        with sqlite3.connect(backup) as before:
+        with contextlib.closing(sqlite3.connect(backup)) as before:
             self.assertEqual(before.execute("SELECT canonical_name FROM entity WHERE id=?", (entity_id,)).fetchone()[0], "纯白彩永")
 
     def test_a_second_apply_changes_nothing(self):

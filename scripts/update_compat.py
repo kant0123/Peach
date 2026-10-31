@@ -65,12 +65,33 @@ def _version(value: str) -> tuple[int, ...]:
     return tuple(map(int, value.removeprefix("v").split(".")))
 
 
-def client_tags(root: Path, version: str, oldest: str = OLDEST_CLIENT) -> list[str]:
-    """已发布、不早于 `oldest`、早于本版的版本标签。"""
+def _local_tag_names(root: Path) -> list[str]:
     listed = subprocess.run(["git", "-C", str(root), "tag", "--list", "v*"], capture_output=True, text=True,
                             encoding="utf-8", check=True)
-    tags = [tag for tag in listed.stdout.split() if re.fullmatch(r"v\d+\.\d+\.\d+", tag)
+    return listed.stdout.split()
+
+
+def _remote_tag_names(root: Path) -> list[str]:
+    """PR 检出有时只带部分标签；可核对的版本不够时从 origin 补齐，不把环境问题当成不兼容。"""
+    try:
+        remote = subprocess.run(["git", "-C", str(root), "ls-remote", "--tags", "origin"],
+                                capture_output=True, text=True, encoding="utf-8", check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    return [line.split("\trefs/tags/", 1)[1].removesuffix("^{}")
+            for line in remote.stdout.splitlines() if "\trefs/tags/" in line]
+
+
+def _matching_tags(names: list[str], version: str, oldest: str) -> list[str]:
+    return [tag for tag in names if re.fullmatch(r"v\d+\.\d+\.\d+", tag)
             and _version(oldest) <= _version(tag) < _version(version)]
+
+
+def client_tags(root: Path, version: str, oldest: str = OLDEST_CLIENT) -> list[str]:
+    """已发布、不早于 `oldest`、早于本版的版本标签。"""
+    tags = _matching_tags(_local_tag_names(root), version, oldest)
+    if not tags:
+        tags = _matching_tags(_remote_tag_names(root), version, oldest)
     if not tags:
         raise ValueError(f"没有可核对的旧版本标签（{oldest} 起）；检出须带发布标签")
     return sorted(tags, key=_version)
