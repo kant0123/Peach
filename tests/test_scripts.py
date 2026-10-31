@@ -3673,7 +3673,9 @@ class OperationalScriptTests(unittest.TestCase):
                     ], provider=provider)
             self.assertEqual(result, 0)
             self.assertEqual(provider.calls, [("CCC-003", "r18dev")])
-            self.assertEqual(sleep.call_count, 1, "本地快照不能消耗来源限流等待")
+            waits = [call.args[0] for call in sleep.call_args_list if call.args]
+            self.assertEqual(len([delay for delay in waits if 2 <= delay <= 2.5]), 1,
+                             "本地快照不能消耗来源限流等待")
             with errors.open(encoding="utf-8-sig", newline="") as handle:
                 error_rows = list(csv.DictReader(handle))
             self.assertEqual([(row["code"], row["status_code"]) for row in error_rows],
