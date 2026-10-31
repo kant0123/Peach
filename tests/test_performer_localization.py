@@ -240,7 +240,7 @@ class PerformerLocalizationTests(unittest.TestCase):
                          [("飯岡かなこ", "饭冈加奈子", "localize")])
         self.assertEqual(self.con.execute("SELECT canonical_name FROM entity WHERE id=18").fetchone()[0], "飯岡かなこ")
 
-    def test_the_script_no_longer_takes_write_arguments(self):
+    def test_write_arguments_are_rejected(self):
         root = Path(self.tmp.name).resolve()
         for flag in (["--apply"], ["--backup", str(root / "backup.db")], ["--mapping-source", "x"]):
             with self.subTest(flag=flag), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
