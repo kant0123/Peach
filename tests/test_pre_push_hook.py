@@ -16,7 +16,7 @@ class PrePushHookTests(unittest.TestCase):
     def push(self, remote: str, url: str, *refs: str) -> subprocess.CompletedProcess:
         lines = "".join(f"refs/heads/work abc123 {ref} {ZERO}\n" for ref in refs)
         return subprocess.run([SHELL, str(HOOK), remote, url], input=lines, capture_output=True,
-                              text=True, encoding="utf-8", check=False)
+                              text=True, encoding="utf-8", errors="replace", check=False)
 
     def test_the_own_repository_receives_any_branch_including_main(self):
         for url in (OWN, OWN.removesuffix(".git")):
