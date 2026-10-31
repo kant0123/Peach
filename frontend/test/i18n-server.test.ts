@@ -55,6 +55,15 @@ describe('localizeServer', () => {
     expect(localizeServer('正在下载 ffmpeg 工具包')).toBe('ffmpeg ツールパッケージをダウンロード中');
   });
 
+  it('口味分析的结论、要点与探索说明，以及处理阶段的垃圾检查换成译文', async () => {
+    const { localizeServer } = await load('ja');
+    expect(localizeServer('Peach 观看行为目前更集中在巨乳、熟女。')).toBe('Peach での視聴は今のところ巨乳、熟女に集中しています。');
+    expect(localizeServer({ label: 'Peach 印证' })).toEqual({ label: 'Peach での裏付け' });
+    expect(localizeServer('浏览信号 1,204 次 · 馆藏 37 部 · 尚无观看印证'))
+      .toBe('閲覧シグナル 1,204 回 · ライブラリ 37 本 · 視聴での裏付けなし');
+    expect(localizeServer('检查垃圾文件')).toBe('ゴミファイルを確認');
+  });
+
   it('没有译文的句子原样返回', async () => {
     const { localizeServer } = await load('ja');
     expect(localizeServer('没有收录的句子')).toBe('没有收录的句子');
