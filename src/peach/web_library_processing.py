@@ -3,6 +3,7 @@ import json
 import hashlib
 
 from . import settings_file
+from .iv_completion import complete
 from .library_processing import (ALL_STAGES, COLLECT_STAGE, SCAN_STAGE, STAGES,
                                 METADATA_STAGE, PREVIEWS_STAGE, _asset_selection,
                                 decorate, issues_path, process_library, snapshot)
@@ -354,7 +355,6 @@ def w_library_processing(contract, body, *, resume=False):
                     key: value for key, value in state.items() if key != 'job_id'}))
             pending = result.get('iv_pending_ids') or []
             if pending:
-                from .iv_completion import complete
                 result['iv_completion'] = complete(
                     config, contract.database, contract.candidate_root, contract.cover_root, pending,
                     active=lambda: (contract.library_processing_job.snapshot() or {}).get('job_id') == job_id,
