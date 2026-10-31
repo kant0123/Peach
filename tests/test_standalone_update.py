@@ -542,6 +542,11 @@ class StandaloneUpdateTests(unittest.TestCase):
     def test_supported_older_clients_can_install_this_release(self):
         """旧版本标签里的更新代码原样读这一版的发布条目与更新包（ADR-0120）。"""
         from scripts import update_compat
+        try:
+            update_compat.client_tags(update_compat.ROOT, "1.0.0")
+        except ValueError as error:
+            # PR 检出可能只有部分标签或没有标签；这是检出状态，不是旧客户端读不了更新包。
+            self.skipTest(f"检出没有发布标签：{error}")
         source, output, manifest, target, archive, release = self.release_fixture()
         self.assertEqual(update_compat.verify(output, "1.0.0"), {})
         rows = [update_compat.release_row(output, "1.0.0")]
