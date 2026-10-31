@@ -144,6 +144,8 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      - name: 获取发布标签
+        run: git fetch --tags --force
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
