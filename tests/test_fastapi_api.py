@@ -4005,6 +4005,31 @@ class UnconfiguredMachineTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(calls, ['previews', 'previews'])
                 self.assertEqual(job.snapshot()['run_id'], run_id)
 
+    async def test_complete_missing_runs_the_second_pass_without_the_full_library_scan(self):
+        from peach import settings_file
+        parent = self.settings.db_path.parent
+        parent.mkdir(parents=True)
+        database = fresh_ledger(parent)
+        media = parent.parent / 'media'
+        media.mkdir()
+        config = replace(settings_file.load_config(environ={'PEACH_DATA_ROOT': str(parent.parent)}),
+                         present=True, locations={'local': (str(media),)})
+        stats = {'pending': 2, 'attempted': 2, 'processed': 1, 'applied': 1, 'covers': 0,
+                 'skipped': 0, 'skipped_recent': 1, 'failed': 0, 'remaining': 0}
+        with patch('peach.settings_file.active', return_value=config), \
+                patch('peach.web_library_processing.pending_completion_ids', return_value=[1, 2]), \
+                patch('peach.web_library_processing.complete_pending', return_value=stats) as run:
+            async with self.ledger_client(database) as (app, _client):
+                from peach.web_library_processing import w_library_processing
+                job = app.state.web_contract.library_processing_job
+                w_library_processing(app.state.web_contract, {'complete_missing': True, 'limit': 2})
+                await asyncio.to_thread(job.thread.join, 5)
+                self.assertFalse(job.thread.is_alive())
+                run.assert_called_once()
+                snapshot = job.snapshot()
+        self.assertEqual(snapshot['iv_completion'], stats)
+        self.assertEqual((snapshot['status'], snapshot['total']), ('complete', 2))
+
     async def test_preparing_the_ledger_requires_a_service_restart_to_resume_background_work(self):
         parent = self.settings.db_path.parent
         parent.mkdir(parents=True)

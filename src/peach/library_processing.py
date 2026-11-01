@@ -32,6 +32,7 @@ from .jav_cover_fetch import MIN_WIDTH, DeadlineExceeded, NotFound
 from .sources.base import SourceFailure
 from .library_nfo import sidecars, SidecarIndex
 from .media_io import directory_files, read_nfo, local_art, root_online, directory_entries, file_stat
+from .filename_metadata import infer
 from .genre_decisions import load_genre_decisions
 from .metadata import (candidate_text_is_valid, source_text_is_valid,
                        extract_catalog_evidence, extract_peach_fields, validate_provider_code)
@@ -266,6 +267,9 @@ CANDIDATE_FLUSH_SECONDS = 5.0
 #: 采集要补的字段，以及它们在 `asset` 表里的列名（没列出的与字段同名或不在表里）。
 COLLECTED_FIELDS = ('title', 'performers', 'studio', 'release_date', 'tags')
 COLUMN_OF = {'title': 'catalog_title'}
+
+#: 第二趟「文件名补全」优先看的必填标量；`tags` 与封面单列，见 `_completion_need`。
+COMPLETION_SCALARS = ('title', 'performers', 'studio', 'release_date')
 
 #: 一趟任务向外部来源要的总量。三条闸门里谁先到谁生效，之后每部片只记「本趟…已用完」。
 #: 一部片问三家目录站、每家 1～2 次，所以 6000 次约等于 1500 部。请求是一条接一条发的，
@@ -1289,23 +1293,101 @@ def _asks_cover(code, *evidence):
     return bool(code) and metadata_routes.classify(code, *evidence) not in ('kmib', 'other')
 
 
-def _iv_pending_row(row, code, found, covers, missing, cover_root):
-    """这一行要不要交给后段的文件名补全：资料或封面有一边没取到。
+def _completion_need(row, code, found, covers, missing, cover_root, clue=None):
+    """这一行要不要交给后段的文件名补全，以及先做哪一档。
 
-    本地已有封面不能替代缺失的作品资料；资料缺失时即使 covers 非空也要交出去。
+    rank 0：番号已定、常规来源什么都没给、还缺标量——第二趟最可能补上的行（IV 在这里）。
+    rank 1：还缺标量，但常规来源已经给了些东西。
+    rank 2：没有番号，文件名能读出演者或标题，靠 JavArchive 搜索识别。
+    rank 3：标量齐了，只缺封面。
+
+    `tags` 只在封面也缺时顺带补；只缺 `tags` 的行不进第二趟：JavArchive 给不了全部
+    标签，占着名额只会让真正的缺口轮不到。本地已有封面不能替代缺失的作品资料，
+    资料缺失时即使 `covers` 非空也要交出去。
     """
-    if missing:
-        return True
-    if found or covers:
-        return False
-    return (_asks_cover(code, *_studio_evidence(row))
-            and not cover_settled(cover_root / (code + '.jpg')))
+    wanted = {'title' if str(field) == 'catalog_title' else str(field) for field in missing}
+    scalars = wanted.intersection(COMPLETION_SCALARS)
+    evidence = bool(found or covers)
+    if code and metadata_routes.classify(code, *_studio_evidence(row)) in ('kmib', 'other', 'fc2'):
+        # 这些内容类型第二趟的 `_override` 不给链，放进队列只会占一个名额。
+        return False, -1
+    if scalars:
+        if code and not evidence:
+            return True, 0
+        if evidence:
+            return True, 1
+        clue = clue if clue is not None else (infer(row.get('name'), row.get('path')) or {})
+        if clue.get('title') or clue.get('performers'):
+            return True, 2
+        return False, -1
+    if not code or not _asks_cover(code, *_studio_evidence(row)):
+        return False, -1
+    if cover_settled(cover_root / (code + '.jpg')):
+        return False, -1
+    return True, 3
+
+
+def _iv_pending_row(row, code, found, covers, missing, cover_root):
+    """这一行要不要交给后段的文件名补全：资料或封面有一边没取到。"""
+    return _completion_need(row, code, found, covers, missing, cover_root)[0]
 
 
 def _pending_ids(seen, cover_root):
-    """这一趟没取到资料或封面的资产，交给后段文件名补全。"""
-    return sorted({int(row['id']) for row, code, found, covers, missing in seen
-                   if _iv_pending_row(row, code, found, covers, missing, cover_root)})
+    """这一趟没取到资料或封面的资产，按第二趟的优先级排好，交给后段文件名补全。"""
+    chosen: dict[int, int] = {}
+    for row, code, found, covers, missing in seen:
+        needed, rank = _completion_need(row, code, found, covers, missing, cover_root)
+        if not needed:
+            continue
+        asset_id = int(row['id'])
+        chosen[asset_id] = min(chosen.get(asset_id, rank), rank)
+    return [asset_id for asset_id, _rank in sorted(chosen.items(), key=lambda item: (item[1], item[0]))]
+
+
+def online_library_roots(config):
+    """配置里当前可读的来源根（账本写法翻译后的本机路径），供只读的补全选行复用。"""
+    roots = []
+    for values in config.locations.values():
+        for root in values:
+            local = translate_ledger_path(root)
+            if root_online(local) and local not in roots:
+                roots.append(local)
+    return roots
+
+
+def _path_has_prefix(path, prefix) -> bool:
+    """账本路径是否在 `prefix` 之下；`PureWindowsPath` 负责大小写与分隔符差异。"""
+    if not prefix:
+        return True
+    try:
+        PureWindowsPath(str(path or '')).relative_to(PureWindowsPath(str(prefix)))
+    except ValueError:
+        return False
+    return True
+
+
+def pending_completion_ids(config, db_path, cover_root, *, asset_ids=None, path_prefix=None):
+    """只读地列出下一趟文件名补全该处理的资产，按优先级排序。
+
+    判据与 `process_library` 末尾的 `iv_pending_ids` 同一套；不读本地文件、不问来源。
+    `path_prefix` 按账本路径（Windows 写法）前缀过滤，大小写不敏感。
+    """
+    if asset_ids is not None and not asset_ids:
+        return []
+    roots = online_library_roots(config)
+    if not roots:
+        return []
+    rows, _decisions = _collection_rows(db_path, locations=config.locations,
+                                        online_roots=roots, asset_ids=asset_ids)
+    seen = []
+    for row in rows:
+        if not _path_has_prefix(row.get('path'), path_prefix):
+            continue
+        code = normalise_code_key(row.get('code')) if row.get('code') else ''
+        clue = infer(row.get('name'), row.get('path')) or {}
+        code = code or clue.get('code') or ''
+        seen.append((row, code, [], 0, _missing_fields(row, ())))
+    return _pending_ids(seen, cover_root)
 
 
 def _scrapes_as_jav(row, code):
