@@ -56,6 +56,10 @@ def _cast_matches(clue: list[str], record: dict) -> bool:
         return True
     found = [_normal(row.get("japanese_name")) for row in record.get("actresses") or []
              if isinstance(row, dict)]
+    if not found:
+        # 搜索结果页常只把出演者写在标题里，正文没填「出演」；标题里能对上也算证据。
+        title = _normal(record.get("title"))
+        return any(name and name in title for name in wanted)
     return any(name and (name in other or other in name) for name in wanted for other in found)
 
 

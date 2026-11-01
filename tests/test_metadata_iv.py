@@ -11,7 +11,7 @@ from peach.catalog_rules import release_code_from_filename_suffix
 from peach.filename_metadata import infer
 from peach.iv_completion import _override, _record_matches, complete, identify
 from peach.sources import Page, R18DevSource
-from peach.sources.javarchive import JavArchiveSource, _search_links, links
+from peach.sources.javarchive import JavArchiveSource, _code_in_link, _search_links, links
 from peach.sources.r18dev import with_japanese
 
 IV_ARCHIVE_LINK = "/105865-imbd-214-%e5%88%9d%e5%86%99-%e4%bd%90%e3%80%85%e6%9c%a8%e6%a1%83%e8%8f%af-blu-ray%e7%89%88-pn.html"
@@ -87,6 +87,14 @@ class JavArchiveIvTests(unittest.TestCase):
                                      "IMBD-214")
         self.assertEqual(str(caught.exception), "JavArchive 上没有这个商品")
 
+    def test_quality_prefix_and_fullwidth_punctuation_do_not_hide_the_code(self):
+        link = "/370246-fhd-abp-652-pn.html"
+        self.assertEqual(_code_in_link(link), "ABP-652")
+        page = (f"<div class='news_1n'><a href='{link}'>"
+                "FHD abp-652 同棲してるボクの彼女は多重人格！？ VOL.02 あやみ旬果</a></div>")
+        self.assertEqual(_search_links(page, "同棲してるボクの彼女は多重人格!？ VOL.02 あやみ旬果"),
+                         [link])
+
     def test_keyword_results_ignore_the_popular_sidebar(self):
         page = ("<div class='news_1n'><a href='/105865-imbd-214-x-pn.html'>IMBD-214 初写 佐々木桃華</a></div>"
                 "<div class='sidebar'><a href='/999-fc2-ppv-4998939-x-pn.html'>FC2 新作</a></div>")
@@ -114,6 +122,11 @@ class FilenameMetadataTests(unittest.TestCase):
                       "[紗倉まな／古川いおり] SODstar 10 SEX AFTER PARTY 2019.MP4")
         self.assertEqual(found["performers"], ["紗倉まな", "古川いおり"])
         self.assertEqual(found["title"], "SODstar 10 SEX AFTER PARTY 2019")
+
+    def test_a_missing_opening_bracket_still_gives_the_performer(self):
+        found = infer("高杉麻里] 彼女がボンデージに着替えたら。Mな私とSな私…どっちの私が好き？.mp4")
+        self.assertEqual(found["performers"], ["高杉麻里"])
+        self.assertEqual(found["title"], "彼女がボンデージに着替えたら。Mな私とSな私…どっちの私が好き？")
 
     def test_placeholders_and_quality_tags_do_not_become_performers(self):
         for name in ("[----] 1pon-whole1.mp4", "[中文字幕] ABW-358.mp4", "[4K] title.mp4"):
