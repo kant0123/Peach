@@ -10,6 +10,7 @@ from unittest.mock import patch
 from peach.catalog_rules import release_code_from_filename_suffix
 from peach.filename_metadata import infer
 from peach.iv_completion import _override, _record_matches, complete, identify
+from peach.library_processing import _pending_ids
 from peach.sources import Page, R18DevSource
 from peach.sources.javarchive import JavArchiveSource, _code_in_link, _search_links, links
 from peach.sources.r18dev import with_japanese
@@ -162,6 +163,13 @@ class FilenameSuffixTests(unittest.TestCase):
 
 
 class FilenameCompletionTests(unittest.TestCase):
+    def test_a_no_code_row_with_a_local_cover_is_still_pending(self):
+        row = {"id": 860, "name": "[北野のぞみ 北野のぞみ] 北野のぞみの、いっぱいコスって萌えてイこう！.mkv",
+               "path": "I:\\library\\[北野のぞみ] 北野のぞみの、いっぱいコスって萌えてイこう！\\"
+                       "[北野のぞみ 北野のぞみ] 北野のぞみの、いっぱいコスって萌えてイこう！.mkv"}
+        pending = _pending_ids([(row, "", [], 1, ["catalog_title", "performers"])], Path("C:\\covers"))
+        self.assertEqual(pending, [860])
+
     def test_the_separate_pass_adds_javarchive_without_touching_fc2(self):
         row = {"path": "E:\\GLA\\01_IV\\IMBD-214\\IMBD-214.mp4",
                "name": "IMBD-214.mp4", "studio": ""}

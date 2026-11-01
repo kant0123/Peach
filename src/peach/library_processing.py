@@ -1290,11 +1290,14 @@ def _asks_cover(code, *evidence):
 
 
 def _iv_pending_row(row, code, found, covers, missing, cover_root):
-    """这一行要不要交给后段的文件名补全：资料或封面有一边没取到。"""
-    if found or covers:
-        return False
+    """这一行要不要交给后段的文件名补全：资料或封面有一边没取到。
+
+    本地已有封面不能替代缺失的作品资料；资料缺失时即使 covers 非空也要交出去。
+    """
     if missing:
         return True
+    if found or covers:
+        return False
     return (_asks_cover(code, *_studio_evidence(row))
             and not cover_settled(cover_root / (code + '.jpg')))
 
@@ -2958,6 +2961,9 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
                 if code or payload:
                     prepared.append((row, code, verify_existing, local_fields, entries,
                                      state['issue_count'] == issues_before))
+                else:
+                    # 没有番号、也没有 NFO 的行不会进入来源链；仍要留给后段按文件名补全。
+                    iv_seen.append((row, code, [], 0, _missing_fields(row, local_fields)))
                 update(checked=completed_count + index + 1)
             flush_candidates(force=True)
             pending.pop('local')
