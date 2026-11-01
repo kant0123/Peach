@@ -1,16 +1,18 @@
 """IV（イメージビデオ）的作品资料：r18 的 actors 栏、JavArchive 的日文资料块与文件名末尾番号。"""
 import json
+import sqlite3
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from peach.catalog_rules import release_code_from_filename_suffix
 from peach.filename_metadata import infer
 from peach.http import HttpResponse
-from peach.iv_completion import _override, _record_matches, complete, complete_pending, identify
+from peach.iv_completion import (BATCH_LIMIT, TIME_BUDGET_SECONDS, _override,
+                                 _record_matches, complete, complete_pending, identify)
 from peach.library_processing import _path_has_prefix, _pending_ids
 from peach.metadata_auto_apply import _group_identifies_code
 from peach.sources import Page, R18DevSource
@@ -399,6 +401,86 @@ class FilenameCompletionTests(unittest.TestCase):
             self.assertEqual(identify(Provider(), clue), "IMBD-214")
             source.return_value.search_records.return_value = [Record(), Other()]
             self.assertEqual(identify(Provider(), clue), "")
+
+
+class CompletionTailBudgetTests(unittest.TestCase):
+    """整库补全要接着跑完整条队列：只取前 120 部时，后面的既有影片永远轮不到。
+
+    `作品情報のみ補完` 与 `补全已入库影片` 是在补存量，单部重新采集能补上的那一部
+    也必须在这一趟里被轮到；日常增量同步只发现新增文件，保留原来的小尾巴。
+    """
+
+    def _start(self, body, pending=(1, 2, 3), stage_result=None):
+        from peach import web_library_processing
+        from support.ledger import fresh_ledger
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            media = root / "media"
+            media.mkdir()
+            (root / "database").mkdir()
+            db = fresh_ledger(root / "database")
+            video = media / "ABC-001.mp4"
+            video.write_bytes(b"video")
+            with closing(sqlite3.connect(db)) as connection, connection:
+                connection.execute(
+                    "INSERT INTO asset(id,location,path,name,medium,code) VALUES(1,'local',?,?,'video','ABC-001')",
+                    (str(video), video.name))
+            config = SimpleNamespace(configured=True, locations={"local": (str(media),)},
+                                     directory=lambda name: root / name)
+            contract = SimpleNamespace(
+                db_path=db, candidate_root=root / "generated", cover_root=root / "covers",
+                cache_bust=lambda: None, database=Mock(),
+                library_processing_job=SimpleNamespace(
+                    snapshot=lambda: None,
+                    start=lambda work, restart, initial, recovery: (work("job"), initial)[1],
+                    update=lambda job_id, **values: None))
+            result = {"status": "complete", "iv_pending_ids": list(pending), **(stage_result or {})}
+            with patch.object(web_library_processing.settings_file, "active", return_value=config), \
+                    patch.object(web_library_processing, "process_library", return_value=result), \
+                    patch.object(web_library_processing, "complete", return_value={"processed": len(pending)}) as tail:
+                web_library_processing.w_library_processing(contract, body)
+        return tail.call_args.kwargs
+
+    def test_the_whole_library_metadata_run_drains_the_completion_queue(self):
+        budget = self._start({"stage": "metadata"})
+        self.assertEqual((budget["limit"], budget["time_budget"]), (0, None))
+
+    def test_the_whole_library_collect_run_drains_the_completion_queue(self):
+        budget = self._start({"stage": "collect"})
+        self.assertEqual((budget["limit"], budget["time_budget"]), (0, None))
+
+    def test_a_selected_asset_run_keeps_the_short_tail(self):
+        budget = self._start({"stage": "metadata", "asset_ids": [1]})
+        self.assertEqual((budget["limit"], budget["time_budget"]), (BATCH_LIMIT, TIME_BUDGET_SECONDS))
+
+    def test_daily_incremental_sync_keeps_the_short_tail(self):
+        budget = self._start({"incremental": True})
+        self.assertEqual((budget["limit"], budget["time_budget"]), (BATCH_LIMIT, TIME_BUDGET_SECONDS))
+
+    def test_stopping_the_task_stops_the_completion_queue(self):
+        from peach.processing_control import control_for
+        from peach.web_library_processing import _tail_active
+        with tempfile.TemporaryDirectory() as directory:
+            config = SimpleNamespace(directory=lambda name: Path(directory) / name)
+            control = control_for(config)
+            control.select_job("job")
+            active = _tail_active(config, lambda: True)
+            self.assertTrue(active())
+            control.request("cancel", "job")
+            self.assertFalse(active())
+
+    def test_the_queue_reports_its_own_progress_and_clears_the_stale_deadline(self):
+        """队列接着跑时按它自己的总数报进度；上一段的截止点留着会让卡片一开跑就显示卡住。"""
+        from peach.web_library_processing import _tail_report
+        updates = []
+        job = SimpleNamespace(update=lambda job_id, **values: updates.append(values))
+        _tail_report(job, "job")(stage="补全未取得的资料", current_action="iv_completion",
+                                 current_asset_id=7, current_asset_name="A.mp4",
+                                 iv_checked=2, iv_total=9)
+        self.assertEqual((updates[0]["checked"], updates[0]["total"]), (2, 9))
+        self.assertIsNone(updates[0]["current_deadline_at"])
+        self.assertIn("last_progress_at", updates[0])
+        self.assertIn("current_started_at", updates[0])
 
 
 class SougouWikiKeywordTests(unittest.TestCase):

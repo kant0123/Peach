@@ -4,7 +4,9 @@ import hashlib
 import time
 
 from . import settings_file
-from .iv_completion import complete, complete_pending
+from .iv_completion import (BATCH_LIMIT as COMPLETION_BATCH,
+                            TIME_BUDGET_SECONDS as COMPLETION_SECONDS,
+                            complete, complete_pending)
 from .library_processing import (ALL_STAGES, COLLECT_STAGE, SCAN_STAGE, STAGES,
                                 METADATA_STAGE, PREVIEWS_STAGE, _asset_selection,
                                 decorate, issues_path, pending_completion_ids,
@@ -383,6 +385,52 @@ def _completion_job(contract, config, body):
                   'limit': limit, 'retry': retry, 'stage': 'metadata'}))
 
 
+def completion_tail_budget(stage, asset_ids, incremental):
+    """整库补全这一趟的文件名补全队列上限：`(行数, 秒数)`，0 与 None 表示跑完为止。
+
+    用户明确发起的「仅补全影片资料」「补全已入库影片」是在补存量：每趟只取队列前
+    120 部时，排在后面的既有影片永远轮不到，而单部重新采集却能补上同一部。日常
+    增量同步只发现新增文件，不该顺手跑几个小时的存量，仍保留原来的小尾巴。
+    """
+    if asset_ids is None and not incremental and stage in (COLLECT_STAGE, METADATA_STAGE):
+        return 0, None
+    return COMPLETION_BATCH, COMPLETION_SECONDS
+
+
+def _tail_active(config, active):
+    """补全队列接着跑时仍服从任务卡的暂停与停止；每部之间读一次控制文件。"""
+    control = control_for(config)
+
+    def still_active():
+        control.refresh(force=True)
+        while control.paused and not control.cancelled:
+            control.event.wait(0.25)
+            control.refresh(force=True)
+        return active() and not control.cancelled
+
+    return still_active
+
+
+def _tail_report(job, job_id):
+    """文件名补全的进度也投影到任务卡：这一段是接着跑的事件，读数与心跳都换成队列的。"""
+    def report(**values):
+        fields = {'stage': values.get('stage'), 'current_action': values.get('current_action'),
+                  'current_asset_id': values.get('current_asset_id'),
+                  'current_asset_name': values.get('current_asset_name')}
+        fields = {key: value for key, value in fields.items() if value is not None}
+        # 每部都重置等待起点并清掉上一段的截止点：`decorate` 按这两个值报「已等待」与
+        # 「长时间没有新进展」，沿用它上一段的值，队列一开跑就显示成卡住。
+        fields.update(current_started_at=time.time(), current_deadline_at=None,
+                      last_progress_at=time.time())
+        if values.get('iv_checked') is not None:
+            fields['checked'] = values['iv_checked']
+        if values.get('iv_total') is not None:
+            fields['total'] = values['iv_total']
+        job.update(job_id, **fields)
+
+    return report
+
+
 def w_library_processing(contract, body, *, resume=False):
     config = settings_file.active()
     if (body or {}).get('action'):
@@ -418,10 +466,13 @@ def w_library_processing(contract, body, *, resume=False):
                     key: value for key, value in state.items() if key != 'job_id'}))
             pending = result.get('iv_pending_ids') or []
             if pending:
+                limit, seconds = completion_tail_budget(stage, asset_ids, incremental)
                 result['iv_completion'] = complete(
                     config, contract.database, contract.candidate_root, contract.cover_root, pending,
-                    active=lambda: (contract.library_processing_job.snapshot() or {}).get('job_id') == job_id,
-                    report=lambda **values: contract.library_processing_job.update(job_id, **values))
+                    limit=limit, time_budget=seconds,
+                    active=_tail_active(config, lambda: (
+                        contract.library_processing_job.snapshot() or {}).get('job_id') == job_id),
+                    report=_tail_report(contract.library_processing_job, job_id))
             contract.library_processing_job.update(job_id, **{key: value for key, value in result.items() if key != 'job_id'})
         finally:
             contract.cache_bust()
