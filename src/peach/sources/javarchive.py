@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 import urllib.parse
 
 from bs4 import BeautifulSoup
@@ -154,16 +155,23 @@ def _strip_title_code(title: str, code: str) -> str:
 
 
 def _code_in_link(link: str) -> str:
-    """站内作品地址里的番号：`/105865-imbd-214-…`、`/926949-FC2-PPV-4137487-…`。"""
+    """站内作品地址里的番号：`/105865-imbd-214-…`、`/370246-fhd-abp-652-…`。"""
     text = urllib.parse.unquote(str(link or ""))
     fc2 = re.search(r"(?i)/\d+-fc2[-_]?(?:ppv)?[-_]?(\d{5,8})(?=[-_.])", text)
     if fc2:
         return normalise_code_key(f"FC2-PPV-{fc2.group(1)}")
-    matched = re.search(r"(?i)/\d+-([a-z]{2,8})-(\d{2,5})(?=[-_.])", text)
-    if not matched:
-        return ""
-    code = normalise_code_key(f"{matched.group(1)}-{matched.group(2)}")
-    return code if is_jav_code(code) else ""
+    body = re.sub(r"^/\d+-", "", text)
+    for matched in re.finditer(r"(?i)(?<![a-z])([a-z]{2,8})-(\d{2,5})(?=[-_.]|$)", body):
+        code = normalise_code_key(f"{matched.group(1)}-{matched.group(2)}")
+        if is_jav_code(code):
+            return code
+    return ""
+
+
+def _search_text(value: str) -> str:
+    """搜索词比对前的归一：全半角、大小写、标点都不该决定命中。"""
+    return re.sub(r"[^0-9a-z\u3040-\u30ff\u3400-\u9fff]+", "",
+                  unicodedata.normalize("NFKC", str(value or "")).casefold())
 
 
 def _search_links(html: str, query: str) -> list[str]:
@@ -171,8 +179,10 @@ def _search_links(html: str, query: str) -> list[str]:
 
     站上的搜索页在没有命中时仍会列出热门与侧栏作品；不过滤就会把那些 FC2 的标题当成
     「IMBD-214 的搜索结果」。每个空白分隔的词都要出现在地址或链接文字里，才当作命中。
+    标题里的 `！？`／`!？`、`VOL.02`／`VOL 02` 只是写法差异，归一后再比。
     """
-    tokens = [token.casefold() for token in str(query or "").split() if len(token) >= 2]
+    tokens = [_search_text(token) for token in str(query or "").split()]
+    tokens = [token for token in tokens if len(token) >= 2]
     if not tokens:
         return []
     soup = BeautifulSoup(html, "html.parser")
@@ -181,8 +191,8 @@ def _search_links(html: str, query: str) -> list[str]:
         link = str(anchor.get("href") or "").strip()
         if not re.fullmatch(r"/\d+-.+\.html", link):
             continue
-        hay = " ".join((urllib.parse.unquote(link), anchor.get_text(" ", strip=True),
-                        str(anchor.get("title") or ""))).casefold()
+        hay = _search_text(" ".join((urllib.parse.unquote(link), anchor.get_text(" ", strip=True),
+                                     str(anchor.get("title") or ""))))
         if all(token in hay for token in tokens) and link not in found:
             found.append(link)
     return found

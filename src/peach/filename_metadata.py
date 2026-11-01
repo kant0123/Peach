@@ -16,6 +16,8 @@ from .catalog_rules import release_code_from_filename, release_code_from_filenam
 
 #: 名字开头的方括号、圆括号或【】块。作品目录常写成 `[出演者] 标题`。
 _LEADING_BRACKET = re.compile(r"^\s*[\[\(【]([^\[\]\(\)【】]{1,80})[\]\)】]\s*(.+)$")
+#: 下载站常把左边的开括号吃掉：`高杉麻里] 标题`、`枢木あおい, 高杉麻里] 标题`。
+_STRAY_CLOSE = re.compile(r"^\s*([^\[\]【】]{1,60})\]\s*(.+)$")
 #: 多人并列的写法；`／` 与 `/` 在日文目录里同样常见。
 _PERSON_SEPARATOR = re.compile(r"[、,，／/]")
 _KANJI_KANA = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
@@ -64,7 +66,7 @@ def _title(value: str) -> str:
 
 def _bracket_metadata(text: str) -> tuple[str, list[str]] | None:
     cleaned = re.sub(r"^[\s$'\"`]+", "", str(text or ""))
-    match = _LEADING_BRACKET.match(cleaned)
+    match = _LEADING_BRACKET.match(cleaned) or _STRAY_CLOSE.match(cleaned)
     if not match:
         return None
     people = _people(match.group(1))

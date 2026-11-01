@@ -51,11 +51,25 @@ def _title_matches(clue: str, found: str) -> bool:
 
 
 def _cast_matches(clue: list[str], record: dict) -> bool:
-    wanted = [_normal(name) for name in clue if _normal(name)]
+    wanted = []
+    for name in clue:
+        for part in re.split(r"[\s、,，／/]+", str(name)):
+            normalized = _normal(part)
+            if normalized:
+                wanted.append(normalized)
     if not wanted:
         return True
-    found = [_normal(row.get("japanese_name")) for row in record.get("actresses") or []
-             if isinstance(row, dict)]
+    found = []
+    for row in record.get("actresses") or []:
+        if not isinstance(row, dict):
+            continue
+        name = re.sub(r"^(?:出\s*演(?:者)?|者)\s*[:：]\s*", "", str(row.get("japanese_name") or ""))
+        if normalized := _normal(name):
+            found.append(normalized)
+    if not found:
+        # 搜索结果页常只把出演者写在标题里，正文没填「出演」；标题里能对上也算证据。
+        title = _normal(record.get("title"))
+        return any(name in title for name in wanted)
     return any(name and (name in other or other in name) for name in wanted for other in found)
 
 
