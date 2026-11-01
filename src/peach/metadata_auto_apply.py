@@ -905,7 +905,15 @@ def _group_identifies_code(code: str, targets) -> bool:
 
     身份保证仍然成立：读不出番号的文件证明不了这组是别的片；组里真混进别的番号时
     那一条读得出来，照旧交回人工。
+
+    第二趟已按文件名把番号写进账本的行，文件名本身当然还没有这个番号；归属串
+    `auto:iv-completion-*` 就是那一次的识别证据，值也核过是同一个番号时直接认。
     """
+    for target in targets:
+        owner = owner_of(target.get("field_owners"), "code")
+        if (owner.startswith("auto:iv-completion-")
+                and same_release_code(code, str(target.get("code") or ""))):
+            return True
     names = [str(target["name"] or "") for target in targets]
     if not any(_filename_carries_code(code, name) for name in names):
         if any(_name_code(name) for name in names):

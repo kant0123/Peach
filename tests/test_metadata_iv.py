@@ -11,6 +11,7 @@ from peach.catalog_rules import release_code_from_filename_suffix
 from peach.filename_metadata import infer
 from peach.iv_completion import _override, _record_matches, complete, identify
 from peach.library_processing import _pending_ids
+from peach.metadata_auto_apply import _group_identifies_code
 from peach.sources import Page, R18DevSource
 from peach.sources.javarchive import JavArchiveSource, _code_in_link, _search_links, links
 from peach.sources.r18dev import with_japanese
@@ -169,6 +170,16 @@ class FilenameCompletionTests(unittest.TestCase):
                        "[北野のぞみ 北野のぞみ] 北野のぞみの、いっぱいコスって萌えてイこう！.mkv"}
         pending = _pending_ids([(row, "", [], 1, ["catalog_title", "performers"])], Path("C:\\covers"))
         self.assertEqual(pending, [860])
+
+    def test_a_code_written_by_the_second_pass_identifies_the_group(self):
+        target = {
+            "code": "ABP-279",
+            "name": "[北野のぞみ 北野のぞみ] 北野のぞみの、いっぱいコスって萌えてイこう！.mkv",
+            "path": "I:\\library\\[北野のぞみ] 北野のぞみの、いっぱいコスって萌えてイこう！\\"
+                    "[北野のぞみ 北野のぞみ] 北野のぞみの、いっぱいコスって萌えてイこう！.mkv",
+            "field_owners": '{"code": "auto:iv-completion-iv-20261101-t150746"}',
+        }
+        self.assertTrue(_group_identifies_code("ABP-279", [target]))
 
     def test_the_separate_pass_adds_javarchive_without_touching_fc2(self):
         row = {"path": "E:\\GLA\\01_IV\\IMBD-214\\IMBD-214.mp4",
