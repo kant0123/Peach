@@ -145,6 +145,20 @@ def identify(provider, clue: dict, *, deadline=None, wiki: SougouWikiSearch | No
     return codes[0] if len(codes) == 1 else ""
 
 
+def _sougou_wiki(config) -> SougouWikiSearch:
+    """総合Wiki 的浏览器取页器；浏览器起不来时 `available` 为假，不阻断补全。"""
+    return SougouWikiSearch(config.directory("state") / "browser" / "sougouwiki")
+
+
+def _close_quietly(value) -> None:
+    if value is None:
+        return
+    try:
+        value.close()
+    except Exception:  # noqa: BLE001 - 关闭失败不该盖住本趟统计
+        pass
+
+
 def _row(connection: sqlite3.Connection, asset_id: int) -> dict | None:
     row = connection.execute(
         "SELECT a.id,a.path,a.name,a.code,a.studio,a.creator,a.release_date,a.catalog_title,"
@@ -283,7 +297,7 @@ def complete(config, database, candidate_root, cover_root, asset_ids, *,
         return stats
     attempts = _load_attempts(attempts_path)
     provider = None
-    wiki = None
+    wiki = _sougou_wiki(config)
     deadline = time.monotonic() + time_budget if time_budget else None
     budget = max(0, int(limit))
     try:
@@ -318,8 +332,6 @@ def complete(config, database, candidate_root, cover_root, asset_ids, *,
                     break
                 stats["attempted"] += 1
                 if not code:
-                    if wiki is None:
-                        wiki = SougouWikiSearch(config.directory("state") / "browser" / "sougouwiki")
                     code = identify(provider, clue, wiki=wiki)
                     if not code:
                         stats["skipped"] += 1
@@ -393,11 +405,7 @@ def complete(config, database, candidate_root, cover_root, asset_ids, *,
                 provider.close()
             except Exception:  # noqa: BLE001 - 关闭连接失败不该盖住本趟统计
                 pass
-        if wiki is not None:
-            try:
-                wiki.close()
-            except Exception:  # noqa: BLE001 - 浏览器关闭失败不该盖住本趟统计
-                pass
+        _close_quietly(wiki)
         lock.release()
     stats["remaining"] = max(0, total - stats["attempted"] - stats["skipped_recent"])
     return stats
