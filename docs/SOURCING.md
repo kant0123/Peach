@@ -199,10 +199,12 @@ Wiki 与视频作品资料无关。
 - 没有番号的行用 JavArchive 按标题和出演者搜索（`JavArchiveSource.search_records`）。搜索结果
   的侧栏与热门栏不含查询词，会被过滤掉。标题的包含或高相似、出演者一致两项同时成立，
   且**同一番号只有一件**时才采用；有歧义就什么都不写。
-- 番号确定后，对该行重跑一次现有的 `process_library`，把 `javarchive` 排在官方档之后、
-  综合索引之前，缺标量时才问它。只补实际的缺口（`recheck_existing=False`），不重问已经
-  答过且有新鲜快照的来源。候选合并、自动落库与封面都走既有判定；JavArchive 是转载来源，
-  需要两家一致的字段仍照旧留在复核队列。
+- 番号确定后，对该行重跑一次现有的 `process_library`。有码行把 `javarchive` 提到最前，
+  并去掉 `makers`、`prestige`、`faleno`、`dahlia`、`mgstage` 这几档：它们经 amane 桥，
+  准备运行环境的成本远高于 IV 番号在片商官网的命中率；其他类型仍按官方档、`javarchive`、
+  综合索引的顺序。只补实际的缺口（`recheck_existing=False`），不重问已经答过且有新鲜
+  快照的来源。候选合并、自动落库与封面都走既有判定；JavArchive 是转载来源，需要两家
+  一致的字段仍照旧留在复核队列。
 - 每趟最多处理 120 部、最多 900 秒（`BATCH_LIMIT`、`TIME_BUDGET_SECONDS`）。处理过的行记进
   `state/iv-completion/attempts.json`：同一行、同一组缺失字段在 7 天内不再重问（失败 1 天，
   认不出番号 7 天，韩国 MIB／国产欧美 30 天）；文件名、番号或缺失字段一变就重新尝试。

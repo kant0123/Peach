@@ -33,7 +33,7 @@ from .field_owners import write_owned_fields
 from .filename_metadata import infer
 from .fsutil import atomic_write_text
 from .jav_cover_fetch import DeadlineExceeded
-from .metadata_routes import OFFICIAL_STAGE, classify, route_for_code
+from .metadata_routes import AMANE_OFFICIAL_STAGE, OFFICIAL_STAGE, classify, route_for_code
 from .sources import Session
 from .sources.javarchive import JavArchiveSource
 
@@ -155,10 +155,13 @@ def _missing(row: dict) -> list[str]:
 
 
 def _override(code: str, row: dict) -> dict[str, tuple[str, ...]] | None:
-    """这一行的来源链：官方与发行方在前，JavArchive 次之，综合索引最后。
+    """这一行的来源链：IV 先问 JavArchive，其余类型官方在前、JavArchive 次之。
 
-    JavArchive 是 IV 的主要目录；放在综合索引之前，缺资料的行不必先白问三家
-    收录 IV 很少的站。候选的结算顺序仍由 `metadata_policy` 决定，不随查询顺序变。
+    有码行的 `makers`、`prestige` 等经 amane 桥，准备桥要先建/校验一套独立运行环境；
+    IV 的番号几乎不在片商官网目录里，为了一个问不出东西的档把整趟堵在准备阶段不划算。
+    有码行去掉这几档、把 JavArchive 提到最前，再落到 r18dev、DMM 与综合索引；其他类型
+    保持官方、JavArchive、综合索引的顺序。候选的结算顺序仍由 `metadata_policy` 决定，
+    不随查询顺序变。
     """
     kind = classify(code, row.get("path"), row.get("name"), row.get("studio"))
     if kind in ("kmib", "other", "unknown", "fc2"):
@@ -166,6 +169,10 @@ def _override(code: str, row: dict) -> dict[str, tuple[str, ...]] | None:
     chain = route_for_code(code, row.get("path"), row.get("name"), row.get("studio"))
     if not chain:
         return None
+    if kind == "censored":
+        rest = tuple(source for source in chain
+                     if source not in AMANE_OFFICIAL_STAGE and source != "javarchive")
+        return {kind: ("javarchive", *rest)}
     if "javarchive" in chain:
         return {kind: chain}
     official = tuple(source for source in chain if source in OFFICIAL_STAGE)
