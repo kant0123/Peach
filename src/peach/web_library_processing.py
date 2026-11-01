@@ -1,12 +1,14 @@
 """统一处理任务的启动、只读状态查询与失败项重试。"""
 import json
 import hashlib
+import time
 
 from . import settings_file
-from .iv_completion import complete
+from .iv_completion import complete, complete_pending
 from .library_processing import (ALL_STAGES, COLLECT_STAGE, SCAN_STAGE, STAGES,
                                 METADATA_STAGE, PREVIEWS_STAGE, _asset_selection,
-                                decorate, issues_path, process_library, snapshot)
+                                decorate, issues_path, pending_completion_ids,
+                                process_library, snapshot)
 from .processing_control import control_for, initial_estimate, valid_mode, mode_ratio
 
 ACTIVE = ('running', 'pausing', 'paused', 'stopping')
@@ -24,6 +26,7 @@ PUBLIC_FIELDS = frozenset({
     'issues_log', 'issues_truncated', 'retryable_asset_ids', 'notes', 'current_asset_id',
     'current_asset_name', 'current_action', 'current_started_at', 'last_progress_at', 'stalled',
     'waited_seconds', 'completed_at', 'current_source', 'skip_requested', 'archived', 'new_asset_count',
+    'iv_completion',
 })
 
 
@@ -322,6 +325,64 @@ def _processing_request(contract, config, previous, body):
     return retry_ids, asset_ids, stage
 
 
+def _completion_job(contract, config, body):
+    """只跑文件名补全：不扫描、不读本地资料，按账本算出该补哪些行。
+
+    与全馆处理末尾的第二趟共用 `complete_pending`，所以候选、自动反映、封面和
+    试过记录都是同一套；`path_prefix` 把范围收窄到一个目录，`retry` 忽略近期记录。
+    """
+    if not config.configured or not config.locations:
+        raise ValueError('请先添加媒体目录')
+    if contract.db_path.resolve() != (config.directory('database') / 'ledger.db').resolve():
+        raise ValueError('当前馆藏与媒体配置不一致')
+    raw_ids = (body or {}).get('asset_ids')
+    asset_ids = _asset_selection(contract.db_path, raw_ids) if raw_ids is not None else None
+    path_prefix = str((body or {}).get('path_prefix') or '').strip() or None
+    limit = int((body or {}).get('limit') or 500)
+    retry = bool((body or {}).get('retry'))
+    pending = pending_completion_ids(config, contract.db_path, contract.cover_root,
+                                     asset_ids=asset_ids, path_prefix=path_prefix)
+
+    def work(job_id):
+        try:
+            stats = complete_pending(
+                config, contract.database, contract.candidate_root, contract.cover_root,
+                asset_ids=asset_ids, path_prefix=path_prefix, limit=limit, retry=retry,
+                active=lambda: (contract.library_processing_job.snapshot() or {}).get('job_id') == job_id,
+                report=lambda **values: contract.library_processing_job.update(job_id, **{
+                    key: value for key, value in {
+                        'stage': values.get('stage') or '补全未取得的资料',
+                        'current_action': values.get('current_action') or 'iv_completion',
+                        'current_asset_id': values.get('current_asset_id'),
+                        'current_asset_name': values.get('current_asset_name') or '',
+                        'checked': values.get('iv_checked'),
+                        'total': values.get('iv_total'),
+                    }.items() if value is not None}))
+            locked = stats.get('stopped') == 'locked'
+            failed = bool(stats.get('failed')) or locked
+            contract.library_processing_job.update(
+                job_id, status='failed' if failed else 'complete',
+                outcome='partial' if failed else 'complete',
+                stage='补全未完成' if failed else '补全结束',
+                completed_at=time.time(), iv_completion=stats,
+                checked=int(stats.get('attempted') or 0), total=int(stats.get('pending') or 0),
+                error=('另一个文件名补全正在运行' if locked
+                       else '部分作品补全失败' if stats.get('failed') else ''))
+        finally:
+            contract.cache_bust()
+
+    return public_state(contract.library_processing_job.start(
+        work, restart=True,
+        initial={'stage': '补全未取得的资料', 'requested_stage': 'metadata',
+                 'checked': 0, 'total': len(pending), 'candidates': 0, 'covers': 0,
+                 'auto_applied': 0, 'issue_count': 0, 'paused_count': 0, 'issue_preview': [],
+                 'issues_truncated': False, 'notes': {}, 'retryable_asset_ids': [],
+                 'followups': [], 'started_at': time.time(), 'error': '',
+                 'iv_completion': None},
+        recovery={'complete_missing': True, 'asset_ids': asset_ids, 'path_prefix': path_prefix,
+                  'limit': limit, 'retry': retry, 'stage': 'metadata'}))
+
+
 def w_library_processing(contract, body, *, resume=False):
     config = settings_file.active()
     if (body or {}).get('action'):
@@ -329,6 +390,8 @@ def w_library_processing(contract, body, *, resume=False):
     previous = _current(contract)
     if previous.get('status') in ACTIVE and not resume:
         return public_state(previous)
+    if (body or {}).get('complete_missing'):
+        return _completion_job(contract, config, body)
     if (body or {}).get('retry') is not None:
         previous['retryable_asset_ids'] = _remaining_retry_ids(contract, previous)
     retry_ids, asset_ids, stage = _processing_request(contract, config, previous, body)

@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 from peach.catalog_rules import release_code_from_filename_suffix
 from peach.filename_metadata import infer
-from peach.iv_completion import _override, _record_matches, complete, identify
-from peach.library_processing import _pending_ids
+from peach.iv_completion import _override, _record_matches, complete, complete_pending, identify
+from peach.library_processing import _path_has_prefix, _pending_ids
 from peach.metadata_auto_apply import _group_identifies_code
 from peach.sources import Page, R18DevSource
 from peach.sources.javarchive import JavArchiveSource, _code_in_link, _search_links, links
@@ -233,7 +233,135 @@ class FilenameCompletionTests(unittest.TestCase):
                 stats = complete(config, Database(), Path("candidates"), Path("covers"), [7])
         self.assertEqual(calls[0]["asset_ids"], [7])
         self.assertIn("javarchive", calls[0]["route_overrides"]["censored"])
+        self.assertFalse(calls[0]["recheck_existing"])
         self.assertEqual((stats["processed"], stats["applied"], stats["covers"]), (1, 2, 1))
+
+    def test_scalar_gaps_come_before_cover_only_and_tags_only(self):
+        rows = [
+            ({"id": 5, "name": "ABP-001.mp4", "path": "E:\\a\\ABP-001.mp4", "studio": ""},
+             "ABP-001", [], 0, ["tags"]),
+            ({"id": 4, "name": "ABP-002.mp4", "path": "E:\\a\\ABP-002.mp4", "studio": ""},
+             "ABP-002", [], 0, []),
+            ({"id": 3, "name": "IMBD-003.mp4", "path": "E:\\a\\IMBD-003.mp4", "studio": ""},
+             "IMBD-003", [], 0, ["title", "performers"]),
+            ({"id": 2, "name": "[出演者] タイトル.mp4", "path": "E:\\a\\[出演者] タイトル.mp4", "studio": ""},
+             "", [], 0, ["title"]),
+        ]
+
+        def settled(path):
+            return Path(path).stem == "ABP-001"
+
+        with patch("peach.library_processing.cover_settled", side_effect=settled):
+            pending = _pending_ids(rows, Path("C:\\covers"))
+        self.assertEqual(pending, [3, 2, 4])
+
+    def test_javarchive_comes_before_the_community_stage(self):
+        row = {"path": "E:\\GLA\\01_IV\\IMBD-214\\IMBD-214.mp4",
+               "name": "IMBD-214.mp4", "studio": ""}
+        chain = _override("IMBD-214", row)["censored"]
+        self.assertLess(chain.index("r18dev"), chain.index("javarchive"))
+        self.assertLess(chain.index("javarchive"), chain.index("avbase"))
+
+    def test_a_recent_attempt_is_skipped_until_the_row_changes_or_retry(self):
+        class Connection:
+            def execute(self, *_args, **_kwargs):
+                return self
+
+            def fetchone(self):
+                return {"id": 7, "path": "E:\\GLA\\01_IV\\IMBD-214\\IMBD-214.mp4",
+                        "name": "IMBD-214.mp4", "code": "IMBD-214", "studio": "",
+                        "creator": "", "release_date": "", "catalog_title": "",
+                        "performers": "", "tags": ""}
+
+        class Database:
+            db_path = Path("ledger.db")
+
+            @contextmanager
+            def read_connection(self):
+                yield Connection()
+
+        class Provider:
+            transport = object()
+
+            def close(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+
+            def fake_process(*_args, **kwargs):
+                calls.append(kwargs)
+                return {"auto_applied": 1, "covers": 0}
+
+            config = SimpleNamespace(directory=lambda name: Path(directory) / name)
+            with patch("peach.library_processing.LibraryMetadataProvider", return_value=Provider()), \
+                    patch("peach.library_processing.process_library", side_effect=fake_process):
+                first = complete(config, Database(), Path("candidates"), Path("covers"), [7])
+                second = complete(config, Database(), Path("candidates"), Path("covers"), [7])
+                third = complete(config, Database(), Path("candidates"), Path("covers"), [7], retry=True)
+        self.assertEqual((first["processed"], second["processed"], third["processed"]), (1, 0, 1))
+        self.assertEqual(second["skipped_recent"], 1)
+        self.assertEqual(len(calls), 2)
+
+    def test_skipped_recent_rows_do_not_fill_the_per_run_limit(self):
+        rows = {
+            1: {"id": 1, "path": "E:\\GLA\\ABP-001\\ABP-001.mp4", "name": "ABP-001.mp4",
+                "code": "ABP-001", "studio": "", "creator": "", "release_date": "",
+                "catalog_title": "", "performers": "", "tags": ""},
+            2: {"id": 2, "path": "E:\\GLA\\ABP-002\\ABP-002.mp4", "name": "ABP-002.mp4",
+                "code": "ABP-002", "studio": "", "creator": "", "release_date": "",
+                "catalog_title": "", "performers": "", "tags": ""},
+        }
+
+        class Connection:
+            params = ()
+
+            def execute(self, _sql, params=()):
+                self.params = params
+                return self
+
+            def fetchone(self):
+                return rows.get(int(self.params[0]))
+
+        class Database:
+            db_path = Path("ledger.db")
+
+            @contextmanager
+            def read_connection(self):
+                yield Connection()
+
+        class Provider:
+            transport = object()
+
+            def close(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+
+            def fake_process(*_args, **kwargs):
+                calls.append(kwargs["asset_ids"])
+                return {"auto_applied": 0, "covers": 0}
+
+            config = SimpleNamespace(directory=lambda name: Path(directory) / name)
+            with patch("peach.library_processing.LibraryMetadataProvider", return_value=Provider()), \
+                    patch("peach.library_processing.process_library", side_effect=fake_process):
+                complete(config, Database(), Path("candidates"), Path("covers"), [1, 2], limit=1)
+                second = complete(config, Database(), Path("candidates"), Path("covers"), [1, 2], limit=1)
+        self.assertEqual(calls, [[1], [2]])
+        self.assertEqual((second["processed"], second["skipped_recent"]), (1, 1))
+
+    def test_path_prefix_ignores_case_and_separator(self):
+        self.assertTrue(_path_has_prefix("E:\\GLA\\01_IV\\IMBD-214\\IMBD-214.mp4", "e:/gla/01_iv"))
+        self.assertFalse(_path_has_prefix("E:\\GLA\\02\\x.mp4", "E:\\GLA\\01_IV"))
+        self.assertTrue(_path_has_prefix("anything", ""))
+
+    def test_complete_pending_returns_without_asking_when_nothing_is_pending(self):
+        config = SimpleNamespace()
+        database = SimpleNamespace(db_path=Path("ledger.db"))
+        with patch("peach.library_processing.pending_completion_ids", return_value=[]):
+            stats = complete_pending(config, database, Path("candidates"), Path("covers"))
+        self.assertEqual((stats["pending"], stats["processed"], stats["stopped"]), (0, 0, "empty"))
 
     def test_only_a_unique_title_and_performer_match_is_accepted(self):
         clue = {"title": "初写 佐々木桃華", "performers": ["佐々木桃華"], "code": ""}

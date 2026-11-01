@@ -103,6 +103,59 @@ class LibraryNfoTests(unittest.TestCase):
                          ('XeYkdb', 'https://javdb.com/v/XeYkdb'))
 
     @windows_ledger_roots
+    def test_complete_pending_fills_an_iv_row_and_then_stops_when_nothing_is_missing(self):
+        from peach.iv_completion import complete_pending
+
+        media = self.root / 'media'
+        media.mkdir()
+        video = media / 'IMBD-214.mp4'
+        video.write_bytes(b'video')
+        db = fresh_ledger(self.root)
+        with closing(sqlite3.connect(db)) as connection, connection:
+            connection.execute(
+                "INSERT INTO asset(id,location,path,name,medium,code,studio,release_date)"
+                " VALUES(1,'local',?,?,'video','IMBD-214','アイファクトリー','2013-11-25')",
+                (str(video), video.name))
+        covers = self.root / 'covers'
+        covers.mkdir()
+        Image.new('RGB', (1600, 1600), 'white').save(covers / 'IMBD-214.jpg')
+        config = PeachConfig(self.root, self.root / 'config.toml', present=True,
+                             locations={'local': (str(media),)})
+        provider = Mock()
+
+        def query(code, source='r18dev', **_):
+            if source == 'javarchive':
+                return {'id': 'IMBD-214', 'source_url': 'https://javarchive.com/105865-imbd-214-pn.html',
+                        'title': '初写 佐々木桃華 Blu-ray版', 'maker': 'アイファクトリー',
+                        'release_date': '2013-11-25', 'cover_urls': [],
+                        'actresses': [{'japanese_name': '佐々木桃華'}], 'genres': ['アイドル']}
+            raise NotFound('没有')
+
+        provider.query.side_effect = query
+        provider.community.side_effect = NotFound('没有')
+        provider.amane.side_effect = NotFound('没有')
+        provider.cover.return_value = False
+        with patch('peach.library_processing.LibraryMetadataProvider', return_value=provider), \
+                patch('peach.metadata_amane.ensure'), \
+                patch('peach.library_processing._enrich_finished_performers',
+                      return_value={'aliases': 0, 'avatars': 0, 'conflicts': 0, 'failed': 0}):
+            first = complete_pending(config, LedgerDatabase(db), self.root / 'generated', covers,
+                                     limit=10, time_budget=60)
+            with closing(sqlite3.connect(db)) as connection:
+                title, performers = connection.execute(
+                    'SELECT catalog_title, (SELECT count(*) FROM asset_entity ae'
+                    ' JOIN entity e ON e.id=ae.entity_id WHERE ae.asset_id=asset.id'
+                    " AND e.kind='performer') FROM asset WHERE id=1").fetchone()
+            second = complete_pending(config, LedgerDatabase(db), self.root / 'generated', covers,
+                                      limit=10, time_budget=60)
+        self.assertEqual((first['processed'], first['failed']), (1, 0))
+        self.assertEqual(title, '初写 佐々木桃華 Blu-ray版')
+        self.assertEqual(performers, 1)
+        self.assertTrue((config.directory('sources') / 'library-metadata/IMBD-214-javarchive.json').is_file())
+        self.assertTrue((config.directory('state') / 'iv-completion/attempts.json').is_file())
+        self.assertEqual((second['pending'], second['processed']), (0, 0))
+
+    @windows_ledger_roots
     def test_targeted_recheck_asks_a_source_despite_old_miss_but_normal_collection_keeps_it(self):
         from peach.library_processing import _MissCache, misses_path
         for recheck in (False, True):

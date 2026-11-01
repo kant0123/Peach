@@ -511,6 +511,26 @@ def _process_library(args: argparse.Namespace) -> int:
         from .jobs import JobCancelled
         database = LedgerDatabase(args.db)
         try:
+            if getattr(args, 'complete_missing', False):
+                from .iv_completion import complete_pending
+                stats = complete_pending(
+                    config, database, config.directory('generated'),
+                    config.directory('generated') / 'covers',
+                    path_prefix=getattr(args, 'path_prefix', None),
+                    limit=(getattr(args, 'limit', 0) or 500),
+                    retry=bool(getattr(args, 'retry', False)),
+                    report=lambda **values: print(
+                        f"{values.get('stage') or '补全未取得的资料'}："
+                        f"{values.get('iv_checked', 0)}/{values.get('iv_total', 0)}", flush=True))
+                print(f"文件名补全：处理 {stats.get('processed', 0)} 部，"
+                      f"自动反映 {stats.get('applied', 0)} 项，封面 {stats.get('covers', 0)} 张，"
+                      f"跳过近期已试 {stats.get('skipped_recent', 0)} 部，"
+                      f"剩余 {stats.get('remaining', 0)} 部", flush=True)
+                failed = bool(stats.get('failed'))
+                handle.finish('failed' if failed else 'succeeded',
+                              summary={'iv_completion': stats},
+                              error='部分作品补全失败' if failed else '')
+                return 1 if failed else 0
             result = process_library(config, args.db, config.directory('generated'),
                                      config.directory('generated') / 'covers', location=args.location,
                                      database=database,
@@ -789,6 +809,14 @@ def build_parser() -> argparse.ArgumentParser:
     process_parser = commands.add_parser('process', help='扫描文件并补全馆藏资料')
     process_parser.add_argument('location', nargs='?', default='configured')
     process_parser.add_argument('--db', type=Path, default=DEFAULT_DB)
+    process_parser.add_argument('--complete-missing', action='store_true',
+                                help='只补全未取得资料的作品，不扫描也不读本地资料')
+    process_parser.add_argument('--path-prefix',
+                                help='只处理账本路径以此前缀开头的作品，配合 --complete-missing')
+    process_parser.add_argument('--limit', type=int, default=0,
+                                help='本趟最多处理多少部（默认 500，0 表示用默认值）')
+    process_parser.add_argument('--retry', action='store_true',
+                                help='忽略最近的补全记录，重新尝试')
     process_parser.set_defaults(handler=_process_library)
 
     token = commands.add_parser("token", help="查看局域网访问口令，没有就生成一份")
