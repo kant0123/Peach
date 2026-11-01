@@ -48,7 +48,9 @@ ADR-0132 把「文件名补全」做成常规处理之后的第二趟，并把�
 ### 第二趟的成本
 
 - `process_library` 用 `recheck_existing=False`，只补实际缺口，复用新鲜快照与「没有」记忆。
-- `javarchive` 排在官方档之后、综合索引之前；候选取舍仍按 `metadata_policy`，不随查询顺序变。
+- 有码行把 `javarchive` 提到最前，并去掉 `makers`／`prestige`／`faleno`／`dahlia`／`mgstage`
+  这几档：它们经 amane 桥，准备运行环境的成本远高于 IV 番号在片商官网的命中率。其他类型保持
+  官方档 → `javarchive` → 综合索引。候选取舍仍按 `metadata_policy`，不随查询顺序变。
 - 全馆处理末尾每趟上限 120 部、900 秒；单独运行默认 500 部、1800 秒，调用处可以覆盖。
 
 ### 单独运行
@@ -75,5 +77,5 @@ ADR-0132 把「文件名补全」做成常规处理之后的第二趟，并把�
 ## 验证
 
 临时账本与模拟来源覆盖：排序与 tags-only 排除、试过记录的跳过／过期／`retry`、JavArchive
-先于综合索引、`path_prefix` 的大小写与分隔符、单独运行的 CLI/API 入口与统计。
+先于综合索引、有码行跳过 amane 官方档、`path_prefix` 的大小写与分隔符、单独运行的 CLI/API 入口与统计。
 真实网络只做只读试跑，不写账本。
