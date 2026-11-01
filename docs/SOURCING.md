@@ -205,10 +205,12 @@ Wiki 与视频作品资料无关。
   综合索引的顺序。只补实际的缺口（`recheck_existing=False`），不重问已经答过且有新鲜
   快照的来源。候选合并、自动落库与封面都走既有判定；JavArchive 是转载来源，需要两家
   一致的字段仍照旧留在复核队列。
-- 每趟最多处理 120 部、最多 900 秒（`BATCH_LIMIT`、`TIME_BUDGET_SECONDS`）。处理过的行记进
+- 日常增量同步的第二趟每趟最多处理 120 部、最多 900 秒（`BATCH_LIMIT`、`TIME_BUDGET_SECONDS`）；
+  用户明确发起的整库「仅补全影片资料」「补全已入库影片」不设这两个上限，按优先级把整条队列
+  走完，暂停与停止在每部之间生效（ADR-0134）。处理过的行记进
   `state/iv-completion/attempts.json`：同一行、同一组缺失字段在 7 天内不再重问（失败 1 天，
   认不出番号 7 天，韩国 MIB／国产欧美 30 天）；文件名、番号或缺失字段一变就重新尝试。
-  因此全馆处理末尾的第二趟每次都往没试过的行前进，而不是反复处理同一批低 id。
+  因此每一趟都往没试过的行前进，而不是反复处理同一批低 id。
 - 不想等全馆处理时，可以只跑第二趟：CLI `peach process --complete-missing`，或网页
   API `POST /api/library-processing` 的 `complete_missing`。两者都不扫描、不读本地资料，
   先由账本算出该补哪些行；`--path-prefix`（网页请求的 `path_prefix`）可以把范围收到一个
