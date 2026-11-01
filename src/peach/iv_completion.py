@@ -36,6 +36,7 @@ from .jav_cover_fetch import DeadlineExceeded
 from .metadata_routes import OFFICIAL_STAGE, classify, route_for_code
 from .sources import Session
 from .sources.javarchive import JavArchiveSource
+from .wiki_keyword import SougouWikiSearch
 
 SOURCE_PREFIX = "auto:iv-completion"
 #: 一趟最多回填多少部。第二趟现在会跳过最近试过的行，120 部里绝大多数是新的。
@@ -116,13 +117,14 @@ def _queries(clue: dict) -> list[str]:
     return list(dict.fromkeys(found))[:2]
 
 
-def identify(provider, clue: dict, *, deadline=None) -> str:
-    """用 JavArchive 的关键词搜索把文件名线索收敛成一个番号；不唯一就返回空串。"""
+def identify(provider, clue: dict, *, deadline=None, wiki: SougouWikiSearch | None = None) -> str:
+    """用 JavArchive／総合Wiki 的关键词搜索把文件名线索收敛成一个番号；不唯一就返回空串。"""
     if not clue or clue.get("code"):
         return str(clue.get("code") or "")
     codes: list[str] = []
     session = Session(provider.transport, deadline)
-    for query in _queries(clue):
+    queries = _queries(clue)
+    for query in queries:
         try:
             records = JavArchiveSource().search_records(query, session=session, limit=SEARCH_LIMIT)
         except Exception:  # noqa: BLE001 - 单条搜索失败不阻断其他写法
@@ -133,6 +135,13 @@ def identify(provider, clue: dict, *, deadline=None) -> str:
                 codes.append(record.code)
         if codes:
             break
+    if not codes and wiki is not None and wiki.available:
+        for query in queries:
+            for payload in wiki.search(query):
+                if _record_matches(clue, payload) and payload["code"] not in codes:
+                    codes.append(payload["code"])
+            if codes:
+                break
     return codes[0] if len(codes) == 1 else ""
 
 
@@ -267,6 +276,7 @@ def complete(config, database, candidate_root, cover_root, asset_ids, *,
         return stats
     attempts = _load_attempts(attempts_path)
     provider = None
+    wiki = None
     deadline = time.monotonic() + time_budget if time_budget else None
     budget = max(0, int(limit))
     try:
@@ -301,7 +311,9 @@ def complete(config, database, candidate_root, cover_root, asset_ids, *,
                     break
                 stats["attempted"] += 1
                 if not code:
-                    code = identify(provider, clue)
+                    if wiki is None:
+                        wiki = SougouWikiSearch(config.directory("state") / "browser" / "sougouwiki")
+                    code = identify(provider, clue, wiki=wiki)
                     if not code:
                         stats["skipped"] += 1
                         _remember(attempts, asset_id, "unidentified", signature)
@@ -373,6 +385,11 @@ def complete(config, database, candidate_root, cover_root, asset_ids, *,
             try:
                 provider.close()
             except Exception:  # noqa: BLE001 - 关闭连接失败不该盖住本趟统计
+                pass
+        if wiki is not None:
+            try:
+                wiki.close()
+            except Exception:  # noqa: BLE001 - 浏览器关闭失败不该盖住本趟统计
                 pass
         lock.release()
     stats["remaining"] = max(0, total - stats["attempted"] - stats["skipped_recent"])

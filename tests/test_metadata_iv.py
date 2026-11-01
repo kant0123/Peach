@@ -9,12 +9,14 @@ from unittest.mock import patch
 
 from peach.catalog_rules import release_code_from_filename_suffix
 from peach.filename_metadata import infer
+from peach.http import HttpResponse
 from peach.iv_completion import _override, _record_matches, complete, complete_pending, identify
 from peach.library_processing import _path_has_prefix, _pending_ids
 from peach.metadata_auto_apply import _group_identifies_code
 from peach.sources import Page, R18DevSource
 from peach.sources.javarchive import JavArchiveSource, _code_in_link, _search_links, links
 from peach.sources.r18dev import with_japanese
+from peach.wiki_keyword import SougouWikiSearch
 
 IV_ARCHIVE_LINK = "/105865-imbd-214-%e5%88%9d%e5%86%99-%e4%bd%90%e3%80%85%e6%9c%a8%e6%a1%83%e8%8f%af-blu-ray%e7%89%88-pn.html"
 IV_ARCHIVE_URL = "https://javarchive.com" + IV_ARCHIVE_LINK
@@ -391,6 +393,44 @@ class FilenameCompletionTests(unittest.TestCase):
             self.assertEqual(identify(Provider(), clue), "IMBD-214")
             source.return_value.search_records.return_value = [Record(), Other()]
             self.assertEqual(identify(Provider(), clue), "")
+
+
+class SougouWikiKeywordTests(unittest.TestCase):
+    def _transport(self, table_html, *, status=200):
+        search = ('<div class="result-box"><div class="body"><h3>'
+                  '<a href="/w/sougouwiki/d/ABP-279">ABP-279</a></h3></div></div>')
+
+        def fetch(request, timeout, max_bytes):
+            body = ("<meta charset='utf-8'>" +
+                    (search if "search?keywords" in request.url else table_html)).encode("utf-8")
+            return HttpResponse(status, {"content-type": "text/html; charset=utf-8"}, body, request.url)
+
+        return fetch
+
+    def test_browser_search_reads_the_work_table(self):
+        table = ('<div id="page-body"><div class="user-area"><table id="works">'
+                 '<tr><th>NO</th><th>PHOTO</th><th>TITLE</th><th>ACTRESS</th><th>RELEASE</th></tr>'
+                 '<tr><td><a href="https://example.test/abp279">ABP-279</a></td><td></td>'
+                 '<td>北野のぞみの、いっぱいコスって萌えてイこう！</td>'
+                 '<td><a href="/w/sougouwiki/d/kitano">北野のぞみ</a></td><td>2014-04-01</td></tr>'
+                 '</table></div></div>')
+        wiki = SougouWikiSearch(Path("C:\\unused"), transport=self._transport(table))
+        found = wiki.search("北野のぞみの、いっぱいコスって萌えてイこう！")
+        self.assertEqual([row["code"] for row in found], ["ABP-279"])
+        self.assertEqual(found[0]["title"], "北野のぞみの、いっぱいコスって萌えてイこう！")
+        self.assertEqual(found[0]["actresses"], [{"japanese_name": "北野のぞみ"}])
+
+    def test_identify_uses_the_wiki_when_javarchive_has_nothing(self):
+        table = ('<div id="page-body"><div class="user-area"><table>'
+                 '<tr><th>NO</th><th>TITLE</th><th>ACTRESS</th></tr>'
+                 '<tr><td>ABP-279</td><td>北野のぞみの、いっぱいコスって萌えてイこう！</td>'
+                 '<td><a href="/w/sougouwiki/d/kitano">北野のぞみ</a></td></tr>'
+                 '</table></div></div>')
+        wiki = SougouWikiSearch(Path("C:\\unused"), transport=self._transport(table))
+        provider = SimpleNamespace(transport=self._transport("<html></html>"))
+        clue = {"title": "北野のぞみの、いっぱいコスって萌えてイこう！",
+                "performers": ["北野のぞみ"], "code": ""}
+        self.assertEqual(identify(provider, clue, wiki=wiki), "ABP-279")
 
 
 if __name__ == "__main__":
