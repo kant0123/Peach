@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "762cfd05-4416-434c-98ae-e4f5b0e8599e", e._sentryDebugIdIdentifier = "sentry-dbid-762cfd05-4416-434c-98ae-e4f5b0e8599e");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "ef5bde5e-f62a-4ef5-b5f0-1fc857a01c1b", e._sentryDebugIdIdentifier = "sentry-dbid-ef5bde5e-f62a-4ef5-b5f0-1fc857a01c1b");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -3949,6 +3949,16 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	共同信号: "共通のシグナル",
 	待验证: "要確認",
 	"探索 {b}": "探索 {b}",
+	"Peach 印证": "Peach での裏付け",
+	"浏览兴趣以{a}为主，Peach 中稳定出现{b}。": "閲覧の関心は{a}が中心で、Peach では{b}が安定して見られます。",
+	"浏览兴趣目前以{a}为主，Peach 观看证据仍偏少。": "閲覧の関心は今のところ{a}が中心です。Peach での視聴の根拠はまだ少なめです。",
+	"Peach 观看行为目前更集中在{a}。": "Peach での視聴は今のところ{a}に集中しています。",
+	可信度较高: "信頼度は高め",
+	可信度中等: "信頼度は中程度",
+	"浏览信号 {a} 次": "閲覧シグナル {a} 回",
+	"馆藏 {a} 部": "ライブラリ {a} 本",
+	已有观看印证: "視聴での裏付けあり",
+	尚无观看印证: "視聴での裏付けなし",
 	补齐馆藏证据: "ライブラリの根拠を補完",
 	追踪常访创作者: "よく見るクリエイターを追跡",
 	"分析浏览记录：已处理 {b} / {d} 条": "閲覧履歴を分析中: {b} / {d} 件を処理済み",
@@ -4117,6 +4127,8 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	扫描文件: "ファイルをスキャン",
 	检查媒体目录: "メディアフォルダーを確認",
 	检查配套文件: "付随ファイルを確認",
+	检查垃圾文件: "ゴミファイルを確認",
+	读取媒体属性与检查垃圾: "メディア情報の読み取りとゴミファイルの確認",
 	生成视频预览: "動画プレビューを生成",
 	读取媒体属性: "メディア情報を読み取り",
 	读取媒体属性与生成预览: "メディア情報の読み取りとプレビュー生成",
@@ -26942,4 +26954,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=762cfd05-4416-434c-98ae-e4f5b0e8599e
+//# debugId=ef5bde5e-f62a-4ef5-b5f0-1fc857a01c1b
