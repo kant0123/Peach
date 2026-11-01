@@ -181,11 +181,16 @@ class FilenameCompletionTests(unittest.TestCase):
         }
         self.assertTrue(_group_identifies_code("ABP-279", [target]))
 
-    def test_the_separate_pass_adds_javarchive_without_touching_fc2(self):
+    def test_the_separate_pass_puts_javarchive_first_and_skips_amane_official(self):
         row = {"path": "E:\\GLA\\01_IV\\IMBD-214\\IMBD-214.mp4",
                "name": "IMBD-214.mp4", "studio": ""}
         overrides = _override("IMBD-214", row)
-        self.assertIn("javarchive", overrides["censored"])
+        chain = overrides["censored"]
+        self.assertEqual(chain[0], "javarchive")
+        self.assertFalse({"makers", "prestige", "faleno", "dahlia", "mgstage"} & set(chain))
+        amateur = _override("SIRO-1234", row)
+        self.assertLess(amateur["amateur"].index("mgstage"),
+                        amateur["amateur"].index("javarchive"))
         self.assertIsNone(_override("FC2-PPV-4137487", row))
         self.assertIsNone(_override("YUJ-103", row))
 
@@ -259,7 +264,8 @@ class FilenameCompletionTests(unittest.TestCase):
         row = {"path": "E:\\GLA\\01_IV\\IMBD-214\\IMBD-214.mp4",
                "name": "IMBD-214.mp4", "studio": ""}
         chain = _override("IMBD-214", row)["censored"]
-        self.assertLess(chain.index("r18dev"), chain.index("javarchive"))
+        self.assertEqual(chain[0], "javarchive")
+        self.assertLess(chain.index("r18dev"), chain.index("avbase"))
         self.assertLess(chain.index("javarchive"), chain.index("avbase"))
 
     def test_a_recent_attempt_is_skipped_until_the_row_changes_or_retry(self):
