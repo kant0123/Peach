@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "06891ccc-785c-455e-aa48-c2fd67ee82dc", e._sentryDebugIdIdentifier = "sentry-dbid-06891ccc-785c-455e-aa48-c2fd67ee82dc");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "762cfd05-4416-434c-98ae-e4f5b0e8599e", e._sentryDebugIdIdentifier = "sentry-dbid-762cfd05-4416-434c-98ae-e4f5b0e8599e");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -4136,9 +4136,21 @@ var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescr
 	修复: "修復",
 	扫描: "スキャン",
 	完成: "完了",
-	"番号 标题": "品番 タイトル",
-	厂牌分目录: "レーベル別フォルダー",
-	"厂牌 / 番号目录": "レーベル / 品番フォルダー",
+	仅番号: "品番のみ",
+	番号和标题: "品番とタイトル",
+	番号和画质: "品番と画質",
+	番号和出演者: "品番と出演者",
+	按厂牌建文件夹: "レーベル別フォルダー",
+	按系列建文件夹: "シリーズ別フォルダー",
+	按出演者建文件夹: "出演者別フォルダー",
+	按发行年建文件夹: "発売年別フォルダー",
+	厂牌下按番号建文件夹: "レーベル内の品番別フォルダー",
+	"ABC-123 标题.mp4": "ABC-123 タイトル.mp4",
+	"厂牌/ABC-123 标题.mp4": "レーベル/ABC-123 タイトル.mp4",
+	"系列/ABC-123 标题.mp4": "シリーズ/ABC-123 タイトル.mp4",
+	"甲、乙/ABC-123 标题.mp4": "甲、乙/ABC-123 タイトル.mp4",
+	"2024/ABC-123 标题.mp4": "2024/ABC-123 タイトル.mp4",
+	"厂牌/ABC-123/ABC-123 标题 CD2.mp4": "レーベル/ABC-123/ABC-123 タイトル CD2.mp4",
 	番号: "品番",
 	标题: "タイトル",
 	发行年: "発売年",
@@ -26930,4 +26942,4 @@ ie();
 var bv = document.getElementById("peach-page"), xv = bv ? yv[bv.dataset.page ?? ""] : void 0;
 bv && xv && (0, pe.createRoot)(bv).render(/* @__PURE__ */ (0, V.jsx)(xv, { data: { ...bv.dataset } }));
 
-//# debugId=06891ccc-785c-455e-aa48-c2fd67ee82dc
+//# debugId=762cfd05-4416-434c-98ae-e4f5b0e8599e
