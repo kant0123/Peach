@@ -910,9 +910,9 @@ def _group_identifies_code(code: str, targets) -> bool:
     `auto:iv-completion-*` 就是那一次的识别证据，值也核过是同一个番号时直接认。
     """
     for target in targets:
-        owner = owner_of(target.get("field_owners"), "code")
+        owner = owner_of(target["field_owners"], "code")
         if (owner.startswith("auto:iv-completion-")
-                and same_release_code(code, str(target.get("code") or ""))):
+                and same_release_code(code, str(target["code"] or ""))):
             return True
     names = [str(target["name"] or "") for target in targets]
     if not any(_filename_carries_code(code, name) for name in names):
