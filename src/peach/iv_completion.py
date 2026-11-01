@@ -135,12 +135,12 @@ def identify(provider, clue: dict, *, deadline=None, wiki: SougouWikiSearch | No
                 codes.append(record.code)
         if codes:
             break
-    if not codes and wiki is not None and wiki.available:
+    if len(codes) != 1 and wiki is not None and wiki.available:
         for query in queries:
             for payload in wiki.search(query):
                 if _record_matches(clue, payload) and payload["code"] not in codes:
                     codes.append(payload["code"])
-            if codes:
+            if len(codes) == 1:
                 break
     return codes[0] if len(codes) == 1 else ""
 
